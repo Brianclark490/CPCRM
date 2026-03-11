@@ -1,5 +1,6 @@
 import { useUser, useDescope } from '@descope/react-sdk';
 import { useNavigate } from 'react-router-dom';
+import { sessionHistory } from '../store/sessionHistory.js';
 
 export function DashboardPage() {
   const { user } = useUser();
@@ -8,6 +9,7 @@ export function DashboardPage() {
 
   const handleLogout = async () => {
     await logout();
+    sessionHistory.clearAuthenticated();
     void navigate('/login');
   };
 
