@@ -67,6 +67,11 @@ module appService 'modules/app-service.bicep' = {
     keyVaultUri: empty(kvNameSuffix)
       ? 'https://kv-cpcrm-${environmentName}.${environment().suffixes.keyvaultDns}/'
       : 'https://kv-cpcrm-${environmentName}-${kvNameSuffix}.${environment().suffixes.keyvaultDns}/'
+    // Construct the Key Vault reference for the PostgreSQL connection string using the
+    // same deterministic vault name pattern as keyVaultUri above.
+    postgresConnectionStringReference: empty(kvNameSuffix)
+      ? '@Microsoft.KeyVault(VaultName=kv-cpcrm-${environmentName};SecretName=postgres-connection-string)'
+      : '@Microsoft.KeyVault(VaultName=kv-cpcrm-${environmentName}-${kvNameSuffix};SecretName=postgres-connection-string)'
     tags: commonTags
   }
 }
@@ -95,6 +100,7 @@ module postgresql 'modules/postgresql.bicep' = {
     location: location
     adminLogin: postgresAdminLogin
     adminPassword: postgresAdminPassword
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     tags: commonTags
   }
 }

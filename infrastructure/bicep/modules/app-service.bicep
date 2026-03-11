@@ -13,6 +13,9 @@ param appInsightsConnectionString string
 @description('Key Vault URI so the app can reference secrets')
 param keyVaultUri string
 
+@description('Key Vault reference expression for the PostgreSQL connection string app setting')
+param postgresConnectionStringReference string
+
 @description('Resource tags to apply to all resources')
 param tags object = {}
 
@@ -67,6 +70,10 @@ resource apiApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'WEBSITE_NODE_DEFAULT_VERSION'
           value: '~20'
+        }
+        {
+          name: 'DATABASE_URL'
+          value: postgresConnectionStringReference
         }
       ]
     }
