@@ -1,5 +1,6 @@
 import DescopeClient from '@descope/node-sdk';
 import type { Request, Response, NextFunction } from 'express';
+import { logger } from '../lib/logger.js';
 
 const projectId = process.env.DESCOPE_PROJECT_ID;
 
@@ -25,6 +26,7 @@ export async function requireAuth(
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
+    logger.warn({ path: req.path }, 'Auth rejected: missing or invalid Authorization header');
     res.status(401).json({ error: 'Missing or invalid Authorization header' });
     return;
   }
@@ -36,6 +38,7 @@ export async function requireAuth(
     const userId = authInfo.token.sub;
 
     if (!userId) {
+      logger.warn({ path: req.path }, 'Auth rejected: token missing subject claim');
       res.status(401).json({ error: 'Invalid token: missing subject claim' });
       return;
     }
@@ -48,6 +51,7 @@ export async function requireAuth(
 
     next();
   } catch {
+    logger.warn({ path: req.path }, 'Auth rejected: token validation failed');
     res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
