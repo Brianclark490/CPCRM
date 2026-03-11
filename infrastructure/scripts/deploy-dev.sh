@@ -13,11 +13,15 @@
 
 set -euo pipefail
 
+# Resolve repository root so template/parameter paths work from any CWD
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || cd "${SCRIPT_DIR}/../.." && pwd)"
+
 ENVIRONMENT="dev"
 RESOURCE_GROUP="rg-cpcrm-${ENVIRONMENT}"
 LOCATION="eastus"
-TEMPLATE_FILE="infrastructure/bicep/main.bicep"
-PARAMS_FILE="infrastructure/bicep/parameters/dev.bicepparam"
+TEMPLATE_FILE="${REPO_ROOT}/infrastructure/bicep/main.bicep"
+PARAMS_FILE="${REPO_ROOT}/infrastructure/bicep/parameters/dev.bicepparam"
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites

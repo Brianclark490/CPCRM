@@ -20,7 +20,7 @@ param tags object = {}
 // ---------------------------------------------------------------------------
 // PostgreSQL Flexible Server
 // ---------------------------------------------------------------------------
-resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
+resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01' = {
   name: 'psql-cpcrm-${environmentName}'
   location: location
   tags: tags
@@ -48,7 +48,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-pr
 // ---------------------------------------------------------------------------
 // Database
 // ---------------------------------------------------------------------------
-resource crmDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-06-01-preview' = {
+resource crmDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-12-01' = {
   parent: postgresServer
   name: 'cpcrm'
   properties: {
@@ -58,9 +58,9 @@ resource crmDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-0
 }
 
 // ---------------------------------------------------------------------------
-// Firewall rule – allow Azure services (e.g. App Service) to connect
+// Firewall rule – allow Azure services to connect (dev/stg only; not production)
 // ---------------------------------------------------------------------------
-resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-06-01-preview' = {
+resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-12-01' = if (environmentName != 'prod') {
   parent: postgresServer
   name: 'AllowAllAzureServicesAndResourcesWithinAzureIps'
   properties: {

@@ -29,6 +29,9 @@ param postgresAdminLogin string = 'cpcrmadmin'
 @secure()
 param postgresAdminPassword string
 
+@description('Optional suffix to append to the Key Vault name for global uniqueness (e.g. a 5-char token derived from uniqueString). Defaults to empty.')
+param kvNameSuffix string = ''
+
 // ---------------------------------------------------------------------------
 // Tags applied to every resource
 // ---------------------------------------------------------------------------
@@ -59,10 +62,11 @@ module appService 'modules/app-service.bicep' = {
     environmentName: environmentName
     location: location
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
-    // Key Vault URI is passed after Key Vault is created; use a placeholder here
-    // and update via a second deployment or slot config if needed.
-    // In practice the URI follows the predictable pattern below.
-    keyVaultUri: 'https://kv-cpcrm-${environmentName}${environment().suffixes.keyvaultDns}'
+    // Construct the Key Vault URI using the same naming logic as the Key Vault module.
+    // The URI format is: https://<name>.<dns-suffix>/ (trailing slash required by SDK references).
+    keyVaultUri: empty(kvNameSuffix)
+      ? 'https://kv-cpcrm-${environmentName}.${environment().suffixes.keyvaultDns}/'
+      : 'https://kv-cpcrm-${environmentName}-${kvNameSuffix}.${environment().suffixes.keyvaultDns}/'
     tags: commonTags
   }
 }
@@ -76,6 +80,7 @@ module keyVault 'modules/key-vault.bicep' = {
     environmentName: environmentName
     location: location
     apiAppPrincipalId: appService.outputs.apiAppPrincipalId
+    kvNameSuffix: kvNameSuffix
     tags: commonTags
   }
 }

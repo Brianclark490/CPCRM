@@ -10,14 +10,20 @@ param location string
 @description('Object ID of the App Service managed identity that needs secret access')
 param apiAppPrincipalId string
 
+@description('Optional suffix appended to the Key Vault name to ensure global uniqueness (e.g. a 5-char token). Defaults to empty, preserving the standard naming convention.')
+param kvNameSuffix string = ''
+
 @description('Resource tags to apply to all resources')
 param tags object = {}
+
+// Derive the Key Vault name: append suffix only when provided
+var keyVaultName = empty(kvNameSuffix) ? 'kv-cpcrm-${environmentName}' : 'kv-cpcrm-${environmentName}-${kvNameSuffix}'
 
 // ---------------------------------------------------------------------------
 // Key Vault
 // ---------------------------------------------------------------------------
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: 'kv-cpcrm-${environmentName}'
+  name: keyVaultName
   location: location
   tags: tags
   properties: {
@@ -29,7 +35,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: environmentName == 'prod' ? 'Disabled' : 'Enabled'
   }
 }
 
