@@ -1,6 +1,7 @@
 import { Descope, useSession } from '@descope/react-sdk';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { sessionHistory } from '../store/sessionHistory.js';
+import styles from './LoginPage.module.css';
 
 interface LocationState {
   reason?: string;
@@ -28,12 +29,20 @@ export function LoginPage() {
   };
 
   return (
-    <div>
-      <h1>Sign in to CPCRM</h1>
-      {sessionExpired && (
-        <p role="alert">Your session has expired. Please sign in again.</p>
-      )}
-      <Descope flowId="sign-up-or-in" onSuccess={handleSuccess} onError={handleError} />
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <div className={styles.logoArea}>
+          <span className={styles.logoText}>CPCRM</span>
+        </div>
+        <h1 className={styles.title}>Sign in to CPCRM</h1>
+        <p className={styles.subtitle}>Enter your credentials to continue</p>
+        {sessionExpired && (
+          <p role="alert" className={styles.alert}>
+            Your session has expired. Please sign in again.
+          </p>
+        )}
+        <Descope flowId="sign-up-or-in" onSuccess={handleSuccess} onError={handleError} />
+      </div>
     </div>
   );
 }

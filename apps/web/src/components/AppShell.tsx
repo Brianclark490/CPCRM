@@ -2,10 +2,119 @@ import { type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useUser, useDescope } from '@descope/react-sdk';
 import { sessionHistory } from '../store/sessionHistory.js';
+import styles from './AppShell.module.css';
 
 interface AppShellProps {
   children: ReactNode;
 }
+
+function getInitials(name: string | undefined, email: string | undefined): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`;
+    }
+    return parts[0][0] ?? '?';
+  }
+  if (email) return email[0] ?? '?';
+  return '?';
+}
+
+const navItems = [
+  {
+    to: '/dashboard',
+    label: 'Dashboard',
+    icon: (
+      <svg
+        className={styles.navIcon}
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <rect x="1" y="1" width="6" height="6" rx="1.5" fill="currentColor" />
+        <rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor" />
+        <rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor" />
+        <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    to: '/opportunities',
+    label: 'Opportunities',
+    icon: (
+      <svg
+        className={styles.navIcon}
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          d="M2 12V5a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1z"
+          stroke="currentColor"
+          strokeWidth="1.25"
+        />
+        <path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" strokeWidth="1.25" />
+        <path d="M8 7v3M6 9h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    to: '/accounts',
+    label: 'Accounts',
+    icon: (
+      <svg
+        className={styles.navIcon}
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.25" />
+        <path
+          d="M1 13c0-2.21 2.239-4 5-4s5 1.79 5 4"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+        />
+        <path
+          d="M11 7c1.105 0 2 .895 2 2"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+        />
+        <path
+          d="M11 11c1.657 0 3 .895 3 2"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin',
+    label: 'Admin',
+    icon: (
+      <svg
+        className={styles.navIcon}
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.25" />
+        <path
+          d="M8 2v1M8 13v1M2 8h1M13 8h1M3.757 3.757l.707.707M11.536 11.536l.707.707M3.757 12.243l.707-.707M11.536 4.464l.707-.707"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
+];
 
 export function AppShell({ children }: AppShellProps) {
   const { user } = useUser();
@@ -18,33 +127,58 @@ export function AppShell({ children }: AppShellProps) {
     void navigate('/login');
   };
 
+  const displayName = user?.name ?? user?.email ?? 'User';
+  const initials = getInitials(user?.name, user?.email);
+
   return (
-    <div>
-      <header>
-        <span>CPCRM</span>
-        <div>
-          {user && <span>{user.name ?? user.email ?? 'User'}</span>}
-          <button type="button" onClick={() => void handleLogout()}>Sign out</button>
+    <div className={styles.shell}>
+      <aside className={styles.sidebar}>
+        <div className={styles.sidebarLogo}>
+          <span className={styles.logoText}>CPCRM</span>
         </div>
-      </header>
-      <div>
-        <nav aria-label="Main navigation">
-          <ul>
-            <li>
-              <NavLink to="/dashboard">Dashboard</NavLink>
-            </li>
-            <li>
-              <NavLink to="/opportunities">Opportunities</NavLink>
-            </li>
-            <li>
-              <NavLink to="/accounts">Accounts</NavLink>
-            </li>
-            <li>
-              <NavLink to="/admin">Admin</NavLink>
-            </li>
-          </ul>
+        <nav aria-label="Main navigation" className={styles.nav}>
+          <div className={styles.navSection}>
+            <span className={styles.navLabel}>Menu</span>
+            <ul className={styles.navList}>
+              {navItems.map(({ to, label, icon }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    className={({ isActive }) =>
+                      `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                    }
+                  >
+                    {icon}
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
         </nav>
-        <main>{children}</main>
+      </aside>
+
+      <div className={styles.main}>
+        <header className={styles.header}>
+          <div className={styles.userInfo}>
+            {user && (
+              <>
+                <span className={styles.userAvatar} aria-hidden="true">
+                  {initials}
+                </span>
+                <span className={styles.userName}>{displayName}</span>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            className={styles.signOutButton}
+            onClick={() => void handleLogout()}
+          >
+            Sign out
+          </button>
+        </header>
+        <main className={styles.content}>{children}</main>
       </div>
     </div>
   );
