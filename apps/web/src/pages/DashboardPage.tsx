@@ -14,11 +14,7 @@ export function DashboardPage() {
   return (
     <div>
       <h1>Dashboard</h1>
-      {user && (
-        <p>
-          Welcome, {user.name ?? user.email ?? 'User'}
-        </p>
-      )}
+      {user && <p>Welcome, {user.name ?? user.email ?? 'User'}</p>}
       <button onClick={() => void handleLogout()}>Sign out</button>
     </div>
   );
