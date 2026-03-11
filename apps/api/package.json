@@ -2,11 +2,26 @@
   "name": "@cpcrm/api",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "echo 'dev not yet implemented'",
-    "build": "echo 'build not yet implemented'",
-    "test": "echo 'test not yet implemented'",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
     "lint": "echo 'lint not yet implemented'",
-    "typecheck": "echo 'typecheck not yet implemented'"
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@descope/node-sdk": "^1.10.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.4.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }
