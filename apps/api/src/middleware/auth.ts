@@ -14,13 +14,30 @@ const descopeClient = DescopeClient({ projectId });
  * Extracts the active tenant ID from the Descope JWT token payload.
  * Descope includes a `tenants` claim (map of tenantId → tenant metadata)
  * when the user is authenticated within a tenant context.
- * Returns the first tenant ID found, or undefined if the token carries no tenant claim.
+ *
+ * Resolution rules:
+ * - If the token carries exactly one tenant claim, that tenant ID is returned.
+ * - If the token carries multiple tenant claims (ambiguous), the first ID is
+ *   returned and a warning is logged. Multi-tenant token support is not a
+ *   current product requirement; this case should not arise in normal use.
+ * - If the token carries no tenant claim (or the claim is empty), undefined
+ *   is returned and the request will be rejected by requireTenant.
  */
-function resolveTenantId(token: Record<string, unknown>): string | undefined {
+function resolveTenantId(
+  token: Record<string, unknown>,
+  context?: { path?: string; userId?: string },
+): string | undefined {
   const tenants = token['tenants'];
   if (tenants !== null && typeof tenants === 'object' && !Array.isArray(tenants)) {
     const tenantIds = Object.keys(tenants as Record<string, unknown>);
-    return tenantIds.length > 0 ? tenantIds[0] : undefined;
+    if (tenantIds.length === 0) return undefined;
+    if (tenantIds.length > 1) {
+      logger.warn(
+        { path: context?.path, userId: context?.userId, tenantCount: tenantIds.length },
+        'Ambiguous tenant context: JWT carries multiple tenant claims; using the first',
+      );
+    }
+    return tenantIds[0];
   }
   return undefined;
 }
@@ -64,7 +81,7 @@ export async function requireAuth(
       userId,
       email: authInfo.token.email as string | undefined,
       name: authInfo.token.name as string | undefined,
-      tenantId: resolveTenantId(authInfo.token),
+      tenantId: resolveTenantId(authInfo.token, { path: req.path, userId }),
     };
 
     next();
