@@ -1,0 +1,25 @@
+# CODEOWNERS
+# Each line maps a path pattern to one or more GitHub teams/users.
+# The last matching pattern takes precedence.
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global fallback – repo maintainers review everything by default
+*                           @Brianclark490
+
+# Frontend
+apps/web/                   @Brianclark490
+
+# Backend API
+apps/api/                   @Brianclark490
+
+# Shared packages
+packages/                   @Brianclark490
+
+# Infrastructure – require infra/DevOps review
+infrastructure/             @Brianclark490
+
+# CI/CD pipelines – require DevOps review
+.github/                    @Brianclark490
+
+# Documentation
+docs/                       @Brianclark490
