@@ -4,6 +4,7 @@ import { DashboardPage } from './pages/DashboardPage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
+import { AppShell } from './components/AppShell.js';
 
 export function App() {
   return (
@@ -15,7 +16,9 @@ export function App() {
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <AppShell>
+                <DashboardPage />
+              </AppShell>
             </ProtectedRoute>
           }
         />
