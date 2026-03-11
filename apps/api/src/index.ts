@@ -8,6 +8,7 @@ import { logger } from './lib/logger.js';
 import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import { organisationsRouter } from './routes/organisations.js';
+import { opportunitiesRouter } from './routes/opportunities.js';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use(httpLogger({ logger }));
 app.use('/health', healthRouter);
 app.use('/me', meRouter);
 app.use('/organisations', organisationsRouter);
+app.use('/opportunities', opportunitiesRouter);
 
 app.listen(config.port, () => {
   logger.info({ port: config.port, env: config.env }, 'API server started');

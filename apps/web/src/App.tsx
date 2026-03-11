@@ -5,6 +5,7 @@ import { OpportunitiesPage } from './pages/OpportunitiesPage.js';
 import { AccountsPage } from './pages/AccountsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
+import { CreateOpportunityPage } from './pages/CreateOpportunityPage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
@@ -32,6 +33,16 @@ export function App() {
             <ProtectedRoute>
               <AppShell>
                 <OpportunitiesPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/opportunities/new"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <CreateOpportunityPage />
               </AppShell>
             </ProtectedRoute>
           }

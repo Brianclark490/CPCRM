@@ -75,6 +75,7 @@ export interface TenantMembership {
 // Organisation provisioning API types
 // ─────────────────────────────────────────────────────────────────────────────
 
+
 /**
  * Request body for creating a new organisation within a tenant.
  * The tenantId is resolved from the authenticated user's JWT — it must not be
@@ -173,4 +174,29 @@ export interface Opportunity {
   updatedAt: Date;
   /** Descope userId of the user who created this record */
   createdBy: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Opportunity creation API types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Request body for creating a new opportunity within a tenant.
+ * The tenantId and ownerId are resolved from the authenticated user's JWT —
+ * they must not be supplied by the caller.
+ * The initial stage defaults to "prospecting".
+ */
+export interface CreateOpportunityRequest {
+  /** Human-readable title for the opportunity (required, 1–200 chars) */
+  title: string;
+  /** The account this opportunity is linked to (required) */
+  accountId: string;
+  /** Monetary value of the opportunity */
+  value?: number;
+  /** ISO 4217 currency code (e.g. "GBP", "USD") */
+  currency?: string;
+  /** Expected close date in ISO 8601 format (e.g. "2025-12-31") */
+  expectedCloseDate?: string;
+  /** Optional description or notes for the opportunity */
+  description?: string;
 }
