@@ -66,6 +66,23 @@ describe('requireAuth middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('returns 401 when token is valid but missing subject claim', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: { sub: undefined, email: 'user@example.com', name: 'Test User' },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid token: missing subject claim' });
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it('calls next and sets req.user when token is valid', async () => {
     mockValidateSession.mockResolvedValue({
       token: { sub: 'user123', email: 'user@example.com', name: 'Test User' },
