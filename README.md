@@ -60,6 +60,8 @@ npm install
 npm run dev --workspace=apps/web
 ```
 
+See [docs/frontend-setup.md](./docs/frontend-setup.md) for the full frontend setup guide, including environment variables, linting, formatting, and editor configuration.
+
 ### Run the API (development)
 
 ```bash
