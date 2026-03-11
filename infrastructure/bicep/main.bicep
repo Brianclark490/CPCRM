@@ -69,6 +69,12 @@ module appService 'modules/app-service.bicep' = {
       : 'https://kv-cpcrm-${environmentName}-${kvNameSuffix}.${environment().suffixes.keyvaultDns}/'
     // Construct the Key Vault reference for the PostgreSQL connection string using the
     // same deterministic vault name pattern as keyVaultUri above.
+    //
+    // NOTE: This App Service Key Vault reference requires that the App Service can reach the vault.
+    // In environments (e.g. prod) where Key Vault public network access is disabled, you must either:
+    //   - configure a Key Vault private endpoint and integrate the App Service into that VNet, or
+    //   - enable tightly-scoped public access / Azure services bypass on the Key Vault.
+    // Otherwise, this reference will fail to resolve and DATABASE_URL will be missing/invalid at runtime.
     postgresConnectionStringReference: empty(kvNameSuffix)
       ? '@Microsoft.KeyVault(VaultName=kv-cpcrm-${environmentName};SecretName=postgres-connection-string)'
       : '@Microsoft.KeyVault(VaultName=kv-cpcrm-${environmentName}-${kvNameSuffix};SecretName=postgres-connection-string)'
