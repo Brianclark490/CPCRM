@@ -17,6 +17,9 @@ param adminPassword string
 @description('Resource tags to apply to all resources')
 param tags object = {}
 
+@description('Resource ID of the Log Analytics Workspace for diagnostic settings')
+param logAnalyticsWorkspaceId string
+
 // ---------------------------------------------------------------------------
 // PostgreSQL Flexible Server
 // ---------------------------------------------------------------------------
@@ -42,6 +45,9 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01' =
     highAvailability: {
       mode: 'Disabled'
     }
+    network: {
+      publicNetworkAccess: environmentName == 'prod' ? 'Disabled' : 'Enabled'
+    }
   }
 }
 
@@ -66,6 +72,29 @@ resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallR
   properties: {
     startIpAddress: '0.0.0.0'
     endIpAddress: '0.0.0.0'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic Settings – stream all PostgreSQL logs and metrics to Log Analytics
+// ---------------------------------------------------------------------------
+resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'diag-${postgresServer.name}'
+  scope: postgresServer
+  properties: {
+    workspaceId: logAnalyticsWorkspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
   }
 }
 
