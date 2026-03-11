@@ -10,11 +10,28 @@ if (!projectId) {
 
 const descopeClient = DescopeClient({ projectId });
 
+/**
+ * Extracts the active tenant ID from the Descope JWT token payload.
+ * Descope includes a `tenants` claim (map of tenantId → tenant metadata)
+ * when the user is authenticated within a tenant context.
+ * Returns the first tenant ID found, or undefined if the token carries no tenant claim.
+ */
+function resolveTenantId(token: Record<string, unknown>): string | undefined {
+  const tenants = token['tenants'];
+  if (tenants !== null && typeof tenants === 'object' && !Array.isArray(tenants)) {
+    const tenantIds = Object.keys(tenants as Record<string, unknown>);
+    return tenantIds.length > 0 ? tenantIds[0] : undefined;
+  }
+  return undefined;
+}
+
 export interface AuthenticatedRequest extends Request {
   user?: {
     userId: string;
     email?: string;
     name?: string;
+    /** Active tenant ID — resolved from the Descope JWT tenant claim or subdomain routing */
+    tenantId?: string;
   };
 }
 
@@ -47,6 +64,7 @@ export async function requireAuth(
       userId,
       email: authInfo.token.email as string | undefined,
       name: authInfo.token.name as string | undefined,
+      tenantId: resolveTenantId(authInfo.token),
     };
 
     next();
