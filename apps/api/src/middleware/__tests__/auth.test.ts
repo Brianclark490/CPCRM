@@ -83,7 +83,7 @@ describe('requireAuth middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('calls next and sets req.user when token is valid', async () => {
+  it('calls next and sets req.user when token is valid without tenant claim', async () => {
     mockValidateSession.mockResolvedValue({
       token: { sub: 'user123', email: 'user@example.com', name: 'Test User' },
     });
@@ -100,6 +100,49 @@ describe('requireAuth middleware', () => {
       userId: 'user123',
       email: 'user@example.com',
       name: 'Test User',
+      tenantId: undefined,
     });
+  });
+
+  it('resolves tenantId from the JWT tenants claim', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: {
+        sub: 'user123',
+        email: 'user@example.com',
+        name: 'Test User',
+        tenants: { 'tenant-abc': { role: 'member' } },
+      },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user).toEqual({
+      userId: 'user123',
+      email: 'user@example.com',
+      name: 'Test User',
+      tenantId: 'tenant-abc',
+    });
+  });
+
+  it('sets tenantId to undefined when the JWT tenants claim is an empty object', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: { sub: 'user123', tenants: {} },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user?.tenantId).toBeUndefined();
   });
 });
