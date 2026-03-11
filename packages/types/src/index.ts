@@ -72,6 +72,33 @@ export interface TenantMembership {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Organisation provisioning API types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Request body for creating a new organisation within a tenant.
+ * The tenantId is resolved from the authenticated user's JWT — it must not be
+ * supplied by the caller.
+ */
+export interface CreateOrganisationRequest {
+  /** Human-readable display name for the organisation (required, 1–100 chars) */
+  name: string;
+  /** Optional description of the organisation */
+  description?: string;
+}
+
+/**
+ * Result returned by the organisation provisioning workflow.
+ * Includes the newly created organisation and the initial membership
+ * record that associates the requesting user as an owner.
+ */
+export interface ProvisionOrganisationResult {
+  organisation: Organisation;
+  /** Membership record created for the requesting user (role: "owner") */
+  membership: TenantMembership;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CRM entities — all are scoped to a tenant via tenantId
 // ─────────────────────────────────────────────────────────────────────────────
 

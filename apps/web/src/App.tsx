@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/LoginPage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
+import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
@@ -16,6 +17,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/organisations/new"
+          element={
+            <ProtectedRoute>
+              <OrganisationProvisioningPage />
             </ProtectedRoute>
           }
         />
