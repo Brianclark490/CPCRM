@@ -4,6 +4,7 @@ import { DashboardPage } from './pages/DashboardPage.js';
 import { OpportunitiesPage } from './pages/OpportunitiesPage.js';
 import { AccountsPage } from './pages/AccountsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
+import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
@@ -52,6 +53,14 @@ export function App() {
               <AppShell>
                 <AdminPage />
               </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/organisations/new"
+          element={
+            <ProtectedRoute>
+              <OrganisationProvisioningPage />
             </ProtectedRoute>
           }
         />
