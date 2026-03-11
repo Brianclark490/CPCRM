@@ -4,41 +4,45 @@
 
 /* CSS Custom Properties (Design Tokens) */
 :root {
-  /* Surface colors */
-  --color-bg: #f1f5f9;
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f8fafc;
-  --color-border: #e2e8f0;
-  --color-border-subtle: #f1f5f9;
+  /* Surface colors — dark theme */
+  --color-bg: #0f1117;
+  --color-surface: #151923;
+  --color-surface-subtle: #1c2230;
+  --color-border: #2a3142;
+  --color-border-subtle: #232b3a;
 
   /* Text */
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #94a3b8;
+  --color-text-primary: #e6e9ef;
+  --color-text-secondary: #9aa3b2;
+  --color-text-muted: #6b7280;
 
   /* Brand / Primary */
-  --color-primary: #3b82f6;
-  --color-primary-dark: #2563eb;
-  --color-primary-subtle: #eff6ff;
-  --color-primary-text: #1d4ed8;
+  --color-primary: #6366f1;
+  --color-primary-dark: #4f46e5;
+  --color-primary-subtle: rgba(99, 102, 241, 0.12);
+  --color-primary-text: #a5b4fc;
+
+  /* Accent gradient */
+  --gradient-accent: linear-gradient(135deg, #d946ef, #f97316, #6366f1);
+  --gradient-accent-hover: linear-gradient(135deg, #c026d3, #ea6c00, #4f46e5);
 
   /* Sidebar */
-  --color-sidebar-bg: #0f172a;
-  --color-sidebar-text: #94a3b8;
-  --color-sidebar-text-hover: #e2e8f0;
-  --color-sidebar-active-bg: rgba(59, 130, 246, 0.15);
-  --color-sidebar-active-text: #60a5fa;
+  --color-sidebar-bg: #0f1117;
+  --color-sidebar-text: #6b7280;
+  --color-sidebar-text-hover: #e6e9ef;
+  --color-sidebar-active-bg: rgba(217, 70, 239, 0.12);
+  --color-sidebar-active-text: #e6e9ef;
   --color-sidebar-border: rgba(255, 255, 255, 0.06);
 
   /* Status */
   --color-success: #10b981;
-  --color-success-subtle: #ecfdf5;
+  --color-success-subtle: rgba(16, 185, 129, 0.12);
   --color-warning: #f59e0b;
-  --color-warning-subtle: #fffbeb;
+  --color-warning-subtle: rgba(245, 158, 11, 0.12);
   --color-error: #ef4444;
-  --color-error-subtle: #fef2f2;
-  --color-error-text: #dc2626;
-  --color-error-border: rgba(220, 38, 38, 0.2);
+  --color-error-subtle: rgba(239, 68, 68, 0.12);
+  --color-error-text: #fca5a5;
+  --color-error-border: rgba(239, 68, 68, 0.25);
 
   /* Layout */
   --sidebar-width: 240px;
@@ -60,18 +64,20 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
-  --radius-xl: 14px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
   --radius-full: 9999px;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 20px -4px rgba(0, 0, 0, 0.1), 0 4px 8px -4px rgba(0, 0, 0, 0.05);
+  /* Shadows — dark-adapted */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 32px -4px rgba(0, 0, 0, 0.6), 0 6px 12px -4px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px rgba(217, 70, 239, 0.15), 0 0 40px rgba(249, 115, 22, 0.08);
 
   /* Typography */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
   --font-size-xs: 11px;
   --font-size-sm: 13px;
   --font-size-base: 14px;
@@ -84,6 +90,7 @@
   /* Transitions */
   --transition-fast: 100ms ease;
   --transition-base: 150ms ease;
+  --transition-smooth: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Reset */

@@ -16,7 +16,7 @@
   max-width: 420px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-2xl);
   padding: var(--space-10) var(--space-8);
   box-shadow: var(--shadow-lg);
 }
@@ -29,12 +29,11 @@
 .logoText {
   font-size: var(--font-size-2xl);
   font-weight: 700;
-  color: var(--color-text-primary);
   letter-spacing: -0.025em;
-}
-
-.logoAccent {
-  color: var(--color-primary);
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .title {
