@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "echo 'build not yet implemented'",
-    "lint": "echo 'lint not yet implemented'"
+    "build": "echo 'no build step for config package'",
+    "lint": "echo 'no lint step for config package'"
   }
 }
