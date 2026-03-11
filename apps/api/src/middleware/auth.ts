@@ -33,9 +33,15 @@ export async function requireAuth(
 
   try {
     const authInfo = await descopeClient.validateSession(sessionToken);
+    const userId = authInfo.token.sub;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Invalid token: missing subject claim' });
+      return;
+    }
 
     req.user = {
-      userId: authInfo.token.sub!,
+      userId,
       email: authInfo.token.email as string | undefined,
       name: authInfo.token.name as string | undefined,
     };
