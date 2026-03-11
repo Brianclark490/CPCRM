@@ -3,11 +3,18 @@ import type { Response, NextFunction } from 'express';
 import type { AuthenticatedRequest } from '../auth.js';
 
 const mockValidateSession = vi.fn();
+const mockLoggerWarn = vi.fn();
 
 vi.mock('@descope/node-sdk', () => ({
   default: vi.fn(() => ({
     validateSession: mockValidateSession,
   })),
+}));
+
+vi.mock('../../lib/logger.js', () => ({
+  logger: {
+    warn: mockLoggerWarn,
+  },
 }));
 
 vi.stubEnv('DESCOPE_PROJECT_ID', 'P_test_project_id');
@@ -28,6 +35,7 @@ describe('requireAuth middleware', () => {
   beforeEach(() => {
     next = vi.fn();
     mockValidateSession.mockReset();
+    mockLoggerWarn.mockReset();
   });
 
   it('returns 401 when Authorization header is missing', async () => {
@@ -144,5 +152,32 @@ describe('requireAuth middleware', () => {
 
     expect(next).toHaveBeenCalled();
     expect(req.user?.tenantId).toBeUndefined();
+  });
+
+  it('resolves to the first tenantId and warns when JWT carries multiple tenant claims', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: {
+        sub: 'user123',
+        tenants: {
+          'tenant-abc': { role: 'member' },
+          'tenant-xyz': { role: 'admin' },
+        },
+      },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+      path: '/accounts',
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user?.tenantId).toBe('tenant-abc');
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user123', tenantCount: 2 }),
+      expect.stringContaining('Ambiguous tenant context'),
+    );
   });
 });
