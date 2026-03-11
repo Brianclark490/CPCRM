@@ -24,7 +24,7 @@ export function AppShell({ children }: AppShellProps) {
         <span>CPCRM</span>
         <div>
           {user && <span>{user.name ?? user.email ?? 'User'}</span>}
-          <button onClick={() => void handleLogout()}>Sign out</button>
+          <button type="button" onClick={() => void handleLogout()}>Sign out</button>
         </div>
       </header>
       <div>
