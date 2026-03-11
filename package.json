@@ -1,7 +1,10 @@
     {
       "name": "cpcrm",
       "private": true,
-      "workspaces": [],
+      "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
       "scripts": {
         "dev": "npm run dev --workspaces --if-present",
         "build": "npm run build --workspaces --if-present",
