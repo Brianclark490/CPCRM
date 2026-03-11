@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useDescope, useSession } from '@descope/react-sdk';
 import { useNavigate } from 'react-router-dom';
+import styles from './OrganisationProvisioningPage.module.css';
 
 interface FormState {
   name: string;
@@ -71,54 +72,92 @@ export function OrganisationProvisioningPage() {
 
   if (success) {
     return (
-      <div>
-        <h1>Organisation created</h1>
-        <p>Your organisation has been set up successfully.</p>
-        <button onClick={() => void navigate('/dashboard')}>Go to dashboard</button>
+      <div className={styles.page}>
+        <div className={styles.card}>
+          <div className={styles.successIcon} aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M5 13l4 4L19 7"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          <h1 className={styles.successTitle}>Organisation created</h1>
+          <p className={styles.successText}>Your organisation has been set up successfully.</p>
+          <button className={styles.primaryButton} onClick={() => void navigate('/dashboard')}>
+            Go to dashboard
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <h1>Create your organisation</h1>
-      <p>Set up your organisation to get started with CPCRM.</p>
-
-      <form onSubmit={(e) => void handleSubmit(e)}>
-        <div>
-          <label htmlFor="name">Organisation name</label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            value={form.name}
-            onChange={handleChange}
-            placeholder="e.g. Acme Corp"
-            maxLength={100}
-            disabled={submitting}
-          />
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <div className={styles.logoArea}>
+          <span className={styles.logoText}>CPCRM</span>
         </div>
 
-        <div>
-          <label htmlFor="description">Description (optional)</label>
-          <textarea
-            id="description"
-            name="description"
-            value={form.description}
-            onChange={handleChange}
-            placeholder="Brief description of your organisation"
-            disabled={submitting}
-          />
-        </div>
+        <h1 className={styles.title}>Create your organisation</h1>
+        <p className={styles.subtitle}>Set up your organisation to get started with CPCRM.</p>
 
-        {errorMessage && <p role="alert">{errorMessage}</p>}
+        <form className={styles.form} onSubmit={(e) => void handleSubmit(e)}>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="name">
+              Organisation name
+            </label>
+            <input
+              className={styles.input}
+              id="name"
+              name="name"
+              type="text"
+              value={form.name}
+              onChange={handleChange}
+              placeholder="e.g. Acme Corp"
+              maxLength={100}
+              disabled={submitting}
+            />
+          </div>
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Creating…' : 'Create organisation'}
-        </button>
-      </form>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="description">
+              Description (optional)
+            </label>
+            <textarea
+              className={styles.textarea}
+              id="description"
+              name="description"
+              value={form.description}
+              onChange={handleChange}
+              placeholder="Brief description of your organisation"
+              disabled={submitting}
+            />
+          </div>
 
-      <button onClick={() => void handleLogout()}>Sign out</button>
+          {errorMessage && (
+            <p role="alert" className={styles.errorAlert}>
+              {errorMessage}
+            </p>
+          )}
+
+          <div className={styles.actions}>
+            <button className={styles.submitButton} type="submit" disabled={submitting}>
+              {submitting ? 'Creating…' : 'Create organisation'}
+            </button>
+            <button
+              type="button"
+              className={styles.signOutLink}
+              onClick={() => void handleLogout()}
+            >
+              Sign out
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
