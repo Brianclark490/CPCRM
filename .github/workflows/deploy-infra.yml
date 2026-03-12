@@ -1,0 +1,149 @@
+name: Deploy Infrastructure
+
+# Provisions or updates Azure infrastructure via Bicep.
+#
+# Triggers:
+#   1. Manually via workflow_dispatch — choose the target environment.
+#   2. Automatically on pushes to environment branches when Bicep files change.
+#
+# Required GitHub Environment secrets/variables (per environment):
+#   Secrets : POSTGRES_ADMIN_PASSWORD
+#   Variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+#              AZURE_LOCATION (optional, defaults to eastus),
+#              POSTGRES_ADMIN_LOGIN (optional, defaults to cpcrmadmin),
+#              DESCOPE_PROJECT_ID
+#
+# See docs/runbooks/pipeline-setup.md for the full setup guide.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [dev, stg, prod]
+
+  push:
+    branches:
+      - develop
+      - staging
+      - main
+    paths:
+      - 'infrastructure/bicep/**'
+
+concurrency:
+  group: deploy-infra-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Resolve environment (push trigger only) ───────────────────────────────────
+  resolve-env:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+    steps:
+      - name: Map branch / input to environment
+        id: env
+        run: |
+          if [[ -n "${{ inputs.environment }}" ]]; then
+            ENV="${{ inputs.environment }}"
+          else
+            case "$GITHUB_REF_NAME" in
+              develop) ENV=dev  ;;
+              staging) ENV=stg  ;;
+              main)    ENV=prod ;;
+              *) echo "ERROR: Cannot resolve environment for branch '$GITHUB_REF_NAME'" >&2; exit 1 ;;
+            esac
+          fi
+          echo "environment=${ENV}" >> "$GITHUB_OUTPUT"
+
+  # ── Deploy Bicep infrastructure ───────────────────────────────────────────────
+  deploy-infra:
+    name: Deploy infrastructure — ${{ needs.resolve-env.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: resolve-env
+    environment: ${{ needs.resolve-env.outputs.environment }}
+    permissions:
+      id-token: write   # required for OIDC Azure login
+      contents: read
+    env:
+      ENVIRONMENT:    ${{ needs.resolve-env.outputs.environment }}
+      RESOURCE_GROUP: rg-cpcrm-${{ needs.resolve-env.outputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Azure login (OIDC) ───────────────────────────────────────────────────
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # ── Ensure resource group exists ─────────────────────────────────────────
+      - name: Ensure resource group exists
+        run: |
+          LOCATION="${{ vars.AZURE_LOCATION || 'eastus' }}"
+          az group create \
+            --name     "$RESOURCE_GROUP" \
+            --location "$LOCATION" \
+            --tags project=cpcrm environment="$ENVIRONMENT" managedBy=bicep \
+            --output none
+          echo "Resource group '$RESOURCE_GROUP' is ready."
+
+      # ── Deploy Bicep template ─────────────────────────────────────────────────
+      - name: Deploy Bicep
+        id: bicep
+        run: |
+          DEPLOYMENT_NAME="cpcrm-${ENVIRONMENT}-$(date +%Y%m%d%H%M%S)"
+          echo "deployment-name=${DEPLOYMENT_NAME}" >> "$GITHUB_OUTPUT"
+
+          az deployment group create \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file  infrastructure/bicep/main.bicep \
+            --parameters     "infrastructure/bicep/parameters/${ENVIRONMENT}.bicepparam" \
+            --parameters     postgresAdminPassword="${POSTGRES_ADMIN_PASSWORD}" \
+            --name           "$DEPLOYMENT_NAME" \
+            --output table
+        env:
+          POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+
+      # ── Store PostgreSQL connection string in Key Vault ───────────────────────
+      # The App Service reads DATABASE_URL via a Key Vault reference; this step
+      # populates (or refreshes) that secret after every infrastructure deployment.
+      - name: Store PostgreSQL connection string in Key Vault
+        run: |
+          ADMIN_LOGIN="${{ vars.POSTGRES_ADMIN_LOGIN || 'cpcrmadmin' }}"
+          POSTGRES_FQDN="psql-cpcrm-${ENVIRONMENT}.postgres.database.azure.com"
+          CONNECTION_STRING="postgresql://${ADMIN_LOGIN}:${POSTGRES_ADMIN_PASSWORD}@${POSTGRES_FQDN}/cpcrm?sslmode=require"
+
+          KV_NAME="kv-cpcrm-${ENVIRONMENT}"
+          az keyvault secret set \
+            --vault-name "$KV_NAME" \
+            --name       "postgres-connection-string" \
+            --value      "$CONNECTION_STRING" \
+            --output none
+          echo "Connection string stored in Key Vault '${KV_NAME}'."
+        env:
+          POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+
+      # ── Configure App Service: Descope project ID ─────────────────────────────
+      - name: Set Descope project ID on App Service
+        run: |
+          az webapp config appsettings set \
+            --resource-group "$RESOURCE_GROUP" \
+            --name           "app-cpcrm-api-${ENVIRONMENT}" \
+            --settings       "DESCOPE_PROJECT_ID=${{ vars.DESCOPE_PROJECT_ID }}" \
+            --output none
+
+      # ── Print deployment outputs ──────────────────────────────────────────────
+      - name: Print deployment outputs
+        run: |
+          az deployment group show \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "${{ steps.bicep.outputs.deployment-name }}" \
+            --query properties.outputs \
+            --output table

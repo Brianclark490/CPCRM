@@ -1,0 +1,186 @@
+name: Deploy
+
+# Triggers on every push to environment branches.
+# Branch → environment mapping:
+#   develop → dev
+#   staging → stg
+#   main    → prod  (requires manual approval via GitHub Environment protection rules)
+on:
+  push:
+    branches:
+      - develop
+      - staging
+      - main
+
+# Prevent concurrent deployments to the same environment.
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Resolve environment from branch name ─────────────────────────────────────
+  resolve-env:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      resource-group: ${{ steps.env.outputs.resource-group }}
+    steps:
+      - name: Map branch to environment
+        id: env
+        run: |
+          case "$GITHUB_REF_NAME" in
+            develop) ENV=dev  ;;
+            staging) ENV=stg  ;;
+            main)    ENV=prod ;;
+            *) echo "ERROR: Unrecognised branch '$GITHUB_REF_NAME'" >&2; exit 1 ;;
+          esac
+          echo "environment=${ENV}"           >> "$GITHUB_OUTPUT"
+          echo "resource-group=rg-cpcrm-${ENV}" >> "$GITHUB_OUTPUT"
+
+  # ── Build the API (no environment-specific config needed at build time) ───────
+  build-api:
+    name: Build API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck --workspace=@cpcrm/api
+
+      - name: Build
+        run: npm run build --workspace=@cpcrm/api
+
+      # Create a self-contained deployment package:
+      #   dist/           compiled JS output
+      #   package.json    manifest (App Service uses this for the start command)
+      #   node_modules/   production-only dependencies
+      - name: Create standalone deployment package
+        run: |
+          mkdir -p /tmp/api-deploy
+          cp -r apps/api/dist /tmp/api-deploy/dist
+          cp    apps/api/package.json /tmp/api-deploy/package.json
+          cd /tmp/api-deploy
+          npm install --omit=dev --ignore-scripts
+          cd /tmp
+          zip -r "$GITHUB_WORKSPACE/api-deployment.zip" api-deploy/
+
+      - name: Upload API artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-deployment
+          path: api-deployment.zip
+          retention-days: 1
+
+  # ── Deploy to target environment ─────────────────────────────────────────────
+  # This job intentionally combines web build + all deploy steps so that
+  # environment-specific variables (e.g. VITE_DESCOPE_PROJECT_ID) are available
+  # during the build, and a single environment protection gate covers everything.
+  deploy:
+    name: Deploy — ${{ needs.resolve-env.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [resolve-env, build-api]
+    environment: ${{ needs.resolve-env.outputs.environment }}
+    permissions:
+      id-token: write   # required for OIDC Azure login
+      contents: read
+    env:
+      ENVIRONMENT:    ${{ needs.resolve-env.outputs.environment }}
+      RESOURCE_GROUP: ${{ needs.resolve-env.outputs.resource-group }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── Azure login (OIDC — no long-lived credentials) ──────────────────────
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # ── Build web (env-specific VITE_ vars injected at build time) ──────────
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck web
+        run: npm run typecheck --workspace=@cpcrm/web
+
+      - name: Build web
+        run: npm run build --workspace=@cpcrm/web
+        env:
+          VITE_DESCOPE_PROJECT_ID: ${{ vars.DESCOPE_PROJECT_ID }}
+          VITE_API_BASE_URL:       ${{ vars.API_BASE_URL }}
+
+      # ── Deploy API to Azure App Service ─────────────────────────────────────
+      - name: Download API artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: api-deployment
+
+      - name: Deploy API to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: app-cpcrm-api-${{ env.ENVIRONMENT }}
+          package:  api-deployment.zip
+
+      # ── Run database migrations ──────────────────────────────────────────────
+      - name: Install psql client
+        run: sudo apt-get install -y postgresql-client --no-install-recommends -q
+
+      - name: Get runner public IP
+        id: ip
+        run: echo "ip=$(curl -fsSL https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+
+      - name: Open PostgreSQL firewall for runner
+        id: open-fw
+        run: |
+          RULE_NAME="github-runner-${{ github.run_id }}"
+          echo "rule-name=${RULE_NAME}" >> "$GITHUB_OUTPUT"
+          az postgres flexible-server firewall-rule create \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "psql-cpcrm-${ENVIRONMENT}" \
+            --rule-name "${RULE_NAME}" \
+            --start-ip-address "${{ steps.ip.outputs.ip }}" \
+            --end-ip-address   "${{ steps.ip.outputs.ip }}" \
+            --output none
+
+      - name: Run database migrations
+        run: bash infrastructure/scripts/run-migrations.sh
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Close PostgreSQL firewall rule
+        # Always runs so the temporary rule is removed even if migrations fail.
+        # Only attempts deletion if the firewall rule was successfully created.
+        if: always() && steps.open-fw.outcome == 'success'
+        run: |
+          az postgres flexible-server firewall-rule delete \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "psql-cpcrm-${ENVIRONMENT}" \
+            --rule-name "${{ steps.open-fw.outputs.rule-name }}" \
+            --yes --output none 2>/dev/null || true
+
+      # ── Deploy frontend to Azure Static Web App ──────────────────────────────
+      # The web is pre-built in this job; skip_app_build=true uploads dist/ directly.
+      - name: Deploy frontend to Static Web App
+        uses: azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action:          upload
+          app_location:    apps/web
+          output_location: dist
+          skip_app_build:  true
