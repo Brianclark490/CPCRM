@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
     "test": "vitest run",
     "lint": "echo 'lint not yet implemented'",
     "typecheck": "tsc --noEmit"
