@@ -28,167 +28,16 @@
   color: var(--color-text-secondary);
 }
 
-/* ── Opportunity table ────────────────────────────────────── */
+/* ── Error alert ──────────────────────────────────────────── */
 
-.tableCard {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.tableHead {
-  background-color: var(--color-surface-subtle);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.tableHead th {
-  padding: var(--space-3) var(--space-5);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-align: left;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-
-.tableBody tr {
-  border-bottom: 1px solid var(--color-border-subtle);
-  transition: background-color var(--transition-fast);
-}
-
-.tableBody tr:last-child {
-  border-bottom: none;
-}
-
-.tableBody tr:hover {
-  background-color: rgba(255, 255, 255, 0.02);
-}
-
-.tableBody td {
-  padding: var(--space-4) var(--space-5);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  vertical-align: middle;
-}
-
-.opportunityTitle {
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.accountName {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  margin-top: 2px;
-}
-
-.valueCell {
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-primary);
-}
-
-.closeDate {
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-/* ── Stage badge ──────────────────────────────────────────── */
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.badgeProspecting {
-  background-color: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-}
-
-.badgeQualification {
-  background-color: rgba(245, 158, 11, 0.15);
-  color: #fcd34d;
-}
-
-.badgeProposal {
-  background-color: rgba(249, 115, 22, 0.15);
-  color: #fdba74;
-}
-
-.badgeNegotiation {
-  background-color: rgba(217, 70, 239, 0.15);
-  color: #e879f9;
-}
-
-.badgeClosedWon {
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #6ee7b7;
-}
-
-.badgeClosedLost {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
-}
-
-/* ── Row actions ──────────────────────────────────────────── */
-
-.rowActions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
-
-.actionButton {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.editButton {
-  background: transparent;
-  color: var(--color-text-secondary);
-  border-color: var(--color-border);
-}
-
-.editButton:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-  color: var(--color-text-primary);
-  border-color: var(--color-text-muted);
-}
-
-.deleteButton {
-  background: transparent;
-  color: var(--color-text-muted);
-  border-color: transparent;
-}
-
-.deleteButton:hover {
+.errorAlert {
   background-color: var(--color-error-subtle);
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
   color: var(--color-error-text);
-  border-color: var(--color-error-border);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-6);
 }
 
 /* ── Empty state card ─────────────────────────────────────── */
@@ -226,4 +75,72 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.6;
+}
+
+/* ── Opportunities table ──────────────────────────────────── */
+
+.tableCard {
+  background-color: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.th {
+  padding: var(--space-3) var(--space-5);
+  text-align: left;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--color-border);
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.tr {
+  border-bottom: 1px solid var(--color-border-subtle);
+  transition: background-color var(--transition-base);
+}
+
+.tr:last-child {
+  border-bottom: none;
+}
+
+.tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.td {
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  vertical-align: middle;
+}
+
+.nameLink {
+  font-weight: 500;
+  color: var(--color-text-primary);
+  transition: color var(--transition-base);
+}
+
+.nameLink:hover {
+  color: var(--color-primary-text);
+}
+
+.stageBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary-text);
 }

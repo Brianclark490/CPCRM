@@ -1,7 +1,40 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import styles from './OpportunitiesPage.module.css';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type OpportunityStage =
+  | 'prospecting'
+  | 'qualification'
+  | 'proposal'
+  | 'negotiation'
+  | 'closed_won'
+  | 'closed_lost';
+
+interface Opportunity {
+  id: string;
+  title: string;
+  accountId: string;
+  stage: OpportunityStage;
+  value?: number;
+  currency?: string;
+  expectedCloseDate?: string;
+  updatedAt: string;
+}
+
+const STAGE_LABELS: Record<OpportunityStage, string> = {
+  prospecting: 'Prospecting',
+  qualification: 'Qualification',
+  proposal: 'Proposal',
+  negotiation: 'Negotiation',
+  closed_won: 'Closed Won',
+  closed_lost: 'Closed Lost',
+};
+
+// ─── Icons ─────────────────────────────────────────────────────────────────────
 
 const PlusIcon = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -9,96 +42,48 @@ const PlusIcon = () => (
   </svg>
 );
 
-const EditIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-    <path
-      d="M8.5 1.5l2 2-6 6H2.5v-2l6-6z"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const TrashIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-    <path
-      d="M1.5 3h9M4 3V2a1 1 0 011-1h2a1 1 0 011 1v1M5 5.5v3M7 5.5v3M2.5 3l.5 7a1 1 0 001 1h4a1 1 0 001-1l.5-7"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-type Stage = 'Prospecting' | 'Qualification' | 'Proposal' | 'Negotiation' | 'Closed Won' | 'Closed Lost';
-
-interface Opportunity {
-  id: string;
-  title: string;
-  account: string;
-  value?: number;
-  currency?: string;
-  closeDate?: string;
-  stage: Stage;
-}
-
-const STAGE_CLASS: Record<Stage, string> = {
-  'Prospecting': styles.badgeProspecting,
-  'Qualification': styles.badgeQualification,
-  'Proposal': styles.badgeProposal,
-  'Negotiation': styles.badgeNegotiation,
-  'Closed Won': styles.badgeClosedWon,
-  'Closed Lost': styles.badgeClosedLost,
-};
-
-function formatValue(value: number, currency = 'GBP') {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-const PLACEHOLDER_OPPORTUNITIES: Opportunity[] = [
-  {
-    id: '1',
-    title: 'New Partnership Deal',
-    account: 'Contoso Ltd',
-    value: 50000,
-    currency: 'GBP',
-    closeDate: '2025-06-30',
-    stage: 'Proposal',
-  },
-  {
-    id: '2',
-    title: 'Software License Renewal',
-    account: 'Fabrikam Inc',
-    value: 120000,
-    currency: 'USD',
-    closeDate: '2025-05-15',
-    stage: 'Negotiation',
-  },
-  {
-    id: '3',
-    title: 'Cloud Migration Project',
-    account: 'Adventure Works',
-    value: 85000,
-    currency: 'GBP',
-    closeDate: '2025-07-31',
-    stage: 'Qualification',
-  },
-];
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function OpportunitiesPage() {
-  const navigate = useNavigate();
-  const [opportunities, setOpportunities] = useState<Opportunity[]>(PLACEHOLDER_OPPORTUNITIES);
+  const { sessionToken } = useSession();
 
-  const handleDelete = (id: string, title: string) => {
-    if (!window.confirm(`Delete "${title}"? This action cannot be undone.`)) return;
-    setOpportunities((prev) => prev.filter((o) => o.id !== id));
-  };
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch('/api/opportunities', {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        });
+
+        if (cancelled) return;
+
+        if (response.ok) {
+          const data = (await response.json()) as Opportunity[];
+          if (!cancelled) setOpportunities(data);
+        } else {
+          if (!cancelled) setError('Failed to load opportunities.');
+        }
+      } catch {
+        if (!cancelled) setError('Failed to connect to the server. Please try again.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionToken]);
 
   return (
     <div className={styles.page}>
@@ -115,7 +100,13 @@ export function OpportunitiesPage() {
         </Link>
       </div>
 
-      {opportunities.length === 0 ? (
+      {error && (
+        <p role="alert" className={styles.errorAlert}>
+          {error}
+        </p>
+      )}
+
+      {!loading && !error && opportunities.length === 0 && (
         <div className={styles.emptyState}>
           <div className={styles.iconWrap} aria-hidden="true">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -144,57 +135,45 @@ export function OpportunitiesPage() {
             Create your first opportunity to start tracking your sales pipeline.
           </p>
         </div>
-      ) : (
+      )}
+
+      {!loading && !error && opportunities.length > 0 && (
         <div className={styles.tableCard}>
           <table className={styles.table}>
-            <thead className={styles.tableHead}>
+            <thead>
               <tr>
-                <th>Opportunity</th>
-                <th>Value</th>
-                <th>Stage</th>
-                <th>Close Date</th>
-                <th />
+                <th className={styles.th}>Name</th>
+                <th className={styles.th}>Account</th>
+                <th className={styles.th}>Stage</th>
+                <th className={styles.th}>Value</th>
+                <th className={styles.th}>Close date</th>
               </tr>
             </thead>
-            <tbody className={styles.tableBody}>
+            <tbody>
               {opportunities.map((opp) => (
-                <tr key={opp.id}>
-                  <td>
-                    <div className={styles.opportunityTitle}>{opp.title}</div>
-                    <div className={styles.accountName}>{opp.account}</div>
+                <tr key={opp.id} className={styles.tr}>
+                  <td className={styles.td}>
+                    <Link to={`/opportunities/${opp.id}`} className={styles.nameLink}>
+                      {opp.title}
+                    </Link>
                   </td>
-                  <td className={styles.valueCell}>
-                    {opp.value != null ? formatValue(opp.value, opp.currency) : '—'}
+                  <td className={styles.td}>{opp.accountId}</td>
+                  <td className={styles.td}>
+                    <span className={styles.stageBadge}>{STAGE_LABELS[opp.stage]}</span>
                   </td>
-                  <td>
-                    <span className={`${styles.badge} ${STAGE_CLASS[opp.stage]}`}>
-                      {opp.stage}
-                    </span>
+                  <td className={styles.td}>
+                    {opp.value !== undefined
+                      ? `${opp.currency ? opp.currency + ' ' : ''}${opp.value.toLocaleString()}`
+                      : '—'}
                   </td>
-                  <td className={styles.closeDate}>
-                    {opp.closeDate ? formatDate(opp.closeDate) : '—'}
-                  </td>
-                  <td>
-                    <div className={styles.rowActions}>
-                      <button
-                        type="button"
-                        className={`${styles.actionButton} ${styles.editButton}`}
-                        onClick={() => void navigate(`/opportunities/${opp.id}/edit`)}
-                        aria-label={`Edit ${opp.title}`}
-                      >
-                        <EditIcon />
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.actionButton} ${styles.deleteButton}`}
-                        onClick={() => handleDelete(opp.id, opp.title)}
-                        aria-label={`Delete ${opp.title}`}
-                      >
-                        <TrashIcon />
-                        Delete
-                      </button>
-                    </div>
+                  <td className={styles.td}>
+                    {opp.expectedCloseDate
+                      ? new Date(opp.expectedCloseDate).toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })
+                      : '—'}
                   </td>
                 </tr>
               ))}
@@ -205,3 +184,4 @@ export function OpportunitiesPage() {
     </div>
   );
 }
+
