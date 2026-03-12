@@ -54,6 +54,7 @@ resource apiApp 'Microsoft.Web/sites@2023-01-01' = {
       linuxFxVersion: 'NODE|20-lts'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      appCommandLine: 'node dist/index.js'
       appSettings: [
         {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
