@@ -41,6 +41,7 @@ jobs:
   resolve-env:
     name: Resolve environment
     runs-on: ubuntu-latest
+    permissions: {}
     outputs:
       environment: ${{ steps.env.outputs.environment }}
     steps:

@@ -22,6 +22,7 @@ jobs:
   resolve-env:
     name: Resolve environment
     runs-on: ubuntu-latest
+    permissions: {}
     outputs:
       environment: ${{ steps.env.outputs.environment }}
       resource-group: ${{ steps.env.outputs.resource-group }}
@@ -42,6 +43,8 @@ jobs:
   build-api:
     name: Build API
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
