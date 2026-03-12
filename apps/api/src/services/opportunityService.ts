@@ -331,9 +331,13 @@ export async function updateOpportunity(
   if (params.ownerId !== undefined && params.ownerId !== existing.ownerId) changedFields.push('ownerId');
   if (params.stage !== undefined && params.stage !== existing.stage) changedFields.push('stage');
   if (params.value !== undefined && params.value !== existing.value) changedFields.push('value');
-  if (params.currency !== undefined && (params.currency ?? undefined) !== existing.currency) changedFields.push('currency');
-  if (params.expectedCloseDate !== undefined) changedFields.push('expectedCloseDate');
-  if (params.description !== undefined && (params.description ?? undefined) !== existing.description) changedFields.push('description');
+  if (params.currency !== undefined && (params.currency?.trim() || undefined) !== existing.currency) changedFields.push('currency');
+  if (params.expectedCloseDate !== undefined) {
+    const newDate = params.expectedCloseDate ? new Date(params.expectedCloseDate).toISOString() : undefined;
+    const oldDate = existing.expectedCloseDate?.toISOString();
+    if (newDate !== oldDate) changedFields.push('expectedCloseDate');
+  }
+  if (params.description !== undefined && (params.description?.trim() || undefined) !== existing.description) changedFields.push('description');
 
   const now = new Date();
 

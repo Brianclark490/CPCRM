@@ -176,10 +176,10 @@ export function OpportunityDetailPage() {
       return;
     }
 
-    let parsedValue: number | null | undefined;
+    let validatedValue: number | null | undefined;
     if (form.value.trim()) {
-      parsedValue = Number(form.value.trim());
-      if (isNaN(parsedValue)) {
+      validatedValue = Number(form.value.trim());
+      if (isNaN(validatedValue)) {
         setSaveError('Estimated value must be a valid number');
         return;
       }
@@ -209,7 +209,7 @@ export function OpportunityDetailPage() {
           accountId: trimmedAccountId,
           ownerId: form.ownerId.trim() || undefined,
           stage: form.stage,
-          value: parsedValue,
+          value: validatedValue,
           currency: form.currency.trim() || null,
           expectedCloseDate: form.expectedCloseDate.trim() || null,
           description: form.description.trim() || null,
