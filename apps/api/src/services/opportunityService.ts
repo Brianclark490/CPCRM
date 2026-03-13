@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../lib/logger.js';
+import { pool } from '../db/client.js';
 
 // ─── Local type aliases ───────────────────────────────────────────────────────
 
@@ -186,25 +187,47 @@ export function validateStageTransition(
   return null;
 }
 
-// ─── In-memory store ─────────────────────────────────────────────────────────
-// TODO: replace with real database queries once a database client is configured
+// ─── Row → domain model ───────────────────────────────────────────────────────
 
-const opportunityStore = new Map<string, Opportunity>();
+function rowToOpportunity(row: Record<string, unknown>): Opportunity {
+  return {
+    id: row.id as string,
+    tenantId: row.tenant_id as string,
+    accountId: row.account_id as string,
+    ownerId: row.owner_id as string,
+    title: row.title as string,
+    stage: row.stage as OpportunityStage,
+    value: row.value != null ? Number(row.value) : undefined,
+    currency: (row.currency as string | null) ?? undefined,
+    expectedCloseDate: row.expected_close_date != null
+      ? new Date(row.expected_close_date as string)
+      : undefined,
+    description: (row.description as string | null) ?? undefined,
+    createdAt: new Date(row.created_at as string),
+    updatedAt: new Date(row.updated_at as string),
+    createdBy: row.created_by as string,
+    stageHistory: (row.stage_history as StageTransition[]).map((e) => ({
+      from: e.from,
+      to: e.to,
+      changedAt: new Date(e.changedAt),
+      changedBy: e.changedBy,
+    })),
+  };
+}
+
+// ─── Service functions ────────────────────────────────────────────────────────
 
 /**
  * Creates a new opportunity within a tenant.
  *
  * Creation steps:
  *   1. Validate input — title and accountId are required.
- *   2. Create the Opportunity record with initial stage "prospecting".
+ *   2. Persist the Opportunity record with initial stage "prospecting".
  *
  * Tenant isolation: the tenantId is always taken from the authenticated
  * session and never from caller-supplied input.
  *
  * @throws {Error} with a `code` property of "VALIDATION_ERROR" when input is invalid.
- *
- * TODO: Replace the in-memory stub below with real database writes once a
- * database client is configured (see apps/api/src/db/).
  */
 export async function createOpportunity(
   params: CreateOpportunityParams,
@@ -240,61 +263,69 @@ export async function createOpportunity(
 
   logger.info({ tenantId, opportunityId, requestingUserId }, 'Creating new opportunity');
 
-  // Step 2 — create opportunity record
-  const opportunity: Opportunity = {
-    id: opportunityId,
-    tenantId,
-    accountId: accountId.trim(),
-    ownerId: requestingUserId,
-    title: title.trim(),
-    stage: 'prospecting',
-    value,
-    currency: currency?.trim() || undefined,
-    expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
-    description: description?.trim() || undefined,
-    createdAt: now,
-    updatedAt: now,
-    createdBy: requestingUserId,
-    stageHistory: [
-      { from: null, to: 'prospecting', changedAt: now, changedBy: requestingUserId },
-    ],
-  };
+  const initialStageHistory: StageTransition[] = [
+    { from: null, to: 'prospecting', changedAt: now, changedBy: requestingUserId },
+  ];
 
-  opportunityStore.set(opportunityId, opportunity);
+  // Step 2 — persist to database
+  const result = await pool.query(
+    `INSERT INTO opportunities
+       (id, tenant_id, account_id, owner_id, title, stage,
+        value, currency, expected_close_date, description,
+        created_by, created_at, updated_at, stage_history)
+     VALUES ($1,$2,$3,$4,$5,'prospecting',$6,$7,$8,$9,$10,$11,$12,$13)
+     RETURNING *`,
+    [
+      opportunityId,
+      tenantId,
+      accountId.trim(),
+      requestingUserId,
+      title.trim(),
+      value ?? null,
+      currency?.trim() ?? null,
+      expectedCloseDate ?? null,
+      description?.trim() ?? null,
+      requestingUserId,
+      now,
+      now,
+      JSON.stringify(initialStageHistory),
+    ],
+  );
 
   logger.info({ tenantId, opportunityId }, 'Opportunity created successfully');
 
-  return opportunity;
+  return rowToOpportunity(result.rows[0]);
 }
 
 /**
- * Returns all opportunities belonging to a given tenant.
+ * Returns all opportunities belonging to a given tenant, newest first.
  *
  * Tenant isolation: only opportunities with a matching tenantId are returned.
- *
- * TODO: Replace with a real database query:
- *   SELECT * FROM opportunities WHERE tenant_id = $1 ORDER BY created_at DESC
  */
 export async function listOpportunities(tenantId: string): Promise<Opportunity[]> {
-  return Array.from(opportunityStore.values())
-    .filter((o) => o.tenantId === tenantId)
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const result = await pool.query(
+    `SELECT * FROM opportunities
+     WHERE tenant_id = $1
+     ORDER BY created_at DESC`,
+    [tenantId],
+  );
+  return result.rows.map(rowToOpportunity);
 }
 
 /**
  * Returns a single opportunity by ID, scoped to the given tenant.
  * Returns null if the opportunity does not exist or belongs to a different tenant.
- *
- * TODO: Replace with a real database query:
- *   SELECT * FROM opportunities WHERE id = $1 AND tenant_id = $2
  */
 export async function getOpportunity(
   id: string,
   tenantId: string,
 ): Promise<Opportunity | null> {
-  const opportunity = opportunityStore.get(id);
-  if (!opportunity || opportunity.tenantId !== tenantId) return null;
-  return opportunity;
+  const result = await pool.query(
+    `SELECT * FROM opportunities WHERE id = $1 AND tenant_id = $2`,
+    [id, tenantId],
+  );
+  if (result.rows.length === 0) return null;
+  return rowToOpportunity(result.rows[0]);
 }
 
 /**
@@ -303,15 +334,13 @@ export async function getOpportunity(
  * Update steps:
  *   1. Validate that the opportunity exists and belongs to the tenant.
  *   2. Validate updated fields.
- *   3. Apply changes and record which fields changed for the activity log.
+ *   3. Persist changes to the database, appending a stage transition entry when
+ *      the stage changes.
  *
  * Tenant isolation: the tenantId is always taken from the authenticated session.
  *
  * @throws {Error} with a `code` property of "VALIDATION_ERROR" when input is invalid.
  * @throws {Error} with a `code` property of "NOT_FOUND" when the opportunity does not exist.
- *
- * TODO: Replace the in-memory stub below with real database writes and a proper
- * activity log table once a database client is configured (see apps/api/src/db/).
  */
 export async function updateOpportunity(
   id: string,
@@ -319,14 +348,15 @@ export async function updateOpportunity(
   params: UpdateOpportunityParams,
   requestingUserId: string,
 ): Promise<Opportunity> {
-  const existing = opportunityStore.get(id);
-  if (!existing || existing.tenantId !== tenantId) {
+  // Step 1 — load existing record
+  const existing = await getOpportunity(id, tenantId);
+  if (!existing) {
     const err = new Error('Opportunity not found') as Error & { code: string };
     err.code = 'NOT_FOUND';
     throw err;
   }
 
-  // Validate only the fields being changed
+  // Step 2 — validate only the fields being changed
   if (params.title !== undefined) {
     const titleError = validateTitle(params.title);
     if (titleError) {
@@ -381,7 +411,7 @@ export async function updateOpportunity(
     }
   }
 
-  // Determine which fields are actually changing for the activity log
+  // Step 3 — compute updated values
   const changedFields: string[] = [];
   if (params.title !== undefined && params.title.trim() !== existing.title) changedFields.push('title');
   if (params.accountId !== undefined && params.accountId.trim() !== existing.accountId) changedFields.push('accountId');
@@ -406,37 +436,56 @@ export async function updateOpportunity(
         ]
       : existing.stageHistory;
 
-  const updated: Opportunity = {
-    ...existing,
-    title: params.title !== undefined ? params.title.trim() : existing.title,
-    accountId: params.accountId !== undefined ? params.accountId.trim() : existing.accountId,
-    ownerId: params.ownerId !== undefined ? params.ownerId : existing.ownerId,
-    stage: params.stage !== undefined ? params.stage : existing.stage,
-    value: params.value !== undefined ? (params.value ?? undefined) : existing.value,
-    currency:
-      params.currency !== undefined
-        ? (params.currency?.trim() || undefined)
-        : existing.currency,
-    expectedCloseDate:
-      params.expectedCloseDate !== undefined
-        ? (params.expectedCloseDate ? new Date(params.expectedCloseDate) : undefined)
-        : existing.expectedCloseDate,
-    description:
-      params.description !== undefined
-        ? (params.description?.trim() || undefined)
-        : existing.description,
-    stageHistory: newStageHistory,
-    updatedAt: now,
-  };
+  const newTitle = params.title !== undefined ? params.title.trim() : existing.title;
+  const newAccountId = params.accountId !== undefined ? params.accountId.trim() : existing.accountId;
+  const newOwnerId = params.ownerId !== undefined ? params.ownerId : existing.ownerId;
+  const newStage = params.stage !== undefined ? params.stage : existing.stage;
+  const newValue = params.value !== undefined ? (params.value ?? null) : (existing.value ?? null);
+  const newCurrency = params.currency !== undefined
+    ? (params.currency?.trim() || null)
+    : (existing.currency ?? null);
+  const newExpectedCloseDate = params.expectedCloseDate !== undefined
+    ? (params.expectedCloseDate || null)
+    : (existing.expectedCloseDate ?? null);
+  const newDescription = params.description !== undefined
+    ? (params.description?.trim() || null)
+    : (existing.description ?? null);
 
-  // TODO: persist update to the `opportunities` table and insert into an
-  // activity_log table with changedFields, requestingUserId, and timestamp.
-  opportunityStore.set(id, updated);
+  // Step 4 — persist update
+  const result = await pool.query(
+    `UPDATE opportunities
+     SET title               = $3,
+         account_id          = $4,
+         owner_id            = $5,
+         stage               = $6,
+         value               = $7,
+         currency            = $8,
+         expected_close_date = $9,
+         description         = $10,
+         stage_history       = $11,
+         updated_at          = $12
+     WHERE id = $1 AND tenant_id = $2
+     RETURNING *`,
+    [
+      id,
+      tenantId,
+      newTitle,
+      newAccountId,
+      newOwnerId,
+      newStage,
+      newValue,
+      newCurrency,
+      newExpectedCloseDate,
+      newDescription,
+      JSON.stringify(newStageHistory),
+      now,
+    ],
+  );
 
   logger.info(
     { tenantId, opportunityId: id, requestingUserId, changedFields },
     'Opportunity updated',
   );
 
-  return updated;
+  return rowToOpportunity(result.rows[0]);
 }
