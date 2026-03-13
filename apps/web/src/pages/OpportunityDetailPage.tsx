@@ -13,6 +13,13 @@ type OpportunityStage =
   | 'closed_won'
   | 'closed_lost';
 
+interface StageTransition {
+  from: OpportunityStage | null;
+  to: OpportunityStage;
+  changedAt: string;
+  changedBy: string;
+}
+
 interface Opportunity {
   id: string;
   tenantId: string;
@@ -27,6 +34,7 @@ interface Opportunity {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+  stageHistory: StageTransition[];
 }
 
 interface FormState {
@@ -53,6 +61,15 @@ const STAGE_LABELS: Record<OpportunityStage, string> = {
   negotiation: 'Negotiation',
   closed_won: 'Closed Won',
   closed_lost: 'Closed Lost',
+};
+
+const ALLOWED_STAGE_TRANSITIONS: Record<OpportunityStage, readonly OpportunityStage[]> = {
+  prospecting:   ['qualification', 'closed_lost'],
+  qualification: ['proposal', 'prospecting', 'closed_lost'],
+  proposal:      ['negotiation', 'qualification', 'closed_lost'],
+  negotiation:   ['closed_won', 'closed_lost', 'proposal'],
+  closed_won:    ['negotiation'],
+  closed_lost:   ['prospecting'],
 };
 
 function formatDate(iso: string | undefined): string {
@@ -360,12 +377,15 @@ export function OpportunityDetailPage() {
                     onChange={handleChange}
                     disabled={submitting}
                   >
-                    <option value="prospecting">Prospecting</option>
-                    <option value="qualification">Qualification</option>
-                    <option value="proposal">Proposal</option>
-                    <option value="negotiation">Negotiation</option>
-                    <option value="closed_won">Closed Won</option>
-                    <option value="closed_lost">Closed Lost</option>
+                    {/* Current stage is always selectable (no-op change) */}
+                    <option value={form.stage}>{STAGE_LABELS[form.stage]}</option>
+                    {ALLOWED_STAGE_TRANSITIONS[form.stage]
+                      .filter((s) => s !== form.stage)
+                      .map((s) => (
+                        <option key={s} value={s}>
+                          {STAGE_LABELS[s]}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -510,6 +530,23 @@ export function OpportunityDetailPage() {
                   <span className={styles.fieldEmpty}>No description</span>
                 )}
               </div>
+
+              {opportunity.stageHistory.length > 0 && (
+                <div className={`${styles.fieldGroup} ${styles.fieldFull}`}>
+                  <span className={styles.fieldLabel}>Stage history</span>
+                  <ol className={styles.stageHistory}>
+                    {opportunity.stageHistory.map((t, i) => (
+                      <li key={i} className={styles.stageHistoryItem}>
+                        <span className={styles.stageHistoryBadge}>{STAGE_LABELS[t.to]}</span>
+                        <span className={styles.stageHistoryMeta}>
+                          {t.from ? `from ${STAGE_LABELS[t.from]} · ` : ''}
+                          {formatDate(t.changedAt)}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
             </div>
           )}
         </div>

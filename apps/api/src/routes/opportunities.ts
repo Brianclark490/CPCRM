@@ -211,7 +211,7 @@ export async function handleUpdateOpportunity(
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 
-    if (code === 'VALIDATION_ERROR') {
+    if (code === 'VALIDATION_ERROR' || code === 'INVALID_STAGE_TRANSITION') {
       res.status(400).json({ error: (err as Error).message });
       return;
     }

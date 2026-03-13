@@ -152,6 +152,18 @@ export type OpportunityStage =
   | 'closed_lost';
 
 /**
+ * Records a single stage change on an Opportunity.
+ */
+export interface StageTransition {
+  /** The stage before the change, or null when the opportunity was first created. */
+  from: OpportunityStage | null;
+  to: OpportunityStage;
+  changedAt: Date;
+  /** Descope userId of the user who made the change. */
+  changedBy: string;
+}
+
+/**
  * An Opportunity represents a potential deal or sale being tracked in the CRM.
  * It is linked to an Account and assigned to an owner (a tenant member).
  */
@@ -174,6 +186,8 @@ export interface Opportunity {
   updatedAt: Date;
   /** Descope userId of the user who created this record */
   createdBy: string;
+  /** Ordered history of stage transitions, oldest first. */
+  stageHistory: StageTransition[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
