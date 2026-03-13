@@ -2,13 +2,25 @@ import DescopeClient from '@descope/node-sdk';
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from '../lib/logger.js';
 
-const projectId = process.env.DESCOPE_PROJECT_ID;
-
-if (!projectId) {
-  throw new Error('DESCOPE_PROJECT_ID environment variable is required');
+class MissingDescopeConfigError extends Error {
+  constructor() {
+    super('DESCOPE_PROJECT_ID environment variable is required');
+    this.name = 'MissingDescopeConfigError';
+  }
 }
 
-const descopeClient = DescopeClient({ projectId });
+let descopeClientInstance: ReturnType<typeof DescopeClient> | undefined;
+
+function getDescopeClient(): ReturnType<typeof DescopeClient> {
+  if (!descopeClientInstance) {
+    const projectId = process.env.DESCOPE_PROJECT_ID;
+    if (!projectId) {
+      throw new MissingDescopeConfigError();
+    }
+    descopeClientInstance = DescopeClient({ projectId });
+  }
+  return descopeClientInstance;
+}
 
 /**
  * Extracts the active tenant ID from the Descope JWT token payload.
@@ -68,7 +80,8 @@ export async function requireAuth(
   const sessionToken = authHeader.slice(7);
 
   try {
-    const authInfo = await descopeClient.validateSession(sessionToken);
+    const client = getDescopeClient();
+    const authInfo = await client.validateSession(sessionToken);
     const userId = authInfo.token.sub;
 
     if (!userId) {
@@ -85,7 +98,12 @@ export async function requireAuth(
     };
 
     next();
-  } catch {
+  } catch (err) {
+    if (err instanceof MissingDescopeConfigError) {
+      logger.error({ path: req.path }, 'Auth service unavailable: DESCOPE_PROJECT_ID is not configured');
+      res.status(503).json({ error: 'Authentication service unavailable' });
+      return;
+    }
     logger.warn({ path: req.path }, 'Auth rejected: token validation failed');
     res.status(401).json({ error: 'Invalid or expired token' });
   }
