@@ -5,6 +5,44 @@ vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+// ─── Fake DB pool ─────────────────────────────────────────────────────────────
+
+const { mockQuery } = vi.hoisted(() => {
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+
+    if (s.startsWith('INSERT INTO ORGANISATIONS')) {
+      const [id, tenant_id, name, description, created_at, updated_at] = params as unknown[];
+      return {
+        rows: [{
+          id, tenant_id, name,
+          description: description ?? null,
+          created_at, updated_at,
+        }],
+      };
+    }
+
+    if (s.startsWith('INSERT INTO TENANT_MEMBERSHIPS')) {
+      const [id, tenant_id, user_id, organisation_id, , created_at, updated_at] = params as unknown[];
+      return {
+        rows: [{
+          id, tenant_id, user_id, organisation_id,
+          role: 'owner',
+          created_at, updated_at,
+        }],
+      };
+    }
+
+    return { rows: [] };
+  });
+
+  return { mockQuery };
+});
+
+vi.mock('../../db/client.js', () => ({
+  pool: { query: mockQuery },
+}));
+
 describe('validateName', () => {
   it('returns null for a valid name', () => {
     expect(validateName('Acme Corp')).toBeNull();
