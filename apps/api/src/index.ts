@@ -25,6 +25,10 @@ app.get('/', (_req, res) => {
   res.json({ name: 'cpcrm-api', status: 'ok' });
 });
 
+app.get('/favicon.ico', (_req, res) => {
+  res.status(204).end();
+});
+
 app.use('/health', healthRouter);
 app.use('/me', meRouter);
 app.use('/organisations', organisationsRouter);
