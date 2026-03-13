@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
 
 // ─── Local type aliases (mirror packages/types) ───────────────────────────────
 
@@ -105,57 +104,31 @@ export async function provisionOrganisation(
 
   logger.info({ tenantId, organisationId, requestingUserId }, 'Provisioning new organisation');
 
-  // Step 2 — persist organisation record
-  const orgResult = await pool.query(
-    `INSERT INTO organisations (id, tenant_id, name, description, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING *`,
-    [
-      organisationId,
-      tenantId,
-      name.trim(),
-      description?.trim() ?? null,
-      now,
-      now,
-    ],
-  );
-
-  const orgRow = orgResult.rows[0];
+  // Step 2 — create organisation record
+  // TODO: persist to the `organisations` table:
+  //   INSERT INTO organisations (id, tenant_id, name, description, created_at, updated_at)
+  //   VALUES ($1, $2, $3, $4, $5, $6)
   const organisation: Organisation = {
-    id: orgRow.id as string,
-    tenantId: orgRow.tenant_id as string,
-    name: orgRow.name as string,
-    description: (orgRow.description as string | null) ?? undefined,
-    createdAt: new Date(orgRow.created_at as string),
-    updatedAt: new Date(orgRow.updated_at as string),
+    id: organisationId,
+    tenantId,
+    name: name.trim(),
+    description: description?.trim() || undefined,
+    createdAt: now,
+    updatedAt: now,
   };
 
-  // Step 3 — persist membership for the requesting user as owner
-  const membershipId = randomUUID();
-  const memberResult = await pool.query(
-    `INSERT INTO tenant_memberships
-       (id, tenant_id, user_id, organisation_id, role, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, 'owner', $5, $6)
-     RETURNING *`,
-    [
-      membershipId,
-      tenantId,
-      requestingUserId,
-      organisationId,
-      now,
-      now,
-    ],
-  );
-
-  const memberRow = memberResult.rows[0];
+  // Step 3 — create membership for the requesting user as owner
+  // TODO: persist to the `tenant_memberships` table:
+  //   INSERT INTO tenant_memberships (id, tenant_id, user_id, organisation_id, role, created_at, updated_at)
+  //   VALUES ($1, $2, $3, $4, 'owner', $5, $6)
   const membership: TenantMembership = {
-    id: memberRow.id as string,
-    tenantId: memberRow.tenant_id as string,
-    userId: memberRow.user_id as string,
-    organisationId: (memberRow.organisation_id as string | null) ?? undefined,
-    role: memberRow.role as 'owner' | 'admin' | 'member',
-    createdAt: new Date(memberRow.created_at as string),
-    updatedAt: new Date(memberRow.updated_at as string),
+    id: randomUUID(),
+    tenantId,
+    userId: requestingUserId,
+    organisationId,
+    role: 'owner',
+    createdAt: now,
+    updatedAt: now,
   };
 
   logger.info(

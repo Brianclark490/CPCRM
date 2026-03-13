@@ -17,76 +17,6 @@ vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-// ─── Fake DB pool ─────────────────────────────────────────────────────────────
-// Maintains an in-memory store that backs pool.query so service tests can run
-// without a real database while still exercising the full service logic.
-// vi.hoisted is used so the mock reference is available in the vi.mock factory.
-
-const { fakeRows, mockQuery } = vi.hoisted(() => {
-  const fakeRows = new Map<string, Record<string, unknown>>();
-
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
-
-    if (s.startsWith('INSERT INTO OPPORTUNITIES')) {
-      const [id, tenant_id, account_id, owner_id, title, value, currency, expected_close_date, description, created_by, created_at, updated_at, stage_history] = params as unknown[];
-      const row: Record<string, unknown> = {
-        id, tenant_id, account_id, owner_id, title,
-        stage: 'prospecting',
-        value: value ?? null,
-        currency: currency ?? null,
-        expected_close_date: expected_close_date ?? null,
-        description: description ?? null,
-        created_by, created_at, updated_at,
-        stage_history: typeof stage_history === 'string' ? JSON.parse(stage_history) : stage_history,
-      };
-      fakeRows.set(id as string, row);
-      return { rows: [row] };
-    }
-
-    if (s.startsWith('SELECT * FROM OPPORTUNITIES WHERE ID = $1 AND TENANT_ID = $2')) {
-      const [id, tenant_id] = params as string[];
-      const row = fakeRows.get(id);
-      if (row && row.tenant_id === tenant_id) return { rows: [row] };
-      return { rows: [] };
-    }
-
-    if (s.startsWith('SELECT * FROM OPPORTUNITIES WHERE TENANT_ID = $1')) {
-      const [tenant_id] = params as string[];
-      const rows = [...fakeRows.values()]
-        .filter((r) => r.tenant_id === tenant_id)
-        .sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime());
-      return { rows };
-    }
-
-    if (s.startsWith('UPDATE OPPORTUNITIES')) {
-      const [id, tenant_id, title, account_id, owner_id, stage, value, currency, expected_close_date, description, stage_history, updated_at] = params as unknown[];
-      const existing = fakeRows.get(id as string);
-      if (!existing || existing.tenant_id !== tenant_id) return { rows: [] };
-      const updated: Record<string, unknown> = {
-        ...existing,
-        title, account_id, owner_id, stage,
-        value: value ?? null,
-        currency: currency ?? null,
-        expected_close_date: expected_close_date ?? null,
-        description: description ?? null,
-        stage_history: typeof stage_history === 'string' ? JSON.parse(stage_history) : stage_history,
-        updated_at,
-      };
-      fakeRows.set(id as string, updated);
-      return { rows: [updated] };
-    }
-
-    return { rows: [] };
-  });
-
-  return { fakeRows, mockQuery };
-});
-
-vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
-}));
-
 describe('validateTitle', () => {
   it('returns null for a valid title', () => {
     expect(validateTitle('New Partnership Deal')).toBeNull();
@@ -146,7 +76,6 @@ describe('createOpportunity', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    fakeRows.clear();
   });
 
   it('returns an opportunity with the correct title and tenantId', async () => {
@@ -399,7 +328,6 @@ const storeBaseParams = {
 describe('listOpportunities', () => {
   afterEach(() => {
     vi.clearAllMocks();
-    fakeRows.clear();
   });
 
   it('returns opportunities belonging to the requested tenant', async () => {
