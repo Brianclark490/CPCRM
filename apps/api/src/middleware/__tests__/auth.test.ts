@@ -4,6 +4,7 @@ import type { AuthenticatedRequest } from '../auth.js';
 
 const mockValidateSession = vi.fn();
 const mockLoggerWarn = vi.fn();
+const mockLoggerError = vi.fn();
 
 vi.mock('@descope/node-sdk', () => ({
   default: vi.fn(() => ({
@@ -14,6 +15,7 @@ vi.mock('@descope/node-sdk', () => ({
 vi.mock('../../lib/logger.js', () => ({
   logger: {
     warn: mockLoggerWarn,
+    error: mockLoggerError,
   },
 }));
 
@@ -36,6 +38,7 @@ describe('requireAuth middleware', () => {
     next = vi.fn();
     mockValidateSession.mockReset();
     mockLoggerWarn.mockReset();
+    mockLoggerError.mockReset();
   });
 
   it('returns 401 when Authorization header is missing', async () => {
