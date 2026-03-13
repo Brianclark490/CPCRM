@@ -9,6 +9,8 @@ import {
   validateValue,
   validateExpectedCloseDate,
   validateStage,
+  validateStageTransition,
+  ALLOWED_STAGE_TRANSITIONS,
 } from '../opportunityService.js';
 
 vi.mock('../../lib/logger.js', () => ({
@@ -191,6 +193,16 @@ describe('createOpportunity', () => {
       code: 'VALIDATION_ERROR',
     });
   });
+
+  it('initialises stageHistory with a single prospecting entry', async () => {
+    const result = await createOpportunity(baseParams);
+
+    expect(result.stageHistory).toHaveLength(1);
+    expect(result.stageHistory[0].from).toBeNull();
+    expect(result.stageHistory[0].to).toBe('prospecting');
+    expect(result.stageHistory[0].changedBy).toBe('user-123');
+    expect(result.stageHistory[0].changedAt).toBeInstanceOf(Date);
+  });
 });
 
 describe('validateValue', () => {
@@ -266,6 +278,41 @@ describe('validateStage', () => {
 
   it('returns an error for an invalid stage', () => {
     expect(validateStage('invalid_stage')).toContain('Stage must be one of:');
+  });
+});
+
+describe('validateStageTransition', () => {
+  it('returns null for each allowed transition', () => {
+    for (const [from, targets] of Object.entries(ALLOWED_STAGE_TRANSITIONS)) {
+      for (const to of targets) {
+        expect(
+          validateStageTransition(
+            from as Parameters<typeof validateStageTransition>[0],
+            to as Parameters<typeof validateStageTransition>[1],
+          ),
+        ).toBeNull();
+      }
+    }
+  });
+
+  it('returns an error when transitioning from prospecting to proposal (skipping qualification)', () => {
+    expect(validateStageTransition('prospecting', 'proposal')).toContain(
+      "Cannot transition from 'prospecting' to 'proposal'",
+    );
+  });
+
+  it('returns an error when transitioning from closed_won to prospecting', () => {
+    expect(validateStageTransition('closed_won', 'prospecting')).toContain(
+      "Cannot transition from 'closed_won' to 'prospecting'",
+    );
+  });
+
+  it('returns null when reopening a closed_lost opportunity to prospecting', () => {
+    expect(validateStageTransition('closed_lost', 'prospecting')).toBeNull();
+  });
+
+  it('returns null when reopening a closed_won opportunity to negotiation', () => {
+    expect(validateStageTransition('closed_won', 'negotiation')).toBeNull();
   });
 });
 
@@ -360,11 +407,11 @@ describe('updateOpportunity', () => {
     const updated = await updateOpportunity(
       created.id,
       tenantId,
-      { stage: 'proposal' },
+      { stage: 'qualification' },
       storeBaseParams.requestingUserId,
     );
 
-    expect(updated.stage).toBe('proposal');
+    expect(updated.stage).toBe('qualification');
   });
 
   it('refreshes updatedAt when the opportunity is updated', async () => {
@@ -438,6 +485,75 @@ describe('updateOpportunity', () => {
         storeBaseParams.requestingUserId,
       ),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('throws an INVALID_STAGE_TRANSITION error for a disallowed stage transition', async () => {
+    const tenantId = `tenant-invalid-transition-${Date.now()}`;
+    const created = await createOpportunity({ ...storeBaseParams, tenantId });
+
+    // prospecting → proposal is not a valid transition (must go through qualification first)
+    await expect(
+      updateOpportunity(
+        created.id,
+        tenantId,
+        { stage: 'proposal' },
+        storeBaseParams.requestingUserId,
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_STAGE_TRANSITION' });
+  });
+
+  it('records a stage transition in stageHistory when the stage changes', async () => {
+    const tenantId = `tenant-history-${Date.now()}`;
+    const created = await createOpportunity({ ...storeBaseParams, tenantId });
+
+    const updated = await updateOpportunity(
+      created.id,
+      tenantId,
+      { stage: 'qualification' },
+      storeBaseParams.requestingUserId,
+    );
+
+    expect(updated.stageHistory).toHaveLength(2);
+    expect(updated.stageHistory[1].from).toBe('prospecting');
+    expect(updated.stageHistory[1].to).toBe('qualification');
+    expect(updated.stageHistory[1].changedBy).toBe(storeBaseParams.requestingUserId);
+  });
+
+  it('does not append to stageHistory when the stage is unchanged', async () => {
+    const tenantId = `tenant-no-stage-change-${Date.now()}`;
+    const created = await createOpportunity({ ...storeBaseParams, tenantId });
+
+    const updated = await updateOpportunity(
+      created.id,
+      tenantId,
+      { title: 'New Title' },
+      storeBaseParams.requestingUserId,
+    );
+
+    expect(updated.stageHistory).toHaveLength(1);
+  });
+
+  it('accumulates multiple stage transitions in stageHistory', async () => {
+    const tenantId = `tenant-multi-stage-${Date.now()}`;
+    const created = await createOpportunity({ ...storeBaseParams, tenantId });
+
+    const afterQual = await updateOpportunity(
+      created.id,
+      tenantId,
+      { stage: 'qualification' },
+      storeBaseParams.requestingUserId,
+    );
+    const afterProposal = await updateOpportunity(
+      afterQual.id,
+      tenantId,
+      { stage: 'proposal' },
+      storeBaseParams.requestingUserId,
+    );
+
+    expect(afterProposal.stageHistory).toHaveLength(3);
+    expect(afterProposal.stageHistory[0].to).toBe('prospecting');
+    expect(afterProposal.stageHistory[1].to).toBe('qualification');
+    expect(afterProposal.stageHistory[2].to).toBe('proposal');
   });
 
   it('throws a NOT_FOUND error when the opportunity does not exist', async () => {

@@ -21,6 +21,34 @@ const VALID_STAGES: readonly OpportunityStage[] = [
 ];
 
 /**
+ * Defines which stage transitions are permitted.
+ *
+ * The pipeline flows forward (prospecting → qualification → proposal →
+ * negotiation → closed_won / closed_lost), but also supports stepping
+ * back one stage and reopening closed deals.
+ */
+export const ALLOWED_STAGE_TRANSITIONS: Readonly<Record<OpportunityStage, readonly OpportunityStage[]>> = {
+  prospecting:   ['qualification', 'closed_lost'],
+  qualification: ['proposal', 'prospecting', 'closed_lost'],
+  proposal:      ['negotiation', 'qualification', 'closed_lost'],
+  negotiation:   ['closed_won', 'closed_lost', 'proposal'],
+  closed_won:    ['negotiation'],
+  closed_lost:   ['prospecting'],
+};
+
+/**
+ * Records a single stage change on an opportunity.
+ */
+export interface StageTransition {
+  /** The stage before the change, or null when the opportunity was first created. */
+  from: OpportunityStage | null;
+  to: OpportunityStage;
+  changedAt: Date;
+  /** Descope userId of the user who made the change. */
+  changedBy: string;
+}
+
+/**
  * An Opportunity represents a potential deal or sale being tracked in the CRM.
  */
 export interface Opportunity {
@@ -40,6 +68,8 @@ export interface Opportunity {
   updatedAt: Date;
   /** Descope userId of the user who created this record */
   createdBy: string;
+  /** Ordered history of stage transitions, oldest first. */
+  stageHistory: StageTransition[];
 }
 
 /**
@@ -141,6 +171,21 @@ export function validateStage(stage: unknown): string | null {
   return null;
 }
 
+/**
+ * Validates that a stage transition from `from` to `to` is permitted.
+ * Returns an error message string, or null if valid.
+ */
+export function validateStageTransition(
+  from: OpportunityStage,
+  to: OpportunityStage,
+): string | null {
+  const allowed = ALLOWED_STAGE_TRANSITIONS[from];
+  if (!allowed.includes(to)) {
+    return `Cannot transition from '${from}' to '${to}'. Allowed next stages: ${allowed.join(', ')}`;
+  }
+  return null;
+}
+
 // ─── In-memory store ─────────────────────────────────────────────────────────
 // TODO: replace with real database queries once a database client is configured
 
@@ -210,6 +255,9 @@ export async function createOpportunity(
     createdAt: now,
     updatedAt: now,
     createdBy: requestingUserId,
+    stageHistory: [
+      { from: null, to: 'prospecting', changedAt: now, changedBy: requestingUserId },
+    ],
   };
 
   opportunityStore.set(opportunityId, opportunity);
@@ -322,6 +370,15 @@ export async function updateOpportunity(
       err.code = 'VALIDATION_ERROR';
       throw err;
     }
+
+    if (params.stage !== existing.stage) {
+      const transitionError = validateStageTransition(existing.stage, params.stage);
+      if (transitionError) {
+        const err = new Error(transitionError) as Error & { code: string };
+        err.code = 'INVALID_STAGE_TRANSITION';
+        throw err;
+      }
+    }
   }
 
   // Determine which fields are actually changing for the activity log
@@ -340,6 +397,14 @@ export async function updateOpportunity(
   if (params.description !== undefined && (params.description?.trim() || undefined) !== existing.description) changedFields.push('description');
 
   const now = new Date();
+
+  const newStageHistory: StageTransition[] =
+    params.stage !== undefined && params.stage !== existing.stage
+      ? [
+          ...existing.stageHistory,
+          { from: existing.stage, to: params.stage, changedAt: now, changedBy: requestingUserId },
+        ]
+      : existing.stageHistory;
 
   const updated: Opportunity = {
     ...existing,
@@ -360,6 +425,7 @@ export async function updateOpportunity(
       params.description !== undefined
         ? (params.description?.trim() || undefined)
         : existing.description,
+    stageHistory: newStageHistory,
     updatedAt: now,
   };
 
