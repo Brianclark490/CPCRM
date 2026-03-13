@@ -15,6 +15,34 @@ const nodeEnv = (process.env.NODE_ENV ?? 'development') as
   | 'production'
   | 'test';
 
+/**
+ * Resolves the allowed CORS origin(s) for the API server.
+ *
+ * Resolution order:
+ * 1. CORS_ORIGIN env var — supports a single value or a comma-separated list
+ *    of origins (e.g. "https://myapp.com,https://staging.myapp.com")
+ * 2. WEBSITE_HOSTNAME — Azure App Service injects this automatically, so CORS
+ *    works in Azure without any manual configuration
+ * 3. http://localhost:5173 — local development fallback
+ */
+function resolveCorsOrigin(): string | string[] {
+  const envOrigin = process.env.CORS_ORIGIN;
+  if (envOrigin) {
+    const origins = envOrigin
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+    return origins.length === 1 ? origins[0] : origins;
+  }
+
+  const azureHostname = process.env.WEBSITE_HOSTNAME;
+  if (azureHostname) {
+    return `https://${azureHostname}`;
+  }
+
+  return 'http://localhost:5173';
+}
+
 export const config = {
   /** Runtime environment */
   env: nodeEnv,
@@ -22,8 +50,12 @@ export const config = {
   /** Port the HTTP server listens on */
   port: parseInt(process.env.PORT ?? '3001', 10),
 
-  /** Allowed CORS origin for the frontend */
-  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  /**
+   * Allowed CORS origin(s) for the frontend.
+   * Supports a single origin string or an array of origins.
+   * See resolveCorsOrigin() for the full resolution strategy.
+   */
+  corsOrigin: resolveCorsOrigin(),
 
   /**
    * Minimum log level. Accepts pino levels: trace, debug, info, warn, error, fatal.

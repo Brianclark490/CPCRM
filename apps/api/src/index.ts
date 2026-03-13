@@ -21,13 +21,17 @@ app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json());
 app.use(httpLogger({ logger }));
 
+app.get('/', (_req, res) => {
+  res.json({ name: 'cpcrm-api', status: 'ok' });
+});
+
 app.use('/health', healthRouter);
 app.use('/me', meRouter);
 app.use('/organisations', organisationsRouter);
 app.use('/opportunities', opportunitiesRouter);
 
 app.listen(config.port, () => {
-  logger.info({ port: config.port, env: config.env }, 'API server started');
+  logger.info({ port: config.port, env: config.env, corsOrigin: config.corsOrigin }, 'API server started');
 });
 
 export { app };

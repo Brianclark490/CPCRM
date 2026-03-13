@@ -28,10 +28,10 @@ This document describes the configuration strategy for the CPCRM platform across
 |---|---|---|---|---|
 | `DESCOPE_PROJECT_ID` | Yes | No | — | Descope project identifier for JWT validation. |
 | `PORT` | No | No | `3001` | Port the HTTP server listens on. |
-| `CORS_ORIGIN` | No | No | `http://localhost:5173` | Allowed CORS origin. |
+| `CORS_ORIGIN` | No | No | auto-detected | Allowed CORS origin(s). Supports a comma-separated list. In Azure, falls back to `WEBSITE_HOSTNAME` automatically — no manual setting needed unless using a custom domain. |
 | `LOG_LEVEL` | No | No | `info` | Pino log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`). |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | No (local) / Yes (Azure) | Yes | — | Azure Application Insights connection string. |
-| `NODE_ENV` | No | No | `development` | Runtime environment hint (`development`, `production`, `test`). |
+| `NODE_ENV` | No | No | `development` | Runtime environment hint (`development`, `production`, `test`). Set to `production` in Azure App Service → Environment variables. |
 
 ### Web (`apps/web`)
 
