@@ -50,9 +50,9 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/release
           cp package.json $GITHUB_WORKSPACE/release/
-          cp $GITHUB_WORKSPACE/package-lock.json $GITHUB_WORKSPACE/release/
           cp -r dist $GITHUB_WORKSPACE/release/dist
           cp -r $GITHUB_WORKSPACE/apps/web/dist $GITHUB_WORKSPACE/release/public
+          cd $GITHUB_WORKSPACE/release && npm install --omit=dev
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
