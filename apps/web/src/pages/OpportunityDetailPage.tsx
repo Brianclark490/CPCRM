@@ -34,7 +34,7 @@ interface Opportunity {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
-  stageHistory: StageTransition[];
+  stageHistory?: StageTransition[];
 }
 
 interface FormState {
@@ -531,11 +531,11 @@ export function OpportunityDetailPage() {
                 )}
               </div>
 
-              {opportunity.stageHistory.length > 0 && (
+              {(opportunity.stageHistory ?? []).length > 0 && (
                 <div className={`${styles.fieldGroup} ${styles.fieldFull}`}>
                   <span className={styles.fieldLabel}>Stage history</span>
                   <ol className={styles.stageHistory}>
-                    {opportunity.stageHistory.map((t, i) => (
+                    {opportunity.stageHistory!.map((t, i) => (
                       <li key={i} className={styles.stageHistoryItem}>
                         <span className={styles.stageHistoryBadge}>{STAGE_LABELS[t.to]}</span>
                         <span className={styles.stageHistoryMeta}>
