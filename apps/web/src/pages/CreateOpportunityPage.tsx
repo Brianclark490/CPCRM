@@ -66,6 +66,11 @@ export function CreateOpportunityPage() {
     e.preventDefault();
     setErrorMessage(null);
 
+    if (!sessionToken) {
+      setErrorMessage('Session unavailable. Please refresh and try again.');
+      return;
+    }
+
     const trimmedTitle = form.title.trim();
     if (!trimmedTitle) {
       setErrorMessage('Opportunity title is required');

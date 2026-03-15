@@ -114,7 +114,7 @@ export function OpportunityDetailPage() {
   // ── Load opportunity ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !sessionToken) return;
 
     let cancelled = false;
 
@@ -179,6 +179,11 @@ export function OpportunityDetailPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form || !opportunity) return;
+
+    if (!sessionToken) {
+      setSaveError('Session unavailable. Please refresh and try again.');
+      return;
+    }
 
     // Client-side validation
     const trimmedTitle = form.title.trim();
