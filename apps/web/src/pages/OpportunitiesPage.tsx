@@ -52,6 +52,8 @@ export function OpportunitiesPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!sessionToken) return;
+
     let cancelled = false;
 
     const load = async () => {
