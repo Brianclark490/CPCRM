@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config } from './lib/config.js';
 import { logger } from './lib/logger.js';
+import { runMigrations } from './db/runMigrations.js';
 import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import { organisationsRouter } from './routes/organisations.js';
@@ -57,8 +58,16 @@ if (config.env === 'production') {
   });
 }
 
-app.listen(config.port, () => {
-  logger.info({ port: config.port, env: config.env, corsOrigin: config.corsOrigin }, 'API server started');
-});
+// Run database migrations then start the HTTP server.
+runMigrations()
+  .then(() => {
+    app.listen(config.port, () => {
+      logger.info({ port: config.port, env: config.env, corsOrigin: config.corsOrigin }, 'API server started');
+    });
+  })
+  .catch((err: unknown) => {
+    logger.error({ err }, 'Failed to apply database migrations; aborting startup');
+    process.exit(1);
+  });
 
 export { app };
