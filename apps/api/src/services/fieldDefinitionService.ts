@@ -504,6 +504,11 @@ export async function reorderFieldDefinitions(
     throwValidationError('field_ids must be a non-empty array');
   }
 
+  const MAX_REORDER_FIELDS = 1000;
+  if (fieldIds.length > MAX_REORDER_FIELDS) {
+    throwValidationError(`field_ids cannot contain more than ${MAX_REORDER_FIELDS} items`);
+  }
+
   // Verify all field IDs belong to this object
   const existingFields = await pool.query(
     'SELECT id FROM field_definitions WHERE object_id = $1',
