@@ -45,6 +45,13 @@ export function AccountSearchDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Clear debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   const fetchAccounts = useCallback(
     async (search: string) => {
       if (!sessionToken) return;

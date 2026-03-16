@@ -46,7 +46,7 @@ const baseAccount = {
 /**
  * Helper to mock fetch with opportunity load + account resolve.
  */
-function mockLoadWithAccount(opp = baseOpportunity, account = baseAccount) {
+function mockLoadWithAccount(opp: Omit<typeof baseOpportunity, 'accountId'> & { accountId?: string } = baseOpportunity, account = baseAccount) {
   vi.mocked(fetch).mockImplementation(async (url) => {
     const urlStr = typeof url === 'string' ? url : url.toString();
 

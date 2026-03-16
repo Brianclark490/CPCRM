@@ -71,12 +71,12 @@ export async function handleCreateOpportunity(
     res.status(201).json(opportunity);
   } catch (err: unknown) {
     if (err instanceof Error && (err as Error & { code?: string }).code === 'VALIDATION_ERROR') {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: err.message, code: 'VALIDATION_ERROR' });
       return;
     }
 
     if (err instanceof Error && (err as Error & { code?: string }).code === 'ACCOUNT_NOT_FOUND') {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: err.message, code: 'ACCOUNT_NOT_FOUND' });
       return;
     }
 
@@ -217,12 +217,12 @@ export async function handleUpdateOpportunity(
     const code = (err as Error & { code?: string }).code;
 
     if (code === 'VALIDATION_ERROR' || code === 'INVALID_STAGE_TRANSITION' || code === 'ACCOUNT_NOT_FOUND') {
-      res.status(400).json({ error: (err as Error).message });
+      res.status(400).json({ error: (err as Error).message, code });
       return;
     }
 
     if (code === 'NOT_FOUND') {
-      res.status(404).json({ error: 'Opportunity not found' });
+      res.status(404).json({ error: 'Opportunity not found', code: 'NOT_FOUND' });
       return;
     }
 

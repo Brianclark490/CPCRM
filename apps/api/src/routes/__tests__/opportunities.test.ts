@@ -163,7 +163,7 @@ describe('POST /opportunities', () => {
     await handleCreateOpportunity(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Opportunity title is required' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Opportunity title is required', code: 'VALIDATION_ERROR' });
   });
 
   it('returns 400 when the service throws a VALIDATION_ERROR for missing accountId', async () => {
@@ -178,7 +178,7 @@ describe('POST /opportunities', () => {
     await handleCreateOpportunity(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Account ID must be a non-empty string' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Account ID must be a non-empty string', code: 'VALIDATION_ERROR' });
   });
 
   it('returns 201 when creating without an accountId (optional)', async () => {
@@ -222,7 +222,7 @@ describe('POST /opportunities', () => {
     await handleCreateOpportunity(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Account not found or does not belong to you' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Account not found or does not belong to you', code: 'ACCOUNT_NOT_FOUND' });
   });
 
   it('returns 400 when title is missing from the request body', async () => {
@@ -237,7 +237,7 @@ describe('POST /opportunities', () => {
     await handleCreateOpportunity(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Opportunity title is required' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Opportunity title is required', code: 'VALIDATION_ERROR' });
   });
 
   it('returns 500 when the service throws an unexpected error', async () => {
@@ -429,7 +429,7 @@ describe('PUT /opportunities/:id', () => {
     await handleUpdateOpportunity(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Opportunity title is required' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Opportunity title is required', code: 'VALIDATION_ERROR' });
   });
 
   it('returns 404 when the service throws a NOT_FOUND error', async () => {
@@ -446,7 +446,7 @@ describe('PUT /opportunities/:id', () => {
     await handleUpdateOpportunity(req, res);
 
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Opportunity not found' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Opportunity not found', code: 'NOT_FOUND' });
   });
 
   it('returns 500 when the service throws an unexpected error', async () => {
