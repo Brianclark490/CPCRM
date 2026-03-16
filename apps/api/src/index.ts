@@ -16,6 +16,7 @@ import { accountsRouter } from './routes/accounts.js';
 import { profileRouter } from './routes/profile.js';
 import { adminObjectsRouter } from './routes/adminObjects.js';
 import { adminRelationshipsRouter } from './routes/adminRelationships.js';
+import { recordsRouter } from './routes/records.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -49,6 +50,7 @@ app.use('/api/accounts', accountsRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/admin/objects', adminObjectsRouter);
 app.use('/api/admin/relationships', adminRelationshipsRouter);
+app.use('/api/objects/:apiName/records', recordsRouter);
 
 if (config.env === 'production') {
   // In production the CI pipeline copies the built frontend to public/ alongside
