@@ -496,3 +496,63 @@ export interface RecordRelationship {
   targetRecordId: string;
   createdAt: Date;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metadata engine — layout definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Supported layout types.
+ * - form: field layout for create/edit forms
+ * - list: column layout for list/table views
+ * - detail: field layout for read-only detail views
+ */
+export type LayoutType = 'form' | 'list' | 'detail';
+
+/**
+ * Supported layout field widths for form rendering.
+ * - full: spans the entire row
+ * - half: spans half the row (two-column layout)
+ */
+export type LayoutFieldWidth = 'full' | 'half';
+
+/**
+ * A LayoutDefinition describes a named layout for a CRM object.
+ * Each object can have multiple layouts (e.g. a default form and a list view).
+ * Exactly one layout per (object, layout_type) should be marked as default.
+ */
+export interface LayoutDefinition {
+  /** UUID primary key */
+  id: string;
+  /** The object this layout belongs to */
+  objectId: string;
+  /** Human-readable name (e.g. "Default Form", "List View") */
+  name: string;
+  /** The context in which this layout is used */
+  layoutType: LayoutType;
+  /** Whether this is the default layout for its type */
+  isDefault: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * A LayoutField places a field definition into a layout, controlling
+ * section grouping, display order, and width.
+ */
+export interface LayoutField {
+  /** UUID primary key */
+  id: string;
+  /** The layout this field placement belongs to */
+  layoutId: string;
+  /** The field definition being placed */
+  fieldId: string;
+  /** Section index for grouping fields (0-based) */
+  section: number;
+  /** Optional label for the section (e.g. "Address Details") */
+  sectionLabel?: string;
+  /** Display order within the layout */
+  sortOrder: number;
+  /** Width hint for form rendering */
+  width: LayoutFieldWidth;
+}
