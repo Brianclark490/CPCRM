@@ -373,7 +373,7 @@ export function OpportunityDetailPage() {
                     id="accountId"
                     sessionToken={sessionToken ?? ''}
                     value={form.accountId}
-                    valueName={form.accountName}
+                    valueName={form.accountName ?? undefined}
                     onChange={(accountId, accName) => {
                       setForm((prev) =>
                         prev ? { ...prev, accountId, accountName: accName } : prev,

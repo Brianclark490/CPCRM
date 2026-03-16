@@ -179,7 +179,7 @@ export function CreateOpportunityPage() {
               id="accountId"
               sessionToken={sessionToken ?? ''}
               value={form.accountId}
-              valueName={form.accountName}
+              valueName={form.accountName ?? undefined}
               onChange={(accountId, accountName) => {
                 setForm((prev) => ({ ...prev, accountId, accountName }));
                 setErrorMessage(null);
