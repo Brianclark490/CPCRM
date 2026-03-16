@@ -56,7 +56,7 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
       return { rows: [{ total: String(matching.length) }] };
     }
 
-    if (s.startsWith('SELECT * FROM ACCOUNTS') && s.includes('LIMIT')) {
+    if (s.includes('FROM ACCOUNTS') && s.includes('LIMIT') && s.includes('OFFSET')) {
       const [tenant_id, owner_id] = params as string[];
       let matching = [...fakeRows.values()].filter(
         (r) => r.tenant_id === tenant_id && r.owner_id === owner_id,
@@ -72,13 +72,13 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
         );
         const limit = params[3] as number;
         const offset = params[4] as number;
-        return { rows: matching.slice(offset, offset + limit) };
+        return { rows: matching.slice(offset, offset + limit).map((r) => ({ ...r, opportunity_count: '0' })) };
       }
 
       // No search — params: [tenant_id, owner_id, limit, offset]
       const limit = params![2] as number;
       const offset = params![3] as number;
-      return { rows: matching.slice(offset, offset + limit) };
+      return { rows: matching.slice(offset, offset + limit).map((r) => ({ ...r, opportunity_count: '0' })) };
     }
 
     if (s.startsWith('SELECT * FROM ACCOUNTS WHERE ID = $1 AND TENANT_ID = $2 AND OWNER_ID = $3')) {
