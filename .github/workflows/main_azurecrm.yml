@@ -80,8 +80,25 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_8DFD7369E2A74E40B7C5B084BA06579A }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B95EA56C36454F81A0F5E4549C62428E }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_37399C3DD4634AC3875D36E6A64C2087 }}
-          path: release
-          
+
+      - name: Configure App Service settings
+        run: |
+          RESOURCE_GROUP=$(az webapp list --query "[?name=='AzureCRM'].resourceGroup" -o tsv)
+          if [[ -z "$RESOURCE_GROUP" ]]; then
+            echo "ERROR: Could not determine resource group for App Service 'AzureCRM'." >&2
+            exit 1
+          fi
+          # DATABASE_URL is set directly here for simplicity.
+          # For tighter security in production, store the connection string in Azure Key Vault
+          # and replace this value with a Key Vault reference:
+          #   @Microsoft.KeyVault(VaultName=<vault>;SecretName=postgres-connection-string)
+          az webapp config appsettings set \
+            --name AzureCRM \
+            --resource-group "$RESOURCE_GROUP" \
+            --settings \
+              NODE_ENV="production" \
+              DATABASE_URL="${{ secrets.DATABASE_URL }}"
+
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
