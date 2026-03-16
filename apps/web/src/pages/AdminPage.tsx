@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import styles from './PlaceholderPage.module.css';
 
 export function AdminPage() {
@@ -19,9 +20,10 @@ export function AdminPage() {
             />
           </svg>
         </div>
-        <h2 className={styles.emptyTitle}>Administration coming soon.</h2>
+        <h2 className={styles.emptyTitle}>Administration</h2>
         <p className={styles.emptyText}>
-          Manage users, roles, integrations, and workspace settings.
+          <Link to="/admin/objects">Object Manager</Link> — manage object definitions, fields,
+          and layouts.
         </p>
       </div>
     </div>
