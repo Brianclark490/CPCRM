@@ -140,11 +140,8 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
       const objectId = params![params!.length - 1] as string;
       const field = fakeFields.get(fieldId);
       if (field && field.object_id === objectId) {
-        const updated = { ...field, updated_at: new Date() };
+        const updated: Record<string, unknown> = { ...field, updated_at: new Date() };
         // Parse SET clauses from the SQL to update fields
-        // This is a simplified mock that just returns the updated row
-        // In a real mock we'd parse the SQL, but the service tests
-        // primarily test validation logic, not SQL generation
         let paramIdx = 0;
         if (s.includes('LABEL =')) { updated.label = params![paramIdx++]; }
         if (s.includes('FIELD_TYPE =')) { updated.field_type = params![paramIdx++]; }
