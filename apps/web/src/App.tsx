@@ -3,6 +3,7 @@ import { LoginPage } from './pages/LoginPage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
 import { OpportunitiesPage } from './pages/OpportunitiesPage.js';
 import { AccountsPage } from './pages/AccountsPage.js';
+import { AccountDetailPage } from './pages/AccountDetailPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
 import { CreateOpportunityPage } from './pages/CreateOpportunityPage.js';
@@ -71,11 +72,11 @@ export function App() {
           }
         />
         <Route
-          path="/accounts/new"
+          path="/accounts/:id"
           element={
             <ProtectedRoute>
               <AppShell>
-                <CreateAccountPage />
+                <AccountDetailPage />
               </AppShell>
             </ProtectedRoute>
           }
