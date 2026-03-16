@@ -714,11 +714,12 @@ describe('reorderFieldDefinitions', () => {
 
     const result = await reorderFieldDefinitions(objectId, ['f2', 'f1']);
 
+    // f2 → sort_order 1, f1 → sort_order 2; returned ORDER BY sort_order ASC
     expect(result).toHaveLength(2);
-    expect(result[0].apiName).toBe('field_a');
-    expect(result[0].sortOrder).toBe(2);
-    expect(result[1].apiName).toBe('field_b');
-    // f2 was reordered to position 1 but returned sorted by sort_order
+    expect(result[0].apiName).toBe('field_b');
+    expect(result[0].sortOrder).toBe(1);
+    expect(result[1].apiName).toBe('field_a');
+    expect(result[1].sortOrder).toBe(2);
   });
 
   it('throws NOT_FOUND when object does not exist', async () => {
