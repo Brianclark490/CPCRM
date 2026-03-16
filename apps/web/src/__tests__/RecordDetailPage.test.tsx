@@ -30,6 +30,7 @@ function makeRecordResponse(overrides: Partial<{
     label: string;
     relationshipType: string;
     direction: string;
+    relatedObjectApiName: string;
     records: Array<{ id: string; name: string; fieldValues: Record<string, unknown> }>;
   }>;
   fieldValues: Record<string, unknown>;
@@ -272,6 +273,7 @@ describe('RecordDetailPage', () => {
           label: 'Opportunities',
           relationshipType: 'lookup',
           direction: 'source',
+          relatedObjectApiName: 'opportunity',
           records: [
             { id: 'opp-1', name: 'Big Deal', fieldValues: {} },
             { id: 'opp-2', name: 'Small Deal', fieldValues: {} },
@@ -298,6 +300,7 @@ describe('RecordDetailPage', () => {
           label: 'Contacts',
           relationshipType: 'lookup',
           direction: 'source',
+          relatedObjectApiName: 'contact',
           records: [],
         },
       ],

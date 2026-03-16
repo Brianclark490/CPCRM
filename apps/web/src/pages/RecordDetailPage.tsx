@@ -34,6 +34,7 @@ interface Relationship {
   reverseLabel?: string;
   relationshipType: string;
   direction: 'source' | 'target';
+  relatedObjectApiName: string;
   records: RelatedRecord[];
 }
 
@@ -621,7 +622,7 @@ export function RecordDetailPage() {
                     <tr key={relRecord.id} className={styles.relatedTr}>
                       <td className={styles.relatedTd}>
                         <Link
-                          to={`/objects/${apiName}/${relRecord.id}`}
+                          to={`/objects/${rel.relatedObjectApiName}/${relRecord.id}`}
                           className={styles.relatedLink}
                         >
                           {relRecord.name}
