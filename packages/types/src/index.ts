@@ -240,6 +240,73 @@ export interface UpdateProfileRequest {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Account API types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Request body for creating a new account within a tenant.
+ * The tenantId and ownerId are resolved from the authenticated user's JWT —
+ * they must not be supplied by the caller.
+ */
+export interface CreateAccountRequest {
+  /** Company/customer name (required, 1–200 chars) */
+  name: string;
+  /** e.g. "Technology", "Healthcare" */
+  industry?: string;
+  /** Website URL */
+  website?: string;
+  /** Phone number */
+  phone?: string;
+  /** Email address */
+  email?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  /** State/county/region */
+  region?: string;
+  postalCode?: string;
+  country?: string;
+  notes?: string;
+}
+
+/**
+ * Request body for updating an existing account.
+ * All fields are optional — only the supplied fields will be updated.
+ */
+export interface UpdateAccountRequest {
+  name?: string;
+  industry?: string | null;
+  website?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  region?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  notes?: string | null;
+}
+
+/**
+ * Paginated list response for accounts.
+ */
+export interface ListAccountsResponse {
+  data: Account[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/**
+ * Standard error response shape used by the API.
+ */
+export interface ApiErrorResponse {
+  error: string;
+  code: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Opportunity creation API types
 // ─────────────────────────────────────────────────────────────────────────────
 
