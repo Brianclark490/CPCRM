@@ -1002,8 +1002,8 @@ describe('FieldBuilderPage', () => {
     await user.selectOptions(screen.getByLabelText('Layout'), '__create__');
 
     expect(screen.getByRole('dialog', { name: 'Create layout' })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Type/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Type')).toBeInTheDocument();
   });
 
   it('validates required name in create layout modal', async () => {
