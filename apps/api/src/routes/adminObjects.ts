@@ -12,6 +12,7 @@ import {
 import type { UpdateObjectDefinitionParams } from '../services/objectDefinitionService.js';
 import { adminFieldsRouter } from './adminFields.js';
 import { adminObjectRelationshipsRouter } from './adminRelationships.js';
+import { adminLayoutsRouter } from './adminLayouts.js';
 import { logger } from '../lib/logger.js';
 
 export const adminObjectsRouter = Router();
@@ -268,3 +269,6 @@ adminObjectsRouter.use('/:objectId/fields', adminFieldsRouter);
 
 // Nested relationship definition routes: /admin/objects/:objectId/relationships
 adminObjectsRouter.use('/:objectId/relationships', adminObjectRelationshipsRouter);
+
+// Nested layout definition routes: /admin/objects/:objectId/layouts
+adminObjectsRouter.use('/:objectId/layouts', adminLayoutsRouter);
