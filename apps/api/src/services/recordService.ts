@@ -79,6 +79,16 @@ function throwNotFoundError(message: string): never {
   throw err;
 }
 
+/**
+ * Field api_names in the database are validated against this regex on creation.
+ * We recheck before interpolating into SQL as a defence-in-depth measure.
+ */
+const SAFE_IDENTIFIER_RE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
+
+function isSafeIdentifier(value: string): boolean {
+  return SAFE_IDENTIFIER_RE.test(value);
+}
+
 // ─── Row → domain model ──────────────────────────────────────────────────────
 
 function rowToRecord(row: Record<string, unknown>): RecordRow {
@@ -170,7 +180,7 @@ export function validateFieldValue(
   // If value is null/undefined, skip type validation (required check is separate)
   if (value === null || value === undefined) return null;
 
-  const { fieldType, apiName, label, options } = fieldDef;
+  const { fieldType, label, options } = fieldDef;
 
   switch (fieldType) {
     case 'text': {
@@ -444,7 +454,9 @@ export async function listRecords(params: {
 
     const searchConditions = [`r.name ILIKE $${paramIdx}`];
     for (const tf of textFields) {
-      searchConditions.push(`r.field_values->>'${tf.apiName}' ILIKE $${paramIdx}`);
+      if (isSafeIdentifier(tf.apiName)) {
+        searchConditions.push(`r.field_values->>'${tf.apiName}' ILIKE $${paramIdx}`);
+      }
     }
 
     whereClause += ` AND (${searchConditions.join(' OR ')})`;
@@ -470,7 +482,7 @@ export async function listRecords(params: {
     } else {
       // Sort by a JSONB field
       const fieldDef = fieldDefs.find((fd) => fd.apiName === sortBy);
-      if (fieldDef) {
+      if (fieldDef && isSafeIdentifier(fieldDef.apiName)) {
         orderClause = `ORDER BY r.field_values->>'${fieldDef.apiName}' ${direction}`;
       }
     }
