@@ -1,11 +1,17 @@
-import { type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useUser, useDescope } from '@descope/react-sdk';
+import { useUser, useDescope, useSession } from '@descope/react-sdk';
 import { sessionHistory } from '../store/sessionHistory.js';
 import styles from './AppShell.module.css';
 
 interface AppShellProps {
   children: ReactNode;
+}
+
+interface ObjectDefinitionNavItem {
+  apiName: string;
+  pluralLabel: string;
+  icon?: string;
 }
 
 function getInitials(name: string | undefined, email: string | undefined): string {
@@ -20,7 +26,14 @@ function getInitials(name: string | undefined, email: string | undefined): strin
   return '?';
 }
 
-const navItems = [
+const defaultObjectIcon = (
+  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+    <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M5 6h6M5 8h6M5 10h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+  </svg>
+);
+
+const staticNavTop = [
   {
     to: '/dashboard',
     label: 'Dashboard',
@@ -33,48 +46,9 @@ const navItems = [
       </svg>
     ),
   },
-  {
-    to: '/opportunities',
-    label: 'Opportunities',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
-        <path
-          d="M2 12V5a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1z"
-          stroke="currentColor"
-          strokeWidth="1.25"
-        />
-        <path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" strokeWidth="1.25" />
-        <path d="M8 7v3M6 9h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    to: '/accounts',
-    label: 'Accounts',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
-        <circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.25" />
-        <path
-          d="M1 13c0-2.21 2.239-4 5-4s5 1.79 5 4"
-          stroke="currentColor"
-          strokeWidth="1.25"
-          strokeLinecap="round"
-        />
-        <path
-          d="M11 7c1.105 0 2 .895 2 2"
-          stroke="currentColor"
-          strokeWidth="1.25"
-          strokeLinecap="round"
-        />
-        <path
-          d="M11 11c1.657 0 3 .895 3 2"
-          stroke="currentColor"
-          strokeWidth="1.25"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
+];
+
+const staticNavBottom = [
   {
     to: '/admin',
     label: 'Admin',
@@ -110,7 +84,51 @@ const navItems = [
 export function AppShell({ children }: AppShellProps) {
   const { user } = useUser();
   const { logout } = useDescope();
+  const { sessionToken } = useSession();
   const navigate = useNavigate();
+
+  const [objectNavItems, setObjectNavItems] = useState<ObjectDefinitionNavItem[]>([]);
+
+  // Fetch object definitions for dynamic sidebar
+  useEffect(() => {
+    if (!sessionToken) return;
+
+    let cancelled = false;
+
+    const loadObjects = async () => {
+      try {
+        const response = await fetch('/api/admin/objects', {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        });
+
+        if (cancelled || !response.ok) return;
+
+        const objects = (await response.json()) as Array<{
+          apiName: string;
+          pluralLabel: string;
+          icon?: string;
+        }>;
+
+        if (!cancelled) {
+          setObjectNavItems(
+            objects.map((o) => ({
+              apiName: o.apiName,
+              pluralLabel: o.pluralLabel,
+              icon: o.icon,
+            })),
+          );
+        }
+      } catch {
+        // Sidebar object fetch is best-effort — keep static items
+      }
+    };
+
+    void loadObjects();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionToken]);
 
   const handleLogout = async () => {
     await logout();
@@ -131,7 +149,53 @@ export function AppShell({ children }: AppShellProps) {
           <div className={styles.navSection}>
             <span className={styles.navLabel}>Menu</span>
             <ul className={styles.navList}>
-              {navItems.map(({ to, label, icon }) => (
+              {staticNavTop.map(({ to, label, icon }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    className={({ isActive }) =>
+                      `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                    }
+                  >
+                    <span className={styles.navIcon}>{icon}</span>
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {objectNavItems.length > 0 && (
+            <div className={styles.navSection}>
+              <span className={styles.navLabel}>Objects</span>
+              <ul className={styles.navList}>
+                {objectNavItems.map(({ apiName, pluralLabel, icon }) => (
+                  <li key={apiName}>
+                    <NavLink
+                      to={`/objects/${apiName}`}
+                      className={({ isActive }) =>
+                        `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                      }
+                    >
+                      <span className={styles.navIcon}>
+                        {icon ? (
+                          <span aria-hidden="true">{icon}</span>
+                        ) : (
+                          defaultObjectIcon
+                        )}
+                      </span>
+                      {pluralLabel}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className={styles.navSection}>
+            <span className={styles.navLabel}>System</span>
+            <ul className={styles.navList}>
+              {staticNavBottom.map(({ to, label, icon }) => (
                 <li key={to}>
                   <NavLink
                     to={to}
