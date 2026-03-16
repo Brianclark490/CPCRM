@@ -12,6 +12,7 @@ import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import { organisationsRouter } from './routes/organisations.js';
 import { opportunitiesRouter } from './routes/opportunities.js';
+import { accountsRouter } from './routes/accounts.js';
 import { profileRouter } from './routes/profile.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -42,6 +43,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/me', meRouter);
 app.use('/api/organisations', organisationsRouter);
 app.use('/api/opportunities', opportunitiesRouter);
+app.use('/api/accounts', accountsRouter);
 app.use('/api/profile', profileRouter);
 
 if (config.env === 'production') {
