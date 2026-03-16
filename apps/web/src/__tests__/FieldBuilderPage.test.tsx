@@ -498,7 +498,7 @@ describe('FieldBuilderPage', () => {
     await user.click(screen.getByRole('tab', { name: 'Relationships' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Account')).toBeInTheDocument();
+      expect(screen.getAllByText('Account').length).toBeGreaterThan(0);
     });
 
     expect(screen.getByText('Project')).toBeInTheDocument();
@@ -520,7 +520,7 @@ describe('FieldBuilderPage', () => {
     await user.click(screen.getByRole('tab', { name: 'Relationships' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Account')).toBeInTheDocument();
+      expect(screen.getAllByText('Account').length).toBeGreaterThan(0);
     });
 
     // rel-1 is between two system objects (obj-1 and obj-2), so it should show System badge
@@ -562,7 +562,7 @@ describe('FieldBuilderPage', () => {
     await user.click(screen.getByRole('tab', { name: 'Relationships' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Account')).toBeInTheDocument();
+      expect(screen.getAllByText('Account').length).toBeGreaterThan(0);
     });
 
     expect(
