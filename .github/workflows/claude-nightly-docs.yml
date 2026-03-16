@@ -1,0 +1,49 @@
+name: Claude Nightly Docs
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for recent changes
+        id: changes
+        run: |
+          COMMITS=$(git log --since="24 hours ago" --oneline 2>/dev/null | wc -l)
+          echo "count=$COMMITS" >> $GITHUB_OUTPUT
+
+      - name: Update docs with Claude
+        if: steps.changes.outputs.count > 0
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review commits from the last 24 hours:
+            `git log --since="24 hours ago" --stat`
+
+            Update only documentation affected by these changes:
+            1. README.md — if features, endpoints, or setup steps changed
+            2. API docs — if routes in src/server/routes/ changed
+            3. Deployment docs — if Bicep templates changed
+
+            Keep updates surgical. Do not rewrite unaffected sections.
+            Create a single PR titled "docs: automated documentation updates".
+            If that PR already exists, add commits to it.
+          allowed_tools: |
+            Bash
+            Read
+            Write
+            Edit
+            Glob
+            Grep
+            MultiEdit
