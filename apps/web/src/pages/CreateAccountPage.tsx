@@ -167,7 +167,7 @@ export function CreateAccountPage() {
       <p className={styles.pageSubtitle}>Add a new account to your CRM.</p>
 
       <div className={styles.card}>
-        <form className={styles.form} onSubmit={(e) => void handleSubmit(e)}>
+        <form className={styles.form} noValidate onSubmit={(e) => void handleSubmit(e)}>
           <div className={styles.field}>
             <label className={`${styles.label} ${styles.labelRequired}`} htmlFor="name">
               Name
