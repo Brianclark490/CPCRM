@@ -144,9 +144,16 @@ export function validateFieldOptions(
   fieldType: string,
   options: Record<string, unknown> | undefined,
 ): string | null {
-  if (!options || Object.keys(options).length === 0) {
+  if (!options) {
     if (fieldType === 'dropdown' || fieldType === 'multi_select') {
       return `options.choices is required for ${fieldType} fields`;
+    }
+    return null;
+  }
+
+  if (Object.keys(options).length === 0) {
+    if (fieldType === 'dropdown' || fieldType === 'multi_select') {
+      return `options.choices must be a non-empty array of strings for ${fieldType} fields`;
     }
     return null;
   }
