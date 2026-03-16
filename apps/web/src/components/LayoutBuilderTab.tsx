@@ -205,9 +205,10 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
         const data = (await response.json()) as LayoutDefinition[];
         setLayouts(data);
 
-        if (data.length > 0 && !selectedLayoutId) {
-          setSelectedLayoutId(data[0].id);
-        }
+        setSelectedLayoutId((prev) => {
+          if (prev) return prev;
+          return data.length > 0 ? data[0].id : null;
+        });
       } else {
         setLayoutsError('Failed to load layouts.');
       }
@@ -216,7 +217,7 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
     } finally {
       setLayoutsLoading(false);
     }
-  }, [objectId, sessionToken, selectedLayoutId]);
+  }, [objectId, sessionToken]);
 
   useEffect(() => {
     void fetchLayouts();
