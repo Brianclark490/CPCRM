@@ -49,6 +49,7 @@ export interface RecordDetail extends RecordWithLabels {
     reverseLabel?: string;
     relationshipType: string;
     direction: 'source' | 'target';
+    relatedObjectApiName: string;
     records: Array<{
       id: string;
       name: string;
@@ -531,7 +532,9 @@ export async function getRecord(
   const relResult = await pool.query(
     `SELECT rd.*, 
             src_obj.label AS source_object_label,
-            tgt_obj.label AS target_object_label
+            src_obj.api_name AS source_object_api_name,
+            tgt_obj.label AS target_object_label,
+            tgt_obj.api_name AS target_object_api_name
      FROM relationship_definitions rd
      JOIN object_definitions src_obj ON src_obj.id = rd.source_object_id
      JOIN object_definitions tgt_obj ON tgt_obj.id = rd.target_object_id
@@ -548,6 +551,8 @@ export async function getRecord(
     const relLabel = rel.label as string;
     const reverseLabel = (rel.reverse_label as string | null) ?? undefined;
     const relType = rel.relationship_type as string;
+    const sourceObjectApiName = rel.source_object_api_name as string;
+    const targetObjectApiName = rel.target_object_api_name as string;
 
     // Determine direction: is this record the source or target?
     const isSource = sourceObjectId === objectDef.id;
@@ -590,6 +595,7 @@ export async function getRecord(
       reverseLabel,
       relationshipType: relType,
       direction: isSource ? 'source' : 'target',
+      relatedObjectApiName: isSource ? targetObjectApiName : sourceObjectApiName,
       records: relatedRecords,
     });
   }
