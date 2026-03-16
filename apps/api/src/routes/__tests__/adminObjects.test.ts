@@ -30,6 +30,12 @@ vi.mock('../adminFields.js', () => ({
   adminFieldsRouter: vi.fn((_req: unknown, _res: unknown, next: NextFunction) => next()),
 }));
 
+// ─── Mock nested relationship routes to prevent transitive db/client import ──
+
+vi.mock('../adminRelationships.js', () => ({
+  adminObjectRelationshipsRouter: vi.fn((_req: unknown, _res: unknown, next: NextFunction) => next()),
+}));
+
 // ─── Mock logger so tests stay silent ────────────────────────────────────────
 
 vi.mock('../../lib/logger.js', () => ({
