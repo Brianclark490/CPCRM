@@ -78,7 +78,7 @@ export interface Opportunity {
  */
 export interface UpdateOpportunityParams {
   title?: string;
-  accountId?: string;
+  accountId?: string | null;
   ownerId?: string;
   stage?: OpportunityStage;
   value?: number | null;
@@ -93,8 +93,8 @@ export interface UpdateOpportunityParams {
 export interface CreateOpportunityParams {
   /** Human-readable title for the opportunity */
   title: string;
-  /** The account this opportunity is linked to */
-  accountId: string;
+  /** The account this opportunity is linked to (optional) */
+  accountId?: string;
   /** Monetary value of the opportunity */
   value?: number;
   /** ISO 4217 currency code (e.g. "GBP", "USD") */
@@ -124,12 +124,34 @@ export function validateTitle(title: unknown): string | null {
 }
 
 /**
- * Validates the accountId field.
+ * Validates the accountId field when provided.
  * Returns an error message string, or null if valid.
  */
 export function validateAccountId(accountId: unknown): string | null {
+  if (accountId === undefined || accountId === null) return null;
   if (typeof accountId !== 'string' || accountId.trim().length === 0) {
-    return 'Account is required';
+    return 'Account ID must be a non-empty string';
+  }
+  return null;
+}
+
+/**
+ * Checks that the given account exists within the specified tenant and
+ * is owned by the specified user.
+ *
+ * Returns an error message string, or null if the account is valid.
+ */
+export async function validateAccountExists(
+  accountId: string,
+  tenantId: string,
+  ownerId: string,
+): Promise<string | null> {
+  const result = await pool.query(
+    'SELECT 1 FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3',
+    [accountId, tenantId, ownerId],
+  );
+  if (result.rows.length === 0) {
+    return 'Account not found or does not belong to you';
   }
   return null;
 }
@@ -221,13 +243,15 @@ function rowToOpportunity(row: Record<string, unknown>): Opportunity {
  * Creates a new opportunity within a tenant.
  *
  * Creation steps:
- *   1. Validate input — title and accountId are required.
- *   2. Persist the Opportunity record with initial stage "prospecting".
+ *   1. Validate input — title is required, accountId is optional.
+ *   2. If accountId is provided, verify the account exists and belongs to the user.
+ *   3. Persist the Opportunity record with initial stage "prospecting".
  *
  * Tenant isolation: the tenantId is always taken from the authenticated
  * session and never from caller-supplied input.
  *
  * @throws {Error} with a `code` property of "VALIDATION_ERROR" when input is invalid.
+ * @throws {Error} with a `code` property of "ACCOUNT_NOT_FOUND" when the account does not exist.
  */
 export async function createOpportunity(
   params: CreateOpportunityParams,
@@ -258,6 +282,20 @@ export async function createOpportunity(
     throw err;
   }
 
+  // Step 2 — verify account exists when provided
+  if (accountId) {
+    const accountExistsError = await validateAccountExists(
+      accountId.trim(),
+      tenantId,
+      requestingUserId,
+    );
+    if (accountExistsError) {
+      const err = new Error(accountExistsError) as Error & { code: string };
+      err.code = 'ACCOUNT_NOT_FOUND';
+      throw err;
+    }
+  }
+
   const opportunityId = randomUUID();
   const now = new Date();
 
@@ -267,7 +305,7 @@ export async function createOpportunity(
     { from: null, to: 'prospecting', changedAt: now, changedBy: requestingUserId },
   ];
 
-  // Step 2 — persist to database
+  // Step 3 — persist to database
   const result = await pool.query(
     `INSERT INTO opportunities
        (id, tenant_id, account_id, owner_id, title, stage,
@@ -278,7 +316,7 @@ export async function createOpportunity(
     [
       opportunityId,
       tenantId,
-      accountId.trim(),
+      accountId?.trim() ?? null,
       requestingUserId,
       title.trim(),
       value ?? null,
@@ -334,13 +372,15 @@ export async function getOpportunity(
  * Update steps:
  *   1. Validate that the opportunity exists and belongs to the tenant.
  *   2. Validate updated fields.
- *   3. Persist changes to the database, appending a stage transition entry when
+ *   3. If accountId is provided, verify the account exists and belongs to the user.
+ *   4. Persist changes to the database, appending a stage transition entry when
  *      the stage changes.
  *
  * Tenant isolation: the tenantId is always taken from the authenticated session.
  *
  * @throws {Error} with a `code` property of "VALIDATION_ERROR" when input is invalid.
  * @throws {Error} with a `code` property of "NOT_FOUND" when the opportunity does not exist.
+ * @throws {Error} with a `code` property of "ACCOUNT_NOT_FOUND" when the account does not exist.
  */
 export async function updateOpportunity(
   id: string,
@@ -372,6 +412,20 @@ export async function updateOpportunity(
       const err = new Error(accountError) as Error & { code: string };
       err.code = 'VALIDATION_ERROR';
       throw err;
+    }
+
+    // Verify account exists when linking (non-null)
+    if (params.accountId !== null) {
+      const accountExistsError = await validateAccountExists(
+        params.accountId!.trim(),
+        tenantId,
+        requestingUserId,
+      );
+      if (accountExistsError) {
+        const err = new Error(accountExistsError) as Error & { code: string };
+        err.code = 'ACCOUNT_NOT_FOUND';
+        throw err;
+      }
     }
   }
 
@@ -414,7 +468,7 @@ export async function updateOpportunity(
   // Step 3 — compute updated values
   const changedFields: string[] = [];
   if (params.title !== undefined && params.title.trim() !== existing.title) changedFields.push('title');
-  if (params.accountId !== undefined && params.accountId.trim() !== existing.accountId) changedFields.push('accountId');
+  if (params.accountId !== undefined && (params.accountId?.trim() ?? null) !== (existing.accountId ?? null)) changedFields.push('accountId');
   if (params.ownerId !== undefined && params.ownerId !== existing.ownerId) changedFields.push('ownerId');
   if (params.stage !== undefined && params.stage !== existing.stage) changedFields.push('stage');
   if (params.value !== undefined && params.value !== existing.value) changedFields.push('value');
@@ -437,7 +491,7 @@ export async function updateOpportunity(
       : existing.stageHistory;
 
   const newTitle = params.title !== undefined ? params.title.trim() : existing.title;
-  const newAccountId = params.accountId !== undefined ? params.accountId.trim() : existing.accountId;
+  const newAccountId = params.accountId !== undefined ? (params.accountId?.trim() ?? null) : (existing.accountId ?? null);
   const newOwnerId = params.ownerId !== undefined ? params.ownerId : existing.ownerId;
   const newStage = params.stage !== undefined ? params.stage : existing.stage;
   const newValue = params.value !== undefined ? (params.value ?? null) : (existing.value ?? null);

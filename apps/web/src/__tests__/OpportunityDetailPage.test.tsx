@@ -36,6 +36,44 @@ const baseOpportunity = {
   createdBy: 'user-123',
 };
 
+const baseAccount = {
+  id: 'account-uuid-123',
+  name: 'Acme Corp',
+  tenantId: 'tenant-abc',
+  ownerId: 'user-123',
+};
+
+/**
+ * Helper to mock fetch with opportunity load + account resolve.
+ */
+function mockLoadWithAccount(opp: Omit<typeof baseOpportunity, 'accountId'> & { accountId?: string } = baseOpportunity, account = baseAccount) {
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    const urlStr = typeof url === 'string' ? url : url.toString();
+
+    // Account detail fetch (for name resolution)
+    if (urlStr.includes('/api/accounts/')) {
+      return {
+        ok: true,
+        json: async () => account,
+      } as Response;
+    }
+
+    // Account search (for dropdown)
+    if (urlStr.includes('/api/accounts')) {
+      return {
+        ok: true,
+        json: async () => ({ data: [account] }),
+      } as Response;
+    }
+
+    // Opportunity fetch
+    return {
+      ok: true,
+      json: async () => opp,
+    } as Response;
+  });
+}
+
 function renderPage(id = 'opp-uuid-1') {
   return render(
     <MemoryRouter initialEntries={[`/opportunities/${id}`]}>
@@ -67,10 +105,7 @@ describe('OpportunityDetailPage', () => {
   });
 
   it('renders opportunity details after a successful load', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => baseOpportunity,
-    } as Response);
+    mockLoadWithAccount();
 
     renderPage();
 
@@ -80,9 +115,23 @@ describe('OpportunityDetailPage', () => {
 
     // 'Prospecting' appears in both the header badge and the details grid
     expect(screen.getAllByText('Prospecting')).toHaveLength(2);
-    expect(screen.getByText('account-uuid-123')).toBeInTheDocument();
+    // Shows account name instead of raw ID
+    expect(screen.getByText('Acme Corp')).toBeInTheDocument();
     expect(screen.getByText('user-123')).toBeInTheDocument();
     expect(screen.getByText('A great opportunity')).toBeInTheDocument();
+  });
+
+  it('shows "No account linked" when opportunity has no account', async () => {
+    const oppWithoutAccount = { ...baseOpportunity, accountId: undefined };
+    mockLoadWithAccount(oppWithoutAccount);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'New Partnership Deal' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('No account linked')).toBeInTheDocument();
   });
 
   it('shows a 404 message when the opportunity is not found', async () => {
@@ -112,10 +161,7 @@ describe('OpportunityDetailPage', () => {
   });
 
   it('renders an Edit button in view mode', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => baseOpportunity,
-    } as Response);
+    mockLoadWithAccount();
 
     renderPage();
 
@@ -125,10 +171,7 @@ describe('OpportunityDetailPage', () => {
   });
 
   it('navigates back to /opportunities when "Back to opportunities" is clicked', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => baseOpportunity,
-    } as Response);
+    mockLoadWithAccount();
 
     renderPage();
 
@@ -144,10 +187,7 @@ describe('OpportunityDetailPage', () => {
   // ── Edit mode ──────────────────────────────────────────────────────────────
 
   it('switches to edit mode when Edit is clicked', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => baseOpportunity,
-    } as Response);
+    mockLoadWithAccount();
 
     renderPage();
 
@@ -163,10 +203,7 @@ describe('OpportunityDetailPage', () => {
   });
 
   it('pre-fills the edit form with current opportunity values', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => baseOpportunity,
-    } as Response);
+    mockLoadWithAccount();
 
     renderPage();
 
@@ -183,10 +220,7 @@ describe('OpportunityDetailPage', () => {
   });
 
   it('returns to view mode when Cancel is clicked', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => baseOpportunity,
-    } as Response);
+    mockLoadWithAccount();
 
     renderPage();
 
@@ -202,10 +236,7 @@ describe('OpportunityDetailPage', () => {
   });
 
   it('shows a validation error when title is cleared before saving', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => baseOpportunity,
-    } as Response);
+    mockLoadWithAccount();
 
     renderPage();
 
@@ -220,21 +251,29 @@ describe('OpportunityDetailPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('Opportunity name is required');
-    expect(fetch).toHaveBeenCalledTimes(1); // only the initial load
   });
 
   it('submits PUT with updated value when a valid number is entered', async () => {
     const updatedOpportunity = { ...baseOpportunity, value: 99000 };
 
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => baseOpportunity,
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => updatedOpportunity,
-      } as Response);
+    let callCount = 0;
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+
+      if (urlStr.includes('/api/accounts/')) {
+        return { ok: true, json: async () => baseAccount } as Response;
+      }
+
+      if (urlStr.includes('/api/accounts')) {
+        return { ok: true, json: async () => ({ data: [baseAccount] }) } as Response;
+      }
+
+      callCount++;
+      if (callCount === 1) {
+        return { ok: true, json: async () => baseOpportunity } as Response;
+      }
+      return { ok: true, json: async () => updatedOpportunity } as Response;
+    });
 
     renderPage();
 
@@ -251,24 +290,31 @@ describe('OpportunityDetailPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('status')).toHaveTextContent('Opportunity updated successfully.');
     });
-
-    expect(screen.getByRole('status')).toHaveTextContent('Opportunity updated successfully.');
   });
 
   it('submits the PUT request and shows success banner on save', async () => {
     const updatedOpportunity = { ...baseOpportunity, title: 'Updated Deal' };
 
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => baseOpportunity,
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => updatedOpportunity,
-      } as Response);
+    let callCount = 0;
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+
+      if (urlStr.includes('/api/accounts/')) {
+        return { ok: true, json: async () => baseAccount } as Response;
+      }
+
+      if (urlStr.includes('/api/accounts')) {
+        return { ok: true, json: async () => ({ data: [baseAccount] }) } as Response;
+      }
+
+      callCount++;
+      if (callCount === 1) {
+        return { ok: true, json: async () => baseOpportunity } as Response;
+      }
+      return { ok: true, json: async () => updatedOpportunity } as Response;
+    });
 
     renderPage();
 
@@ -295,15 +341,27 @@ describe('OpportunityDetailPage', () => {
   });
 
   it('shows an API error when the save request fails', async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => baseOpportunity,
-      } as Response)
-      .mockResolvedValueOnce({
+    let callCount = 0;
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+
+      if (urlStr.includes('/api/accounts/')) {
+        return { ok: true, json: async () => baseAccount } as Response;
+      }
+
+      if (urlStr.includes('/api/accounts')) {
+        return { ok: true, json: async () => ({ data: [baseAccount] }) } as Response;
+      }
+
+      callCount++;
+      if (callCount === 1) {
+        return { ok: true, json: async () => baseOpportunity } as Response;
+      }
+      return {
         ok: false,
         json: async () => ({ error: 'Opportunity title is required' }),
-      } as Response);
+      } as Response;
+    });
 
     renderPage();
 

@@ -6,6 +6,7 @@ import {
   updateOpportunity,
   validateTitle,
   validateAccountId,
+  validateAccountExists,
   validateValue,
   validateExpectedCloseDate,
   validateStage,
@@ -22,8 +23,9 @@ vi.mock('../../lib/logger.js', () => ({
 // without a real database while still exercising the full service logic.
 // vi.hoisted is used so the mock reference is available in the vi.mock factory.
 
-const { fakeRows, mockQuery } = vi.hoisted(() => {
+const { fakeRows, fakeAccounts, mockQuery } = vi.hoisted(() => {
   const fakeRows = new Map<string, Record<string, unknown>>();
+  const fakeAccounts = new Map<string, Record<string, unknown>>();
 
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
     const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
@@ -42,6 +44,15 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
       };
       fakeRows.set(id as string, row);
       return { rows: [row] };
+    }
+
+    if (s.startsWith('SELECT 1 FROM ACCOUNTS WHERE ID = $1 AND TENANT_ID = $2 AND OWNER_ID = $3')) {
+      const [id, tenant_id, owner_id] = params as string[];
+      const account = fakeAccounts.get(id);
+      if (account && account.tenant_id === tenant_id && account.owner_id === owner_id) {
+        return { rows: [{ '?column?': 1 }] };
+      }
+      return { rows: [] };
     }
 
     if (s.startsWith('SELECT * FROM OPPORTUNITIES WHERE ID = $1 AND TENANT_ID = $2')) {
@@ -80,7 +91,7 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
     return { rows: [] };
   });
 
-  return { fakeRows, mockQuery };
+  return { fakeRows, fakeAccounts, mockQuery };
 });
 
 vi.mock('../../db/client.js', () => ({
@@ -122,17 +133,49 @@ describe('validateAccountId', () => {
     expect(validateAccountId('account-uuid-123')).toBeNull();
   });
 
+  it('returns null for undefined (optional)', () => {
+    expect(validateAccountId(undefined)).toBeNull();
+  });
+
+  it('returns null for null (unlinking)', () => {
+    expect(validateAccountId(null)).toBeNull();
+  });
+
   it('returns an error for an empty string', () => {
-    expect(validateAccountId('')).toBe('Account is required');
+    expect(validateAccountId('')).toBe('Account ID must be a non-empty string');
   });
 
   it('returns an error for a whitespace-only string', () => {
-    expect(validateAccountId('   ')).toBe('Account is required');
+    expect(validateAccountId('   ')).toBe('Account ID must be a non-empty string');
+  });
+});
+
+describe('validateAccountExists', () => {
+  beforeEach(() => {
+    fakeAccounts.clear();
   });
 
-  it('returns an error for a non-string value', () => {
-    expect(validateAccountId(undefined)).toBe('Account is required');
-    expect(validateAccountId(null)).toBe('Account is required');
+  it('returns null when the account exists and matches tenant + owner', async () => {
+    fakeAccounts.set('acct-1', { id: 'acct-1', tenant_id: 't1', owner_id: 'u1' });
+    const result = await validateAccountExists('acct-1', 't1', 'u1');
+    expect(result).toBeNull();
+  });
+
+  it('returns an error when the account does not exist', async () => {
+    const result = await validateAccountExists('missing', 't1', 'u1');
+    expect(result).toBe('Account not found or does not belong to you');
+  });
+
+  it('returns an error when the account belongs to a different tenant', async () => {
+    fakeAccounts.set('acct-1', { id: 'acct-1', tenant_id: 'other', owner_id: 'u1' });
+    const result = await validateAccountExists('acct-1', 't1', 'u1');
+    expect(result).toBe('Account not found or does not belong to you');
+  });
+
+  it('returns an error when the account belongs to a different owner', async () => {
+    fakeAccounts.set('acct-1', { id: 'acct-1', tenant_id: 't1', owner_id: 'other' });
+    const result = await validateAccountExists('acct-1', 't1', 'u1');
+    expect(result).toBe('Account not found or does not belong to you');
   });
 });
 
@@ -147,6 +190,13 @@ describe('createOpportunity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fakeRows.clear();
+    fakeAccounts.clear();
+    // Seed a fake account for the default test parameters
+    fakeAccounts.set('account-uuid-123', {
+      id: 'account-uuid-123',
+      tenant_id: 'tenant-abc',
+      owner_id: 'user-123',
+    });
   });
 
   it('returns an opportunity with the correct title and tenantId', async () => {
@@ -176,6 +226,12 @@ describe('createOpportunity', () => {
   });
 
   it('trims whitespace from title and accountId', async () => {
+    fakeAccounts.set('account-uuid', {
+      id: 'account-uuid',
+      tenant_id: 'tenant-abc',
+      owner_id: 'user-123',
+    });
+
     const result = await createOpportunity({
       ...baseParams,
       title: '  New Deal  ',
@@ -258,10 +314,55 @@ describe('createOpportunity', () => {
     });
   });
 
-  it('throws a VALIDATION_ERROR when accountId is empty', async () => {
+  it('creates an opportunity without an accountId (optional)', async () => {
+    const { accountId: _, ...paramsWithoutAccount } = baseParams;
+    const result = await createOpportunity(paramsWithoutAccount);
+
+    expect(result.accountId).toBeUndefined();
+    expect(result.title).toBe('New Partnership Deal');
+  });
+
+  it('throws a VALIDATION_ERROR when accountId is an empty string', async () => {
     await expect(createOpportunity({ ...baseParams, accountId: '' })).rejects.toMatchObject({
-      message: 'Account is required',
+      message: 'Account ID must be a non-empty string',
       code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('throws an ACCOUNT_NOT_FOUND error when accountId does not exist', async () => {
+    await expect(
+      createOpportunity({ ...baseParams, accountId: 'non-existent-account' }),
+    ).rejects.toMatchObject({
+      message: 'Account not found or does not belong to you',
+      code: 'ACCOUNT_NOT_FOUND',
+    });
+  });
+
+  it('throws an ACCOUNT_NOT_FOUND error when account belongs to a different tenant', async () => {
+    fakeAccounts.set('other-tenant-account', {
+      id: 'other-tenant-account',
+      tenant_id: 'other-tenant',
+      owner_id: 'user-123',
+    });
+
+    await expect(
+      createOpportunity({ ...baseParams, accountId: 'other-tenant-account' }),
+    ).rejects.toMatchObject({
+      code: 'ACCOUNT_NOT_FOUND',
+    });
+  });
+
+  it('throws an ACCOUNT_NOT_FOUND error when account belongs to a different user', async () => {
+    fakeAccounts.set('other-user-account', {
+      id: 'other-user-account',
+      tenant_id: 'tenant-abc',
+      owner_id: 'other-user',
+    });
+
+    await expect(
+      createOpportunity({ ...baseParams, accountId: 'other-user-account' }),
+    ).rejects.toMatchObject({
+      code: 'ACCOUNT_NOT_FOUND',
     });
   });
 
@@ -396,14 +497,29 @@ const storeBaseParams = {
   requestingUserId: 'user-store',
 };
 
+/**
+ * Seeds the fake account store with an account matching the storeBaseParams,
+ * optionally overriding the tenantId. Call before creating opportunities
+ * that reference an accountId.
+ */
+function seedFakeAccount(
+  accountId = storeBaseParams.accountId,
+  tenantId = storeBaseParams.tenantId,
+  ownerId = storeBaseParams.requestingUserId,
+) {
+  fakeAccounts.set(accountId, { id: accountId, tenant_id: tenantId, owner_id: ownerId });
+}
+
 describe('listOpportunities', () => {
   afterEach(() => {
     vi.clearAllMocks();
     fakeRows.clear();
+    fakeAccounts.clear();
   });
 
   it('returns opportunities belonging to the requested tenant', async () => {
     const tenantId = `tenant-list-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const opp1 = await createOpportunity({ ...storeBaseParams, tenantId, title: 'Deal A' });
     const opp2 = await createOpportunity({ ...storeBaseParams, tenantId, title: 'Deal B' });
 
@@ -416,6 +532,7 @@ describe('listOpportunities', () => {
   it('does not return opportunities from other tenants', async () => {
     const tenantA = `tenant-list-a-${Date.now()}`;
     const tenantB = `tenant-list-b-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantA);
     await createOpportunity({ ...storeBaseParams, tenantId: tenantA });
 
     const result = await listOpportunities(tenantB);
@@ -432,6 +549,7 @@ describe('listOpportunities', () => {
 describe('getOpportunity', () => {
   it('returns the opportunity when it exists and belongs to the tenant', async () => {
     const tenantId = `tenant-get-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     const result = await getOpportunity(created.id, tenantId);
@@ -449,6 +567,7 @@ describe('getOpportunity', () => {
   it('returns null when the opportunity belongs to a different tenant', async () => {
     const tenantA = `tenant-isolation-a-${Date.now()}`;
     const tenantB = `tenant-isolation-b-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantA);
     const created = await createOpportunity({ ...storeBaseParams, tenantId: tenantA });
 
     const result = await getOpportunity(created.id, tenantB);
@@ -459,6 +578,7 @@ describe('getOpportunity', () => {
 describe('updateOpportunity', () => {
   it('updates the title of an existing opportunity', async () => {
     const tenantId = `tenant-update-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     const updated = await updateOpportunity(
@@ -474,6 +594,7 @@ describe('updateOpportunity', () => {
 
   it('updates the stage of an existing opportunity', async () => {
     const tenantId = `tenant-update-stage-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     const updated = await updateOpportunity(
@@ -488,6 +609,7 @@ describe('updateOpportunity', () => {
 
   it('refreshes updatedAt when the opportunity is updated', async () => {
     const tenantId = `tenant-update-ts-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     // Small delay to ensure timestamps differ
@@ -505,6 +627,7 @@ describe('updateOpportunity', () => {
 
   it('does not change fields that are not included in the update params', async () => {
     const tenantId = `tenant-partial-update-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({
       ...storeBaseParams,
       tenantId,
@@ -524,6 +647,7 @@ describe('updateOpportunity', () => {
 
   it('throws a VALIDATION_ERROR when title is set to an empty string', async () => {
     const tenantId = `tenant-val-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     await expect(
@@ -533,6 +657,7 @@ describe('updateOpportunity', () => {
 
   it('throws a VALIDATION_ERROR for an invalid value', async () => {
     const tenantId = `tenant-val-value-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     await expect(
@@ -547,6 +672,7 @@ describe('updateOpportunity', () => {
 
   it('throws a VALIDATION_ERROR for an invalid stage', async () => {
     const tenantId = `tenant-val-stage-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     await expect(
@@ -561,6 +687,7 @@ describe('updateOpportunity', () => {
 
   it('throws an INVALID_STAGE_TRANSITION error for a disallowed stage transition', async () => {
     const tenantId = `tenant-invalid-transition-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     // prospecting → proposal is not a valid transition (must go through qualification first)
@@ -576,6 +703,7 @@ describe('updateOpportunity', () => {
 
   it('records a stage transition in stageHistory when the stage changes', async () => {
     const tenantId = `tenant-history-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     const updated = await updateOpportunity(
@@ -593,6 +721,7 @@ describe('updateOpportunity', () => {
 
   it('does not append to stageHistory when the stage is unchanged', async () => {
     const tenantId = `tenant-no-stage-change-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     const updated = await updateOpportunity(
@@ -607,6 +736,7 @@ describe('updateOpportunity', () => {
 
   it('accumulates multiple stage transitions in stageHistory', async () => {
     const tenantId = `tenant-multi-stage-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
     const created = await createOpportunity({ ...storeBaseParams, tenantId });
 
     const afterQual = await updateOpportunity(
@@ -637,10 +767,59 @@ describe('updateOpportunity', () => {
   it('throws a NOT_FOUND error when the opportunity belongs to a different tenant', async () => {
     const tenantA = `tenant-isol-a-${Date.now()}`;
     const tenantB = `tenant-isol-b-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantA);
     const created = await createOpportunity({ ...storeBaseParams, tenantId: tenantA });
 
     await expect(
       updateOpportunity(created.id, tenantB, { title: 'New' }, storeBaseParams.requestingUserId),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('unlinks an account by setting accountId to null', async () => {
+    const tenantId = `tenant-unlink-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
+    const created = await createOpportunity({ ...storeBaseParams, tenantId });
+
+    const updated = await updateOpportunity(
+      created.id,
+      tenantId,
+      { accountId: null },
+      storeBaseParams.requestingUserId,
+    );
+
+    expect(updated.accountId).toBeUndefined();
+  });
+
+  it('links to a new account on update', async () => {
+    const tenantId = `tenant-link-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
+    const created = await createOpportunity({ ...storeBaseParams, tenantId });
+
+    const newAccountId = 'new-account-uuid';
+    seedFakeAccount(newAccountId, tenantId);
+
+    const updated = await updateOpportunity(
+      created.id,
+      tenantId,
+      { accountId: newAccountId },
+      storeBaseParams.requestingUserId,
+    );
+
+    expect(updated.accountId).toBe(newAccountId);
+  });
+
+  it('throws ACCOUNT_NOT_FOUND when updating with a non-existent accountId', async () => {
+    const tenantId = `tenant-bad-acct-${Date.now()}`;
+    seedFakeAccount(storeBaseParams.accountId, tenantId);
+    const created = await createOpportunity({ ...storeBaseParams, tenantId });
+
+    await expect(
+      updateOpportunity(
+        created.id,
+        tenantId,
+        { accountId: 'non-existent-account' },
+        storeBaseParams.requestingUserId,
+      ),
+    ).rejects.toMatchObject({ code: 'ACCOUNT_NOT_FOUND' });
   });
 });
