@@ -118,11 +118,12 @@ export function OpportunityDetailPage() {
   // ── Resolve account name ───────────────────────────────────────────────────
 
   const resolveAccountName = useCallback(
-    async (accountId: string) => {
+    async (accountId: string, signal?: AbortSignal) => {
       if (!sessionToken) return;
       try {
         const response = await fetch(`/api/accounts/${accountId}`, {
           headers: { Authorization: `Bearer ${sessionToken}` },
+          signal,
         });
         if (response.ok) {
           const data = (await response.json()) as { name: string };
@@ -141,6 +142,7 @@ export function OpportunityDetailPage() {
     if (!id || !sessionToken) return;
 
     let cancelled = false;
+    const abortController = new AbortController();
 
     const load = async () => {
       setLoading(true);
@@ -150,6 +152,7 @@ export function OpportunityDetailPage() {
       try {
         const response = await fetch(`/api/opportunities/${id}`, {
           headers: { Authorization: `Bearer ${sessionToken}` },
+          signal: abortController.signal,
         });
 
         if (cancelled) return;
@@ -159,7 +162,7 @@ export function OpportunityDetailPage() {
           if (!cancelled) {
             setOpportunity(data);
             if (data.accountId) {
-              void resolveAccountName(data.accountId);
+              void resolveAccountName(data.accountId, abortController.signal);
             }
           }
         } else if (response.status === 404) {
@@ -178,6 +181,7 @@ export function OpportunityDetailPage() {
 
     return () => {
       cancelled = true;
+      abortController.abort();
     };
   }, [id, sessionToken, resolveAccountName]);
 
