@@ -185,7 +185,31 @@ describe('RecordListPage', () => {
       1,
     );
 
-    mockFetch(response);
+    // Use a custom mock where layouts return an empty list so columns
+    // fall back to record field definitions (the path this test covers).
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ id: 'obj-1', apiName: 'account' }],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/layouts')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/objects/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => response,
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
     renderPage();
 
     await waitFor(() => {
