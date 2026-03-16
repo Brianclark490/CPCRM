@@ -112,9 +112,23 @@ export interface Account {
   id: string;
   /** Tenant that owns this record — used to enforce data isolation in all queries */
   tenantId: string;
+  /** Company/customer name */
   name: string;
+  /** e.g. "Technology", "Healthcare" */
   industry?: string;
   website?: string;
+  phone?: string;
+  email?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  /** State/county/region */
+  region?: string;
+  postalCode?: string;
+  country?: string;
+  notes?: string;
+  /** Descope user ID of the account owner */
+  ownerId: string;
   createdAt: Date;
   updatedAt: Date;
   /** Descope userId of the user who created this record */
@@ -171,7 +185,7 @@ export interface Opportunity {
   /** UUID primary key */
   id: string;
   tenantId: string;
-  accountId: string;
+  accountId?: string;
   /** Descope userId of the team member responsible for this opportunity */
   ownerId: string;
   title: string;
