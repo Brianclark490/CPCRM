@@ -170,7 +170,8 @@ describe('FieldBuilderPage', () => {
     });
 
     const requiredBadges = screen.getAllByText('Required');
-    expect(requiredBadges.length).toBe(2); // Name and Stage are required
+    // 1 column header + 2 badges (Name and Stage are required)
+    expect(requiredBadges.length).toBe(3);
   });
 
   it('shows system badge with lock icon for system fields', async () => {
