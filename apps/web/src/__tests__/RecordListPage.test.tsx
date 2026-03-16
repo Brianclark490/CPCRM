@@ -191,7 +191,9 @@ describe('RecordListPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Technology')).toBeInTheDocument();
     });
-    expect(screen.getByText((content) => content.includes('info@acme.com'))).toBeInTheDocument();
+    // Email fields are rendered as a mailto link, so assert by accessible role + href.
+    const emailLink = await screen.findByRole('link', { name: /info@acme\.com/i });
+    expect(emailLink).toHaveAttribute('href', 'mailto:info@acme.com');
   });
 
   it('shows an error message when the records fetch fails', async () => {
