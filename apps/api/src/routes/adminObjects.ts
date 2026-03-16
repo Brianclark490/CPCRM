@@ -10,6 +10,7 @@ import {
   deleteObjectDefinition,
 } from '../services/objectDefinitionService.js';
 import type { UpdateObjectDefinitionParams } from '../services/objectDefinitionService.js';
+import { adminFieldsRouter } from './adminFields.js';
 import { logger } from '../lib/logger.js';
 
 export const adminObjectsRouter = Router();
@@ -260,3 +261,6 @@ adminObjectsRouter.get('/', requireAuth, handleListObjects);
 adminObjectsRouter.get('/:id', requireAuth, handleGetObject);
 adminObjectsRouter.put('/:id', requireAuth, handleUpdateObject);
 adminObjectsRouter.delete('/:id', requireAuth, handleDeleteObject);
+
+// Nested field definition routes: /admin/objects/:objectId/fields
+adminObjectsRouter.use('/:objectId/fields', adminFieldsRouter);
