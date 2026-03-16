@@ -64,12 +64,18 @@ export function FieldRenderer({ fieldType, value }: FieldRendererProps) {
     case 'phone':
       return <a href={`tel:${String(value)}`}>{String(value)}</a>;
 
-    case 'url':
-      return (
-        <a href={String(value)} target="_blank" rel="noopener noreferrer">
-          {String(value)}
-        </a>
-      );
+    case 'url': {
+      const href = String(value);
+      const isHttpUrl = href.startsWith('http://') || href.startsWith('https://');
+      if (isHttpUrl) {
+        return (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {href}
+          </a>
+        );
+      }
+      return <span>{href}</span>;
+    }
 
     case 'boolean':
       return <span>{value ? 'Yes' : 'No'}</span>;
