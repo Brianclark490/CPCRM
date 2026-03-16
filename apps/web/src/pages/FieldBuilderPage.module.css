@@ -196,6 +196,14 @@
   color: var(--color-text-primary);
 }
 
+.reverseContext {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+
 .apiName {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: var(--font-size-xs);

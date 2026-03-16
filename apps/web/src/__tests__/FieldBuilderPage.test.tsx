@@ -74,6 +74,93 @@ function mockFetchObject(data: unknown = sampleObject) {
   } as Response);
 }
 
+const sampleAllObjects = [
+  {
+    id: 'obj-1',
+    apiName: 'opportunity',
+    label: 'Opportunity',
+    pluralLabel: 'Opportunities',
+    isSystem: true,
+    fieldCount: 3,
+    recordCount: 0,
+  },
+  {
+    id: 'obj-2',
+    apiName: 'account',
+    label: 'Account',
+    pluralLabel: 'Accounts',
+    isSystem: true,
+    fieldCount: 2,
+    recordCount: 0,
+  },
+  {
+    id: 'obj-3',
+    apiName: 'custom_project',
+    label: 'Custom Project',
+    pluralLabel: 'Custom Projects',
+    isSystem: false,
+    fieldCount: 1,
+    recordCount: 0,
+  },
+];
+
+const sampleRelationships = [
+  {
+    id: 'rel-1',
+    sourceObjectId: 'obj-1',
+    targetObjectId: 'obj-2',
+    relationshipType: 'lookup',
+    apiName: 'opportunity_account',
+    label: 'Account',
+    reverseLabel: 'Opportunities',
+    required: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    sourceObjectLabel: 'Opportunity',
+    sourceObjectPluralLabel: 'Opportunities',
+    targetObjectLabel: 'Account',
+    targetObjectPluralLabel: 'Accounts',
+  },
+  {
+    id: 'rel-2',
+    sourceObjectId: 'obj-1',
+    targetObjectId: 'obj-3',
+    relationshipType: 'parent_child',
+    apiName: 'opportunity_project',
+    label: 'Project',
+    reverseLabel: undefined,
+    required: false,
+    createdAt: '2024-01-02T00:00:00Z',
+    sourceObjectLabel: 'Opportunity',
+    sourceObjectPluralLabel: 'Opportunities',
+    targetObjectLabel: 'Custom Project',
+    targetObjectPluralLabel: 'Custom Projects',
+  },
+];
+
+function mockFetchForRelationshipsTab(
+  relationships = sampleRelationships,
+  objects = sampleAllObjects,
+) {
+  const mockFetch = vi.fn();
+  // First call: fetch object definition
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => sampleObject,
+  } as Response);
+  // Second call: fetch relationships
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => relationships,
+  } as Response);
+  // Third call: fetch all objects
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => objects,
+  } as Response);
+  vi.stubGlobal('fetch', mockFetch);
+  return mockFetch;
+}
+
 describe('FieldBuilderPage', () => {
   beforeEach(() => {
     vi.mocked(useSession).mockReturnValue({
@@ -379,8 +466,8 @@ describe('FieldBuilderPage', () => {
     expect(screen.queryByRole('dialog', { name: 'Add field' })).not.toBeInTheDocument();
   });
 
-  it('switches to Relationships tab', async () => {
-    mockFetchObject();
+  it('switches to Relationships tab and shows relationships', async () => {
+    mockFetchForRelationshipsTab();
     const user = userEvent.setup();
 
     renderPage();
@@ -391,7 +478,190 @@ describe('FieldBuilderPage', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Relationships' }));
 
-    expect(screen.getByText('Relationship management coming soon.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Relationships/ })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /Add relationship/ })).toBeInTheDocument();
+  });
+
+  it('displays relationship list with label, related object, type, and required badge', async () => {
+    mockFetchForRelationshipsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Account')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Project')).toBeInTheDocument();
+    expect(screen.getByText('Lookup')).toBeInTheDocument();
+    expect(screen.getByText('Parent–Child')).toBeInTheDocument();
+    expect(screen.getByText('Custom Project')).toBeInTheDocument();
+  });
+
+  it('shows system badge for system relationships', async () => {
+    mockFetchForRelationshipsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Account')).toBeInTheDocument();
+    });
+
+    // rel-1 is between two system objects (obj-1 and obj-2), so it should show System badge
+    expect(screen.getByText('System')).toBeInTheDocument();
+  });
+
+  it('shows delete button only for non-system relationships', async () => {
+    mockFetchForRelationshipsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Project')).toBeInTheDocument();
+    });
+
+    // rel-2 (Project) is between system obj-1 and custom obj-3, so delete should be available
+    expect(screen.getByRole('button', { name: 'Delete Project' })).toBeInTheDocument();
+    // rel-1 (Account) is between two system objects, no delete button
+    expect(screen.queryByRole('button', { name: 'Delete Account' })).not.toBeInTheDocument();
+  });
+
+  it('shows reverse label context for relationships', async () => {
+    mockFetchForRelationshipsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Account')).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByText("Shows as 'Opportunities' on the Account page"),
+    ).toBeInTheDocument();
+  });
+
+  it('opens add relationship modal', async () => {
+    mockFetchForRelationshipsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Add relationship/ })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Add relationship/ }));
+
+    expect(screen.getByRole('dialog', { name: 'Add relationship' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Target object/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Relationship type/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Label/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Reverse label/)).toBeInTheDocument();
+  });
+
+  it('validates required fields in add relationship modal', async () => {
+    mockFetchForRelationshipsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Add relationship/ })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Add relationship/ }));
+
+    // Submit without filling out form
+    const submitButtons = screen.getAllByRole('button', { name: /Add relationship/ });
+    const submitButton = submitButtons[submitButtons.length - 1];
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Target object is required')).toBeInTheDocument();
+    });
+  });
+
+  it('opens delete confirmation for non-system relationship', async () => {
+    mockFetchForRelationshipsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Project')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete Project' }));
+
+    expect(
+      screen.getByRole('dialog', { name: 'Confirm delete relationship' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Are you sure you want to delete the/)).toBeInTheDocument();
+  });
+
+  it('shows empty state when no relationships exist', async () => {
+    mockFetchForRelationshipsTab([]);
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('No relationships yet')).toBeInTheDocument();
+    });
   });
 
   it('switches to Layouts tab', async () => {
