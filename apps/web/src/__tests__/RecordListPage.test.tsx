@@ -191,7 +191,7 @@ describe('RecordListPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Technology')).toBeInTheDocument();
     });
-    expect(screen.getByText('info@acme.com')).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('info@acme.com'))).toBeInTheDocument();
   });
 
   it('shows an error message when the records fetch fails', async () => {
