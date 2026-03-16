@@ -664,8 +664,20 @@ describe('FieldBuilderPage', () => {
     });
   });
 
-  it('switches to Layouts tab', async () => {
-    mockFetchObject();
+  it('switches to Layouts tab and shows layout builder', async () => {
+    const mockFetch = vi.fn();
+    // First call: fetch object definition
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleObject,
+    } as Response);
+    // Second call: fetch layouts list
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
     const user = userEvent.setup();
 
     renderPage();
@@ -676,7 +688,9 @@ describe('FieldBuilderPage', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Layouts' }));
 
-    expect(screen.getByText('Layout builder coming soon.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('No layouts yet')).toBeInTheDocument();
+    });
   });
 
   it('shows an error message when the fetch fails', async () => {
@@ -804,5 +818,339 @@ describe('FieldBuilderPage', () => {
     expect(screen.getByLabelText('Min')).toBeInTheDocument();
     expect(screen.getByLabelText('Max')).toBeInTheDocument();
     expect(screen.getByLabelText('Precision')).toBeInTheDocument();
+  });
+
+  // ── Layout Builder Tab Tests ────────────────────────────────────────────────
+
+  const sampleLayouts = [
+    {
+      id: 'layout-1',
+      objectId: 'obj-1',
+      name: 'Default Form',
+      layoutType: 'form',
+      isDefault: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+    },
+    {
+      id: 'layout-2',
+      objectId: 'obj-1',
+      name: 'List View',
+      layoutType: 'list',
+      isDefault: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+    },
+  ];
+
+  const sampleLayoutDetail = {
+    ...sampleLayouts[0],
+    fields: [
+      {
+        id: 'lf-1',
+        layoutId: 'layout-1',
+        fieldId: 'field-1',
+        section: 0,
+        sectionLabel: 'General',
+        sortOrder: 1,
+        width: 'full',
+        fieldApiName: 'name',
+        fieldLabel: 'Name',
+        fieldType: 'text',
+        fieldRequired: true,
+        fieldOptions: {},
+      },
+      {
+        id: 'lf-2',
+        layoutId: 'layout-1',
+        fieldId: 'field-2',
+        section: 0,
+        sectionLabel: 'General',
+        sortOrder: 2,
+        width: 'half',
+        fieldApiName: 'amount',
+        fieldLabel: 'Amount',
+        fieldType: 'currency',
+        fieldRequired: false,
+        fieldOptions: {},
+      },
+    ],
+  };
+
+  function mockFetchForLayoutsTab(
+    layouts = sampleLayouts,
+    layoutDetail = sampleLayoutDetail,
+  ) {
+    const mockFetch = vi.fn();
+    // First call: fetch object definition
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleObject,
+    } as Response);
+    // Second call: fetch layouts list
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => layouts,
+    } as Response);
+    // Third call: fetch layout detail (auto-selected first layout)
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => layoutDetail,
+    } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+    return mockFetch;
+  }
+
+  it('renders layout selector with existing layouts', async () => {
+    mockFetchForLayoutsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Layouts' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Layouts' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Layout')).toBeInTheDocument();
+    });
+
+    const select = screen.getByLabelText('Layout') as HTMLSelectElement;
+    expect(select).toBeInTheDocument();
+    // Check the options include our layouts
+    expect(screen.getByText('Default Form (form)')).toBeInTheDocument();
+    expect(screen.getByText('List View (list)')).toBeInTheDocument();
+    expect(screen.getByText('+ Create new layout')).toBeInTheDocument();
+  });
+
+  it('shows form layout builder with sections and fields', async () => {
+    mockFetchForLayoutsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Layouts' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Layouts' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Available Fields')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Form Preview')).toBeInTheDocument();
+    expect(screen.getByText('General')).toBeInTheDocument();
+  });
+
+  it('shows available fields that are not yet placed on the layout', async () => {
+    mockFetchForLayoutsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Layouts' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Layouts' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Available Fields')).toBeInTheDocument();
+    });
+
+    // Stage (field-3) is not on the layout, so it should appear in available fields
+    const availablePanel = screen.getByText('Available Fields').closest('div')!;
+    expect(availablePanel).toBeInTheDocument();
+  });
+
+  it('shows add section button for form layouts', async () => {
+    mockFetchForLayoutsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Layouts' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Layouts' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Add section/ })).toBeInTheDocument();
+    });
+  });
+
+  it('opens create layout modal when selecting create new option', async () => {
+    mockFetchForLayoutsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Layouts' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Layouts' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Layout')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText('Layout'), '__create__');
+
+    expect(screen.getByRole('dialog', { name: 'Create layout' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Type/)).toBeInTheDocument();
+  });
+
+  it('validates required name in create layout modal', async () => {
+    mockFetchForLayoutsTab();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Layouts' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Layouts' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Layout')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText('Layout'), '__create__');
+
+    const submitButtons = screen.getAllByRole('button', { name: /Create layout/ });
+    const submitButton = submitButtons[submitButtons.length - 1];
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Name is required')).toBeInTheDocument();
+    });
+  });
+
+  it('shows list layout builder when a list layout is selected', async () => {
+    const listLayoutDetail = {
+      ...sampleLayouts[1],
+      fields: [
+        {
+          id: 'lf-10',
+          layoutId: 'layout-2',
+          fieldId: 'field-1',
+          section: 0,
+          sectionLabel: 'Columns',
+          sortOrder: 1,
+          width: 'full',
+          fieldApiName: 'name',
+          fieldLabel: 'Name',
+          fieldType: 'text',
+          fieldRequired: true,
+          fieldOptions: {},
+        },
+      ],
+    };
+
+    const mockFetch = vi.fn();
+    // First call: fetch object definition
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleObject,
+    } as Response);
+    // Second call: fetch layouts list
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleLayouts,
+    } as Response);
+    // Third call: fetch first layout detail (auto-selected)
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleLayoutDetail,
+    } as Response);
+    // Fourth call: fetch list layout detail when user switches
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => listLayoutDetail,
+    } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Layouts' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Layouts' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Layout')).toBeInTheDocument();
+    });
+
+    // Switch to List View layout
+    await user.selectOptions(screen.getByLabelText('Layout'), 'layout-2');
+
+    await waitFor(() => {
+      expect(screen.getByText('Select Columns')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Column Order')).toBeInTheDocument();
+  });
+
+  it('saves layout fields via the API', async () => {
+    const mockFetch = vi.fn();
+    // First call: fetch object definition
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleObject,
+    } as Response);
+    // Second call: fetch layouts list
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleLayouts,
+    } as Response);
+    // Third call: fetch layout detail
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleLayoutDetail,
+    } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Layouts' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Layouts' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Add section/ })).toBeInTheDocument();
+    });
+
+    // Add a section to make the layout dirty
+    await user.click(screen.getByRole('button', { name: /Add section/ }));
+
+    // Save button should now appear
+    const saveButton = screen.getByRole('button', { name: /Save layout/ });
+    expect(saveButton).toBeInTheDocument();
+
+    // Mock the save API call
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleLayoutDetail,
+    } as Response);
+
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Layout saved successfully.')).toBeInTheDocument();
+    });
   });
 });

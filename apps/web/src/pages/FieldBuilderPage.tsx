@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
+import { LayoutBuilderTab } from '../components/LayoutBuilderTab.js';
 import { slugify } from '../utils.js';
 import styles from './FieldBuilderPage.module.css';
 
@@ -1047,12 +1048,12 @@ export function FieldBuilderPage() {
       )}
 
       {/* Layouts tab */}
-      {activeTab === 'layouts' && (
-        <div className={styles.placeholderCard}>
-          <p className={styles.placeholderText}>
-            Layout builder coming soon.
-          </p>
-        </div>
+      {activeTab === 'layouts' && sessionToken && objectId && (
+        <LayoutBuilderTab
+          objectId={objectId}
+          sessionToken={sessionToken}
+          fields={fields}
+        />
       )}
 
       {/* ── Add/Edit Field Modal ─────────────────────────────── */}
