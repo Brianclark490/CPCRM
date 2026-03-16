@@ -24,6 +24,12 @@ vi.mock('../../services/objectDefinitionService.js', () => ({
   deleteObjectDefinition: mockDeleteObjectDefinition,
 }));
 
+// ─── Mock nested field routes to prevent transitive db/client import ─────────
+
+vi.mock('../adminFields.js', () => ({
+  adminFieldsRouter: vi.fn((_req: unknown, _res: unknown, next: NextFunction) => next()),
+}));
+
 // ─── Mock logger so tests stay silent ────────────────────────────────────────
 
 vi.mock('../../lib/logger.js', () => ({
