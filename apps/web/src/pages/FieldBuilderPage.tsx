@@ -21,6 +21,38 @@ interface FieldDefinition {
   isSystem: boolean;
 }
 
+interface RelationshipDefinition {
+  id: string;
+  sourceObjectId: string;
+  targetObjectId: string;
+  relationshipType: string;
+  apiName: string;
+  label: string;
+  reverseLabel?: string;
+  required: boolean;
+  createdAt: string;
+  sourceObjectLabel: string;
+  sourceObjectPluralLabel: string;
+  targetObjectLabel: string;
+  targetObjectPluralLabel: string;
+}
+
+interface ObjectDefinitionListItem {
+  id: string;
+  apiName: string;
+  label: string;
+  pluralLabel: string;
+  isSystem: boolean;
+}
+
+interface RelationshipForm {
+  targetObjectId: string;
+  relationshipType: string;
+  label: string;
+  reverseLabel: string;
+  required: boolean;
+}
+
 interface ObjectDefinitionDetail {
   id: string;
   apiName: string;
@@ -83,6 +115,19 @@ const EMPTY_FORM: FieldForm = {
   max: '',
   precision: '',
   maxLength: '',
+};
+
+const RELATIONSHIP_TYPE_OPTIONS = [
+  { value: 'lookup', label: 'Lookup' },
+  { value: 'parent_child', label: 'Parent–Child' },
+];
+
+const EMPTY_RELATIONSHIP_FORM: RelationshipForm = {
+  targetObjectId: '',
+  relationshipType: 'lookup',
+  label: '',
+  reverseLabel: '',
+  required: false,
 };
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -204,6 +249,19 @@ export function FieldBuilderPage() {
   // Reorder in-progress
   const [reordering, setReordering] = useState(false);
 
+  // Relationship state
+  const [relationships, setRelationships] = useState<RelationshipDefinition[]>([]);
+  const [allObjects, setAllObjects] = useState<ObjectDefinitionListItem[]>([]);
+  const [relationshipsLoading, setRelationshipsLoading] = useState(false);
+  const [relationshipsError, setRelationshipsError] = useState<string | null>(null);
+  const [showRelModal, setShowRelModal] = useState(false);
+  const [relForm, setRelForm] = useState<RelationshipForm>({ ...EMPTY_RELATIONSHIP_FORM });
+  const [relModalError, setRelModalError] = useState<string | null>(null);
+  const [relSaving, setRelSaving] = useState(false);
+  const [deleteRelTarget, setDeleteRelTarget] = useState<RelationshipDefinition | null>(null);
+  const [deletingRel, setDeletingRel] = useState(false);
+  const [deleteRelError, setDeleteRelError] = useState<string | null>(null);
+
   // ── Fetch object definition ──────────────────────────────
 
   const fetchObject = useCallback(async () => {
@@ -234,6 +292,205 @@ export function FieldBuilderPage() {
   useEffect(() => {
     void fetchObject();
   }, [fetchObject]);
+
+  // ── Fetch relationships ─────────────────────────────────
+
+  const fetchRelationships = useCallback(async () => {
+    if (!sessionToken || !objectId) return;
+
+    setRelationshipsLoading(true);
+    setRelationshipsError(null);
+
+    try {
+      const response = await fetch(`/api/admin/objects/${objectId}/relationships`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as RelationshipDefinition[];
+        setRelationships(data);
+      } else {
+        setRelationshipsError('Failed to load relationships.');
+      }
+    } catch {
+      setRelationshipsError('Failed to connect to the server. Please try again.');
+    } finally {
+      setRelationshipsLoading(false);
+    }
+  }, [sessionToken, objectId]);
+
+  const fetchAllObjects = useCallback(async () => {
+    if (!sessionToken) return;
+
+    try {
+      const response = await fetch('/api/admin/objects', {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as ObjectDefinitionListItem[];
+        setAllObjects(data);
+      }
+    } catch {
+      // Silently fail — the dropdown will just be empty
+    }
+  }, [sessionToken]);
+
+  useEffect(() => {
+    if (activeTab === 'relationships') {
+      void fetchRelationships();
+      void fetchAllObjects();
+    }
+  }, [activeTab, fetchRelationships, fetchAllObjects]);
+
+  // ── Relationship helpers ────────────────────────────────
+
+  const isSystemRelationship = (rel: RelationshipDefinition): boolean => {
+    const sourceObj = allObjects.find((o) => o.id === rel.sourceObjectId);
+    const targetObj = allObjects.find((o) => o.id === rel.targetObjectId);
+    return (sourceObj?.isSystem ?? false) && (targetObj?.isSystem ?? false);
+  };
+
+  const getRelatedObjectLabel = (rel: RelationshipDefinition): string => {
+    if (rel.sourceObjectId === objectId) {
+      return rel.targetObjectLabel;
+    }
+    return rel.sourceObjectLabel;
+  };
+
+  const getReverseContext = (rel: RelationshipDefinition): string | null => {
+    if (!rel.reverseLabel) return null;
+    if (rel.sourceObjectId === objectId) {
+      return `Shows as '${rel.reverseLabel}' on the ${rel.targetObjectLabel} page`;
+    }
+    return `Shows as '${rel.reverseLabel}' on the ${rel.sourceObjectLabel} page`;
+  };
+
+  // ── Relationship modal handlers ─────────────────────────
+
+  const openRelModal = () => {
+    setRelForm({ ...EMPTY_RELATIONSHIP_FORM });
+    setRelModalError(null);
+    setShowRelModal(true);
+  };
+
+  const closeRelModal = () => {
+    setShowRelModal(false);
+    setRelModalError(null);
+  };
+
+  const handleRelFormChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    const { name, value } = e.target;
+    setRelForm((prev) => ({ ...prev, [name]: value }));
+    setRelModalError(null);
+  };
+
+  const handleRelToggleRequired = () => {
+    setRelForm((prev) => ({ ...prev, required: !prev.required }));
+  };
+
+  const handleRelSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRelModalError(null);
+
+    if (!sessionToken || !objectId) {
+      setRelModalError('Session unavailable. Please refresh and try again.');
+      return;
+    }
+
+    if (!relForm.targetObjectId) {
+      setRelModalError('Target object is required');
+      return;
+    }
+
+    if (!relForm.label.trim()) {
+      setRelModalError('Label is required');
+      return;
+    }
+
+    if (!relForm.relationshipType) {
+      setRelModalError('Relationship type is required');
+      return;
+    }
+
+    setRelSaving(true);
+
+    // Auto-generate api_name from label
+    const apiName = slugify(relForm.label);
+
+    const payload = {
+      source_object_id: objectId,
+      target_object_id: relForm.targetObjectId,
+      relationship_type: relForm.relationshipType,
+      api_name: apiName,
+      label: relForm.label.trim(),
+      reverse_label: relForm.reverseLabel.trim() || undefined,
+      required: relForm.required,
+    };
+
+    try {
+      const response = await fetch('/api/admin/relationships', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        setShowRelModal(false);
+        await fetchRelationships();
+      } else {
+        const data = (await response.json()) as ApiError;
+        setRelModalError(data.error ?? 'An unexpected error occurred');
+      }
+    } catch {
+      setRelModalError('Failed to connect to the server. Please try again.');
+    } finally {
+      setRelSaving(false);
+    }
+  };
+
+  // ── Delete relationship handlers ────────────────────────
+
+  const openDeleteRelConfirm = (rel: RelationshipDefinition) => {
+    setDeleteRelTarget(rel);
+    setDeleteRelError(null);
+  };
+
+  const closeDeleteRelConfirm = () => {
+    setDeleteRelTarget(null);
+    setDeleteRelError(null);
+  };
+
+  const handleDeleteRel = async () => {
+    if (!deleteRelTarget || !sessionToken) return;
+
+    setDeletingRel(true);
+    setDeleteRelError(null);
+
+    try {
+      const response = await fetch(`/api/admin/relationships/${deleteRelTarget.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+
+      if (response.ok || response.status === 204) {
+        setDeleteRelTarget(null);
+        await fetchRelationships();
+      } else {
+        const data = (await response.json()) as ApiError;
+        setDeleteRelError(data.error ?? 'Failed to delete relationship');
+      }
+    } catch {
+      setDeleteRelError('Failed to connect to the server. Please try again.');
+    } finally {
+      setDeletingRel(false);
+    }
+  };
 
   // ── Reorder handlers ─────────────────────────────────────
 
@@ -694,11 +951,99 @@ export function FieldBuilderPage() {
 
       {/* Relationships tab */}
       {activeTab === 'relationships' && (
-        <div className={styles.placeholderCard}>
-          <p className={styles.placeholderText}>
-            Relationship management coming soon.
-          </p>
-        </div>
+        <>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>
+              Relationships
+              <span className={styles.fieldCount}>({relationships.length})</span>
+            </h2>
+            <PrimaryButton size="sm" onClick={openRelModal}>
+              <PlusIcon />
+              Add relationship
+            </PrimaryButton>
+          </div>
+
+          {relationshipsError && (
+            <p role="alert" className={styles.errorAlert}>
+              {relationshipsError}
+            </p>
+          )}
+
+          {relationshipsLoading && <div className={styles.page}>Loading…</div>}
+
+          {!relationshipsLoading && !relationshipsError && relationships.length === 0 && (
+            <div className={styles.emptyState}>
+              <h3 className={styles.emptyTitle}>No relationships yet</h3>
+              <p className={styles.emptyText}>
+                Add a relationship to connect this object to other objects.
+              </p>
+            </div>
+          )}
+
+          {!relationshipsLoading && relationships.length > 0 && (
+            <div className={styles.tableCard}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th className={styles.th}>Label</th>
+                    <th className={styles.th}>Related Object</th>
+                    <th className={styles.th}>Type</th>
+                    <th className={styles.th}>Required</th>
+                    <th className={styles.th}>Status</th>
+                    <th className={`${styles.th} ${styles.thActions}`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {relationships.map((rel) => {
+                    const system = isSystemRelationship(rel);
+                    const reverseContext = getReverseContext(rel);
+                    return (
+                      <tr key={rel.id} className={styles.tr}>
+                        <td className={styles.td}>
+                          <span className={styles.fieldLabel}>{rel.label}</span>
+                          {reverseContext && (
+                            <span className={styles.reverseContext}>{reverseContext}</span>
+                          )}
+                        </td>
+                        <td className={styles.td}>{getRelatedObjectLabel(rel)}</td>
+                        <td className={styles.td}>
+                          <span className={styles.typeBadge}>
+                            {rel.relationshipType === 'parent_child' ? 'Parent–Child' : 'Lookup'}
+                          </span>
+                        </td>
+                        <td className={styles.td}>
+                          {rel.required && (
+                            <span className={styles.requiredBadge}>Required</span>
+                          )}
+                        </td>
+                        <td className={styles.td}>
+                          {system && (
+                            <span className={styles.systemBadge}>
+                              <LockIcon />
+                              System
+                            </span>
+                          )}
+                        </td>
+                        <td className={styles.td}>
+                          {!system && (
+                            <button
+                              type="button"
+                              className={styles.deleteButton}
+                              aria-label={`Delete ${rel.label}`}
+                              onClick={() => openDeleteRelConfirm(rel)}
+                            >
+                              <TrashIcon />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {/* Layouts tab */}
@@ -1031,6 +1376,206 @@ export function FieldBuilderPage() {
                 disabled={deleting}
               >
                 {deleting ? 'Deleting…' : 'Delete'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Relationship Modal ───────────────────────────── */}
+
+      {showRelModal && (
+        <div
+          className={styles.overlay}
+          onClick={closeRelModal}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Add relationship"
+        >
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 className={styles.modalTitle}>Add relationship</h2>
+
+            <form
+              className={styles.form}
+              noValidate
+              onSubmit={(e) => void handleRelSubmit(e)}
+            >
+              {/* Target object */}
+              <div className={styles.field}>
+                <label
+                  className={`${styles.label} ${styles.labelRequired}`}
+                  htmlFor="rel-targetObjectId"
+                >
+                  Target object
+                </label>
+                <select
+                  id="rel-targetObjectId"
+                  name="targetObjectId"
+                  className={styles.select}
+                  value={relForm.targetObjectId}
+                  onChange={handleRelFormChange}
+                  disabled={relSaving}
+                >
+                  <option value="">Select an object…</option>
+                  {allObjects
+                    .filter((o) => o.id !== objectId)
+                    .map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Relationship type */}
+              <div className={styles.field}>
+                <label
+                  className={`${styles.label} ${styles.labelRequired}`}
+                  htmlFor="rel-relationshipType"
+                >
+                  Relationship type
+                </label>
+                <select
+                  id="rel-relationshipType"
+                  name="relationshipType"
+                  className={styles.select}
+                  value={relForm.relationshipType}
+                  onChange={handleRelFormChange}
+                  disabled={relSaving}
+                >
+                  {RELATIONSHIP_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Label */}
+              <div className={styles.field}>
+                <label
+                  className={`${styles.label} ${styles.labelRequired}`}
+                  htmlFor="rel-label"
+                >
+                  Label
+                </label>
+                <input
+                  id="rel-label"
+                  name="label"
+                  type="text"
+                  className={styles.input}
+                  value={relForm.label}
+                  onChange={handleRelFormChange}
+                  placeholder="e.g. Account"
+                  maxLength={255}
+                  disabled={relSaving}
+                />
+              </div>
+
+              {/* Reverse label */}
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="rel-reverseLabel">
+                  Reverse label
+                </label>
+                <input
+                  id="rel-reverseLabel"
+                  name="reverseLabel"
+                  type="text"
+                  className={styles.input}
+                  value={relForm.reverseLabel}
+                  onChange={handleRelFormChange}
+                  placeholder="e.g. Opportunities"
+                  maxLength={255}
+                  disabled={relSaving}
+                />
+                <span className={styles.fieldHint}>
+                  How this relationship appears on the related object&rsquo;s page.
+                </span>
+              </div>
+
+              {/* Required toggle */}
+              <div className={styles.field}>
+                <div className={styles.toggleRow}>
+                  <label className={styles.label}>Required</label>
+                  <button
+                    type="button"
+                    className={`${styles.toggle} ${relForm.required ? styles.toggleActive : ''}`}
+                    role="switch"
+                    aria-checked={relForm.required}
+                    aria-label="Required"
+                    onClick={handleRelToggleRequired}
+                    disabled={relSaving}
+                  >
+                    <span className={styles.toggleKnob} />
+                  </button>
+                </div>
+              </div>
+
+              {relModalError && (
+                <p className={styles.errorAlert} role="alert">
+                  {relModalError}
+                </p>
+              )}
+
+              <hr className={styles.divider} />
+
+              <div className={styles.actions}>
+                <PrimaryButton
+                  type="button"
+                  variant="outline"
+                  onClick={closeRelModal}
+                  disabled={relSaving}
+                >
+                  Cancel
+                </PrimaryButton>
+                <PrimaryButton type="submit" disabled={relSaving}>
+                  {relSaving ? 'Adding…' : 'Add relationship'}
+                </PrimaryButton>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Relationship Confirmation Modal ───────────── */}
+
+      {deleteRelTarget && (
+        <div
+          className={styles.overlay}
+          onClick={closeDeleteRelConfirm}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm delete relationship"
+        >
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 className={styles.modalTitle}>Delete relationship</h2>
+            <p className={styles.confirmText}>
+              Are you sure you want to delete the{' '}
+              <span className={styles.confirmName}>{deleteRelTarget.label}</span>{' '}
+              relationship? This will remove all associated record links.
+            </p>
+
+            {deleteRelError && (
+              <p className={styles.errorAlert} role="alert">
+                {deleteRelError}
+              </p>
+            )}
+
+            <div className={styles.actions}>
+              <PrimaryButton
+                type="button"
+                variant="outline"
+                onClick={closeDeleteRelConfirm}
+                disabled={deletingRel}
+              >
+                Cancel
+              </PrimaryButton>
+              <PrimaryButton
+                type="button"
+                onClick={() => void handleDeleteRel()}
+                disabled={deletingRel}
+              >
+                {deletingRel ? 'Deleting…' : 'Delete'}
               </PrimaryButton>
             </div>
           </div>
