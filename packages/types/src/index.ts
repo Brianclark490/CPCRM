@@ -330,3 +330,91 @@ export interface CreateOpportunityRequest {
   /** Optional description or notes for the opportunity */
   description?: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metadata engine — object & field definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Supported field types for metadata-driven field definitions.
+ */
+export type FieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'currency'
+  | 'date'
+  | 'datetime'
+  | 'email'
+  | 'phone'
+  | 'url'
+  | 'boolean'
+  | 'dropdown'
+  | 'multi_select';
+
+/**
+ * An ObjectDefinition describes a CRM object type (e.g. "account", "opportunity").
+ * System objects are seeded by migrations and cannot be deleted by end-users.
+ */
+export interface ObjectDefinition {
+  /** UUID primary key */
+  id: string;
+  /** Machine name, snake_case (e.g. "account", "custom_project") */
+  apiName: string;
+  /** Display name (e.g. "Account") */
+  label: string;
+  /** Plural display name (e.g. "Accounts") */
+  pluralLabel: string;
+  description?: string;
+  /** Icon identifier for the UI */
+  icon?: string;
+  /** True for built-in objects (account, opportunity) */
+  isSystem: boolean;
+  /** Descope user ID of the creator */
+  ownerId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Type-specific configuration stored in FieldDefinition.options.
+ *
+ * - dropdown / multi_select: `{ choices: string[] }`
+ * - number / currency: `{ min?: number; max?: number; precision?: number }`
+ * - text: `{ max_length?: number }`
+ */
+export interface FieldOptions {
+  choices?: string[];
+  min?: number;
+  max?: number;
+  precision?: number;
+  max_length?: number;
+}
+
+/**
+ * A FieldDefinition describes a single field on a CRM object.
+ * The field_type determines how the value is stored, validated, and rendered.
+ */
+export interface FieldDefinition {
+  /** UUID primary key */
+  id: string;
+  /** The object this field belongs to */
+  objectId: string;
+  /** Machine name, snake_case (e.g. "company_name") */
+  apiName: string;
+  /** Display name (e.g. "Company Name") */
+  label: string;
+  fieldType: FieldType;
+  description?: string;
+  required: boolean;
+  /** Default value as string (parsed by field_type) */
+  defaultValue?: string;
+  /** Type-specific configuration */
+  options: FieldOptions;
+  /** Controls display ordering within the object */
+  sortOrder: number;
+  /** True for built-in fields */
+  isSystem: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
