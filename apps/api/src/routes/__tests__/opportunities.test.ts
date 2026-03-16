@@ -167,7 +167,7 @@ describe('POST /opportunities', () => {
   });
 
   it('returns 400 when the service throws a VALIDATION_ERROR for missing accountId', async () => {
-    const validationErr = Object.assign(new Error('Account is required'), {
+    const validationErr = Object.assign(new Error('Account ID must be a non-empty string'), {
       code: 'VALIDATION_ERROR',
     });
     mockCreateOpportunity.mockRejectedValue(validationErr);
@@ -178,7 +178,51 @@ describe('POST /opportunities', () => {
     await handleCreateOpportunity(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Account is required' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Account ID must be a non-empty string' });
+  });
+
+  it('returns 201 when creating without an accountId (optional)', async () => {
+    const now = new Date();
+    const expectedOpportunity = {
+      id: 'opp-uuid',
+      tenantId: 'tenant-abc',
+      ownerId: 'user-123',
+      title: 'No Account Deal',
+      stage: 'prospecting',
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'user-123',
+    };
+
+    mockCreateOpportunity.mockResolvedValue(expectedOpportunity);
+
+    const req = mockReq({ title: 'No Account Deal' });
+    const res = mockRes();
+
+    await handleCreateOpportunity(req, res);
+
+    expect(mockCreateOpportunity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'No Account Deal',
+        accountId: undefined,
+      }),
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('returns 400 when the service throws an ACCOUNT_NOT_FOUND error', async () => {
+    const accountErr = Object.assign(new Error('Account not found or does not belong to you'), {
+      code: 'ACCOUNT_NOT_FOUND',
+    });
+    mockCreateOpportunity.mockRejectedValue(accountErr);
+
+    const req = mockReq({ title: 'New Deal', accountId: 'bad-account-id' });
+    const res = mockRes();
+
+    await handleCreateOpportunity(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Account not found or does not belong to you' });
   });
 
   it('returns 400 when title is missing from the request body', async () => {
