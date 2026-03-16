@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { ObjectManagerPage, slugify } from '../pages/ObjectManagerPage.js';
+import { ObjectManagerPage } from '../pages/ObjectManagerPage.js';
+import { slugify } from '../utils.js';
 
 vi.mock('@descope/react-sdk', () => ({
   useSession: vi.fn(),

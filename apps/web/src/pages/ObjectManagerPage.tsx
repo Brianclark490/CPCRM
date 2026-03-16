@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
+import { slugify } from '../utils.js';
 import styles from './ObjectManagerPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,19 +48,6 @@ const ICON_OPTIONS = [
   { value: '📝', label: '📝 Note' },
   { value: '🗂️', label: '🗂️ Folder' },
 ];
-
-/**
- * Converts a label to a snake_case api_name:
- * "My Custom Object" → "my_custom_object"
- */
-export function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .replace(/_+/g, '_');
-}
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
