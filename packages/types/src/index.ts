@@ -418,3 +418,37 @@ export interface FieldDefinition {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metadata engine — relationship definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Supported relationship types between CRM objects.
+ * - lookup: a simple foreign-key reference (e.g. opportunity → account)
+ * - parent_child: a hierarchical ownership relationship
+ */
+export type RelationshipType = 'lookup' | 'parent_child';
+
+/**
+ * A RelationshipDefinition describes how two CRM object types relate to each other.
+ * For example, an Opportunity has a "lookup" relationship to an Account.
+ */
+export interface RelationshipDefinition {
+  /** UUID primary key */
+  id: string;
+  /** The object that holds the reference (e.g. opportunity) */
+  sourceObjectId: string;
+  /** The object being referenced (e.g. account) */
+  targetObjectId: string;
+  relationshipType: RelationshipType;
+  /** Machine name (e.g. "opportunity_account") */
+  apiName: string;
+  /** Display label shown on the source object form (e.g. "Account") */
+  label: string;
+  /** Display label shown on the target object detail (e.g. "Opportunities") */
+  reverseLabel?: string;
+  /** Whether the relationship is required on the source object */
+  required: boolean;
+  createdAt: Date;
+}
