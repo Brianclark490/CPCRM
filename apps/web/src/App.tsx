@@ -5,6 +5,7 @@ import { OpportunitiesPage } from './pages/OpportunitiesPage.js';
 import { AccountsPage } from './pages/AccountsPage.js';
 import { AccountDetailPage } from './pages/AccountDetailPage.js';
 import { AdminPage } from './pages/AdminPage.js';
+import { ObjectManagerPage } from './pages/ObjectManagerPage.js';
 import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
 import { CreateOpportunityPage } from './pages/CreateOpportunityPage.js';
 import { OpportunityDetailPage } from './pages/OpportunityDetailPage.js';
@@ -97,6 +98,16 @@ export function App() {
             <ProtectedRoute>
               <AppShell>
                 <AdminPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/objects"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <ObjectManagerPage />
               </AppShell>
             </ProtectedRoute>
           }
