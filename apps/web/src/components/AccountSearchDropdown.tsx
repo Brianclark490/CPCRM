@@ -107,9 +107,18 @@ export function AccountSearchDropdown({
       <div className={`${styles.inputWrap} ${disabled ? styles.inputWrapDisabled : ''}`}>
         {value ? (
           <>
-            <span className={styles.input} data-testid="account-selected">
+            <button
+              type="button"
+              id={id}
+              className={styles.input}
+              data-testid="account-selected"
+              onClick={disabled ? undefined : handleFocus}
+              disabled={disabled}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+            >
               {displayValue}
-            </span>
+            </button>
             {!disabled && (
               <button
                 type="button"
