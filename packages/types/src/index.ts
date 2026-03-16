@@ -319,8 +319,8 @@ export interface ApiErrorResponse {
 export interface CreateOpportunityRequest {
   /** Human-readable title for the opportunity (required, 1–200 chars) */
   title: string;
-  /** The account this opportunity is linked to (required) */
-  accountId: string;
+  /** The account this opportunity is linked to (optional) */
+  accountId?: string;
   /** Monetary value of the opportunity */
   value?: number;
   /** ISO 4217 currency code (e.g. "GBP", "USD") */

@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useSession } from '@descope/react-sdk';
 import { useNavigate } from 'react-router-dom';
 import { PrimaryButton } from '../components/PrimaryButton.js';
+import { AccountSearchDropdown } from '../components/AccountSearchDropdown.js';
 import styles from './CreateOpportunityPage.module.css';
 
 interface FormState {
   title: string;
-  accountId: string;
+  accountId: string | null;
+  accountName: string | null;
   value: string;
   currency: string;
   expectedCloseDate: string;
@@ -47,7 +49,8 @@ export function CreateOpportunityPage() {
 
   const [form, setForm] = useState<FormState>({
     title: '',
-    accountId: '',
+    accountId: null,
+    accountName: null,
     value: '',
     currency: '',
     expectedCloseDate: '',
@@ -77,12 +80,6 @@ export function CreateOpportunityPage() {
       return;
     }
 
-    const trimmedAccountId = form.accountId.trim();
-    if (!trimmedAccountId) {
-      setErrorMessage('Account is required');
-      return;
-    }
-
     setSubmitting(true);
 
     try {
@@ -103,7 +100,7 @@ export function CreateOpportunityPage() {
         },
         body: JSON.stringify({
           title: trimmedTitle,
-          accountId: trimmedAccountId,
+          accountId: form.accountId || undefined,
           value: parsedValue,
           currency: form.currency.trim() || undefined,
           expectedCloseDate: form.expectedCloseDate.trim() || undefined,
@@ -175,18 +172,20 @@ export function CreateOpportunityPage() {
           </div>
 
           <div className={styles.field}>
-            <label className={`${styles.label} ${styles.labelRequired}`} htmlFor="accountId">
-              Account
+            <label className={styles.label} htmlFor="accountId">
+              Account (optional)
             </label>
-            <input
+            <AccountSearchDropdown
               id="accountId"
-              name="accountId"
-              type="text"
-              className={styles.input}
+              sessionToken={sessionToken ?? ''}
               value={form.accountId}
-              onChange={handleChange}
-              placeholder="e.g. account-uuid"
+              valueName={form.accountName}
+              onChange={(accountId, accountName) => {
+                setForm((prev) => ({ ...prev, accountId, accountName }));
+                setErrorMessage(null);
+              }}
               disabled={submitting}
+              placeholder="Search accounts…"
             />
           </div>
 

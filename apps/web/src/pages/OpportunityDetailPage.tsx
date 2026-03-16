@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { AccountSearchDropdown } from '../components/AccountSearchDropdown.js';
 import styles from './OpportunityDetailPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ interface StageTransition {
 interface Opportunity {
   id: string;
   tenantId: string;
-  accountId: string;
+  accountId?: string;
   ownerId: string;
   title: string;
   stage: OpportunityStage;
@@ -39,7 +40,8 @@ interface Opportunity {
 
 interface FormState {
   title: string;
-  accountId: string;
+  accountId: string | null;
+  accountName: string | null;
   ownerId: string;
   stage: OpportunityStage;
   value: string;
@@ -82,7 +84,8 @@ function formatDate(iso: string | undefined): string {
 function opportunityToForm(opp: Opportunity): FormState {
   return {
     title: opp.title,
-    accountId: opp.accountId,
+    accountId: opp.accountId ?? null,
+    accountName: null,
     ownerId: opp.ownerId,
     stage: opp.stage,
     value: opp.value !== undefined ? String(opp.value) : '',
@@ -102,6 +105,7 @@ export function OpportunityDetailPage() {
   const { sessionToken } = useSession();
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [accountName, setAccountName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -110,6 +114,26 @@ export function OpportunityDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // ── Resolve account name ───────────────────────────────────────────────────
+
+  const resolveAccountName = useCallback(
+    async (accountId: string) => {
+      if (!sessionToken) return;
+      try {
+        const response = await fetch(`/api/accounts/${accountId}`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        });
+        if (response.ok) {
+          const data = (await response.json()) as { name: string };
+          setAccountName(data.name);
+        }
+      } catch {
+        // silently fail — we'll show the ID as fallback
+      }
+    },
+    [sessionToken],
+  );
 
   // ── Load opportunity ──────────────────────────────────────────────────────
 
@@ -121,6 +145,7 @@ export function OpportunityDetailPage() {
     const load = async () => {
       setLoading(true);
       setLoadError(null);
+      setAccountName(null);
 
       try {
         const response = await fetch(`/api/opportunities/${id}`, {
@@ -131,7 +156,12 @@ export function OpportunityDetailPage() {
 
         if (response.ok) {
           const data = (await response.json()) as Opportunity;
-          if (!cancelled) setOpportunity(data);
+          if (!cancelled) {
+            setOpportunity(data);
+            if (data.accountId) {
+              void resolveAccountName(data.accountId);
+            }
+          }
         } else if (response.status === 404) {
           if (!cancelled) setLoadError('Opportunity not found.');
         } else {
@@ -149,13 +179,15 @@ export function OpportunityDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, sessionToken]);
+  }, [id, sessionToken, resolveAccountName]);
 
   // ── Edit handlers ─────────────────────────────────────────────────────────
 
   const handleEditClick = () => {
     if (!opportunity) return;
-    setForm(opportunityToForm(opportunity));
+    const formState = opportunityToForm(opportunity);
+    formState.accountName = accountName;
+    setForm(formState);
     setSaveError(null);
     setSaveSuccess(false);
     setEditing(true);
@@ -192,12 +224,6 @@ export function OpportunityDetailPage() {
       return;
     }
 
-    const trimmedAccountId = form.accountId.trim();
-    if (!trimmedAccountId) {
-      setSaveError('Account is required');
-      return;
-    }
-
     let validatedValue: number | null | undefined;
     if (form.value.trim()) {
       validatedValue = Number(form.value.trim());
@@ -228,7 +254,7 @@ export function OpportunityDetailPage() {
         },
         body: JSON.stringify({
           title: trimmedTitle,
-          accountId: trimmedAccountId,
+          accountId: form.accountId ?? null,
           ownerId: form.ownerId.trim() || undefined,
           stage: form.stage,
           value: validatedValue,
@@ -241,6 +267,7 @@ export function OpportunityDetailPage() {
       if (response.ok) {
         const updated = (await response.json()) as Opportunity;
         setOpportunity(updated);
+        setAccountName(form.accountName);
         setEditing(false);
         setForm(null);
         setSaveSuccess(true);
@@ -340,15 +367,20 @@ export function OpportunityDetailPage() {
                 {/* Account */}
                 <div className={styles.formField}>
                   <label className={styles.label} htmlFor="accountId">
-                    Account <span className={styles.required}>*</span>
+                    Account (optional)
                   </label>
-                  <input
-                    className={styles.input}
+                  <AccountSearchDropdown
                     id="accountId"
-                    name="accountId"
-                    type="text"
+                    sessionToken={sessionToken ?? ''}
                     value={form.accountId}
-                    onChange={handleChange}
+                    valueName={form.accountName}
+                    onChange={(accountId, accName) => {
+                      setForm((prev) =>
+                        prev ? { ...prev, accountId, accountName: accName } : prev,
+                      );
+                      setSaveError(null);
+                      setSaveSuccess(false);
+                    }}
                     disabled={submitting}
                   />
                 </div>
@@ -490,7 +522,13 @@ export function OpportunityDetailPage() {
 
               <div className={styles.fieldGroup}>
                 <span className={styles.fieldLabel}>Account</span>
-                <span className={styles.fieldValue}>{opportunity.accountId}</span>
+                {opportunity.accountId ? (
+                  <span className={styles.fieldValue}>
+                    {accountName ?? opportunity.accountId}
+                  </span>
+                ) : (
+                  <span className={styles.fieldEmpty}>No account linked</span>
+                )}
               </div>
 
               <div className={styles.fieldGroup}>

@@ -26,7 +26,7 @@ export const opportunitiesRouter = Router();
  * Request body (JSON):
  *   {
  *     "title": string,
- *     "accountId": string,
+ *     "accountId"?: string,
  *     "value"?: number,
  *     "currency"?: string,
  *     "expectedCloseDate"?: string,
@@ -35,7 +35,7 @@ export const opportunitiesRouter = Router();
  *
  * Responses:
  *   201  – opportunity created; body contains the created Opportunity
- *   400  – validation error (e.g. missing title or accountId)
+ *   400  – validation error (e.g. missing title or invalid accountId)
  *   401  – missing or invalid Bearer token
  *   403  – authenticated but no active tenant context
  *   500  – unexpected server error
@@ -59,7 +59,7 @@ export async function handleCreateOpportunity(
   try {
     const opportunity = await createOpportunity({
       title: body?.title ?? '',
-      accountId: body?.accountId ?? '',
+      accountId: body?.accountId || undefined,
       value: body?.value,
       currency: body?.currency,
       expectedCloseDate: body?.expectedCloseDate,
@@ -71,6 +71,11 @@ export async function handleCreateOpportunity(
     res.status(201).json(opportunity);
   } catch (err: unknown) {
     if (err instanceof Error && (err as Error & { code?: string }).code === 'VALIDATION_ERROR') {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+
+    if (err instanceof Error && (err as Error & { code?: string }).code === 'ACCOUNT_NOT_FOUND') {
       res.status(400).json({ error: err.message });
       return;
     }
@@ -160,7 +165,7 @@ export async function handleGetOpportunity(
  * Request body (JSON) — all fields optional:
  *   {
  *     "title"?: string,
- *     "accountId"?: string,
+ *     "accountId"?: string | null,
  *     "ownerId"?: string,
  *     "stage"?: OpportunityStage,
  *     "value"?: number | null,
@@ -186,7 +191,7 @@ export async function handleUpdateOpportunity(
 
   const body = req.body as {
     title?: string;
-    accountId?: string;
+    accountId?: string | null;
     ownerId?: string;
     stage?: OpportunityStage;
     value?: number | null;
@@ -211,7 +216,7 @@ export async function handleUpdateOpportunity(
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 
-    if (code === 'VALIDATION_ERROR' || code === 'INVALID_STAGE_TRANSITION') {
+    if (code === 'VALIDATION_ERROR' || code === 'INVALID_STAGE_TRANSITION' || code === 'ACCOUNT_NOT_FOUND') {
       res.status(400).json({ error: (err as Error).message });
       return;
     }
