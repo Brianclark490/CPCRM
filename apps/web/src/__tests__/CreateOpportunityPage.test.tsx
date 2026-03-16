@@ -33,6 +33,7 @@ function renderPage() {
  * then selects it in the dropdown.
  */
 async function selectAccount(accountId: string, accountName: string) {
+  void accountId;
   // Type into the account search input
   const accountInput = screen.getByPlaceholderText('Search accounts…');
   await userEvent.type(accountInput, accountName);
