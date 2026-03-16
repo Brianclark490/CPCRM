@@ -59,7 +59,7 @@ export async function handleCreateOpportunity(
   try {
     const opportunity = await createOpportunity({
       title: body?.title ?? '',
-      accountId: body?.accountId || undefined,
+      accountId: body?.accountId,
       value: body?.value,
       currency: body?.currency,
       expectedCloseDate: body?.expectedCloseDate,
