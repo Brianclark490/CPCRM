@@ -95,10 +95,17 @@ export interface ListAccountsParams {
 }
 
 /**
+ * An Account list item includes an opportunity count for display in list views.
+ */
+export interface AccountListItem extends Account {
+  opportunityCount: number;
+}
+
+/**
  * Paginated list response for accounts.
  */
 export interface ListAccountsResult {
-  data: Account[];
+  data: AccountListItem[];
   total: number;
   page: number;
   limit: number;
@@ -185,6 +192,13 @@ function rowToAccount(row: Record<string, unknown>): Account {
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
     createdBy: row.created_by as string,
+  };
+}
+
+function rowToAccountListItem(row: Record<string, unknown>): AccountListItem {
+  return {
+    ...rowToAccount(row),
+    opportunityCount: parseInt(row.opportunity_count as string, 10) || 0,
   };
 }
 
@@ -283,28 +297,31 @@ export async function listAccounts(
   const offset = (page - 1) * limit;
 
   const queryParams: unknown[] = [tenantId, ownerId];
-  let whereClause = 'WHERE tenant_id = $1 AND owner_id = $2';
+  let whereClause = 'WHERE a.tenant_id = $1 AND a.owner_id = $2';
 
   if (search && search.trim().length > 0) {
     const searchTerm = `%${search.trim()}%`;
     queryParams.push(searchTerm);
-    whereClause += ` AND (name ILIKE $${queryParams.length} OR email ILIKE $${queryParams.length})`;
+    whereClause += ` AND (a.name ILIKE $${queryParams.length} OR a.email ILIKE $${queryParams.length})`;
   }
 
   const countResult = await pool.query(
-    `SELECT COUNT(*) AS total FROM accounts ${whereClause}`,
+    `SELECT COUNT(*) AS total FROM accounts a ${whereClause}`,
     queryParams,
   );
   const total = parseInt(countResult.rows[0].total as string, 10);
 
   queryParams.push(limit, offset);
   const dataResult = await pool.query(
-    `SELECT * FROM accounts ${whereClause} ORDER BY created_at DESC LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
+    `SELECT a.*, (SELECT COUNT(*) FROM opportunities o WHERE o.account_id = a.id AND o.tenant_id = a.tenant_id) AS opportunity_count
+     FROM accounts a ${whereClause}
+     ORDER BY a.created_at DESC
+     LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
     queryParams,
   );
 
   return {
-    data: dataResult.rows.map(rowToAccount),
+    data: dataResult.rows.map(rowToAccountListItem),
     total,
     page,
     limit,

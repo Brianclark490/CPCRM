@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "echo 'build not yet implemented'",
-    "test": "echo 'test not yet implemented'",
+    "test": "echo 'ui tests not yet implemented' && exit 0",
     "lint": "echo 'lint not yet implemented'",
     "typecheck": "echo 'typecheck not yet implemented'"
   }
