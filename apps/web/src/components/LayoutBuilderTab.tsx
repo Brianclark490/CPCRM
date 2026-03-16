@@ -160,7 +160,7 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
 
   // Selected layout
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
-  const [layoutDetail, setLayoutDetail] = useState<LayoutDefinitionDetail | null>(null);
+  const [, setLayoutDetail] = useState<LayoutDefinitionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   // Form layout builder state
