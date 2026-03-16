@@ -26,6 +26,26 @@ function getInitials(name: string | undefined, email: string | undefined): strin
   return '?';
 }
 
+const TEXT_ICON_MAP: Record<string, string> = {
+  building: '🏢',
+  'dollar-sign': '💰',
+  person: '👤',
+  briefcase: '💼',
+  clipboard: '📋',
+  target: '🎯',
+  money: '💰',
+  chart: '📊',
+  wrench: '🔧',
+  star: '⭐',
+  note: '📝',
+  folder: '🗂️',
+  package: '📦',
+};
+
+function resolveIcon(icon: string): string {
+  return TEXT_ICON_MAP[icon] ?? icon;
+}
+
 const defaultObjectIcon = (
   <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
     <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.25" />
@@ -179,7 +199,7 @@ export function AppShell({ children }: AppShellProps) {
                     >
                       <span className={styles.navIcon}>
                         {icon ? (
-                          <span aria-hidden="true">{icon}</span>
+                          <span aria-hidden="true">{resolveIcon(icon)}</span>
                         ) : (
                           defaultObjectIcon
                         )}
