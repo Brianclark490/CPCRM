@@ -17,7 +17,7 @@ type OpportunityStage =
 interface Opportunity {
   id: string;
   title: string;
-  accountId: string;
+  accountId?: string;
   stage: OpportunityStage;
   value?: number;
   currency?: string;
@@ -159,7 +159,7 @@ export function OpportunitiesPage() {
                       {opp.title}
                     </Link>
                   </td>
-                  <td className={styles.td}>{opp.accountId}</td>
+                  <td className={styles.td}>{opp.accountId ?? '—'}</td>
                   <td className={styles.td}>
                     <span className={styles.stageBadge}>{STAGE_LABELS[opp.stage]}</span>
                   </td>
