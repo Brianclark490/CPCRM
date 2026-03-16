@@ -556,3 +556,60 @@ export interface LayoutField {
   /** Width hint for form rendering */
   width: LayoutFieldWidth;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin API — Object Definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Request body for creating a new object definition.
+ * The ownerId is resolved from the authenticated user's JWT —
+ * it must not be supplied by the caller.
+ */
+export interface CreateObjectDefinitionRequest {
+  /** Machine name, snake_case, 3–50 chars (e.g. "custom_project") */
+  apiName: string;
+  /** Display name (e.g. "Custom Project") */
+  label: string;
+  /** Plural display name (e.g. "Custom Projects") */
+  pluralLabel: string;
+  /** Optional description */
+  description?: string;
+  /** Optional icon identifier for the UI */
+  icon?: string;
+}
+
+/**
+ * Request body for updating an existing object definition.
+ * All fields are optional — only the supplied fields will be updated.
+ * api_name cannot be changed on system objects.
+ */
+export interface UpdateObjectDefinitionRequest {
+  /** Display name */
+  label?: string;
+  /** Plural display name */
+  pluralLabel?: string;
+  /** Description */
+  description?: string | null;
+  /** Icon identifier */
+  icon?: string | null;
+}
+
+/**
+ * An object definition with aggregated field and record counts,
+ * returned by the list endpoint.
+ */
+export interface ObjectDefinitionListItem extends ObjectDefinition {
+  fieldCount: number;
+  recordCount: number;
+}
+
+/**
+ * An object definition with its nested fields, relationships, and layouts,
+ * returned by the get-by-id endpoint.
+ */
+export interface ObjectDefinitionDetail extends ObjectDefinition {
+  fields: FieldDefinition[];
+  relationships: RelationshipDefinition[];
+  layouts: LayoutDefinition[];
+}
