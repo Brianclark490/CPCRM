@@ -191,6 +191,41 @@ export interface Opportunity {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// User Profile
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A UserProfile stores application-level profile data for an authenticated user.
+ * It is uniquely linked to a Descope identity via the `userId` field (JWT `sub` claim).
+ * One profile per Descope user ID is enforced at the database level.
+ */
+export interface UserProfile {
+  /** UUID primary key */
+  id: string;
+  /** Descope user ID — the `sub` claim from the validated JWT. Immutable after creation. */
+  userId: string;
+  /** Optional display name the user has set within CPCRM */
+  displayName?: string;
+  /** Optional job title */
+  jobTitle?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  /** Descope userId of the user who last updated this profile (always the owner) */
+  updatedBy: string;
+}
+
+/**
+ * Request body for updating a user profile.
+ * All fields are optional — only the supplied fields will be updated.
+ */
+export interface UpdateProfileRequest {
+  /** Display name (1–100 characters) */
+  displayName?: string;
+  /** Job title (1–100 characters) */
+  jobTitle?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Opportunity creation API types
 // ─────────────────────────────────────────────────────────────────────────────
 

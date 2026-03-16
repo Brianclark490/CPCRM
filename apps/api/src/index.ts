@@ -12,6 +12,7 @@ import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import { organisationsRouter } from './routes/organisations.js';
 import { opportunitiesRouter } from './routes/opportunities.js';
+import { profileRouter } from './routes/profile.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,6 +42,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/me', meRouter);
 app.use('/api/organisations', organisationsRouter);
 app.use('/api/opportunities', opportunitiesRouter);
+app.use('/api/profile', profileRouter);
 
 if (config.env === 'production') {
   // In production the CI pipeline copies the built frontend to public/ alongside
