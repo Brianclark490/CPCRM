@@ -72,6 +72,16 @@ export function App() {
           }
         />
         <Route
+          path="/accounts/new"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <CreateAccountPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/accounts/:id"
           element={
             <ProtectedRoute>
