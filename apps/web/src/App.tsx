@@ -8,6 +8,7 @@ import { AdminPage } from './pages/AdminPage.js';
 import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
 import { CreateOpportunityPage } from './pages/CreateOpportunityPage.js';
 import { OpportunityDetailPage } from './pages/OpportunityDetailPage.js';
+import { CreateAccountPage } from './pages/CreateAccountPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
