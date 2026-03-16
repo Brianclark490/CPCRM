@@ -55,7 +55,7 @@ export interface StageTransition {
 export interface Opportunity {
   id: string;
   tenantId: string;
-  accountId: string;
+  accountId?: string;
   /** Descope userId of the team member responsible for this opportunity */
   ownerId: string;
   title: string;
@@ -193,7 +193,7 @@ function rowToOpportunity(row: Record<string, unknown>): Opportunity {
   return {
     id: row.id as string,
     tenantId: row.tenant_id as string,
-    accountId: row.account_id as string,
+    accountId: row.account_id != null ? (row.account_id as string) : undefined,
     ownerId: row.owner_id as string,
     title: row.title as string,
     stage: row.stage as OpportunityStage,
