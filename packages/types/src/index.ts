@@ -452,3 +452,47 @@ export interface RelationshipDefinition {
   required: boolean;
   createdAt: Date;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metadata engine — records & record relationships
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A CrmRecord is a single instance of a CRM object (e.g. one account, one
+ * opportunity, one custom object row). All object data lives in the `records`
+ * table, with type-specific field data stored in the JSONB `fieldValues` column.
+ *
+ * Named `CrmRecord` to avoid collision with the built-in TypeScript `Record`
+ * utility type.
+ */
+export interface CrmRecord {
+  /** UUID primary key */
+  id: string;
+  /** The object definition this record belongs to */
+  objectId: string;
+  /** Primary display name of the record */
+  name: string;
+  /** Type-specific field data stored as JSONB key/value pairs */
+  fieldValues: Record<string, unknown>;
+  /** Descope user ID of the record owner */
+  ownerId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * A RecordRelationship links two CrmRecords together via a
+ * RelationshipDefinition. For example, an opportunity record linked to an
+ * account record through the "opportunity_account" relationship.
+ */
+export interface RecordRelationship {
+  /** UUID primary key */
+  id: string;
+  /** The relationship definition that governs this link */
+  relationshipId: string;
+  /** The record that holds the reference (source side) */
+  sourceRecordId: string;
+  /** The record being referenced (target side) */
+  targetRecordId: string;
+  createdAt: Date;
+}
