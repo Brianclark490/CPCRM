@@ -7,6 +7,7 @@ import { AdminPage } from './pages/AdminPage.js';
 import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
 import { CreateOpportunityPage } from './pages/CreateOpportunityPage.js';
 import { OpportunityDetailPage } from './pages/OpportunityDetailPage.js';
+import { CreateAccountPage } from './pages/CreateAccountPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
@@ -65,6 +66,16 @@ export function App() {
             <ProtectedRoute>
               <AppShell>
                 <AccountsPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/accounts/new"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <CreateAccountPage />
               </AppShell>
             </ProtectedRoute>
           }
