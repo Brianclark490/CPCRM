@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { FieldRenderer } from '../components/FieldRenderer.js';
+import { KanbanBoard } from '../components/KanbanBoard.js';
 import styles from './RecordListPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -97,7 +98,11 @@ const SortIcon = ({ direction }: { direction: 'asc' | 'desc' | null }) => (
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function RecordListPage() {
+interface RecordListPageProps {
+  initialView?: 'list' | 'pipeline';
+}
+
+export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   const { apiName } = useParams<{ apiName: string }>();
   const { sessionToken } = useSession();
   const navigate = useNavigate();
@@ -114,6 +119,11 @@ export function RecordListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Pipeline view toggle state
+  const [viewMode, setViewMode] = useState<'list' | 'pipeline'>(initialView ?? 'list');
+  const [hasPipeline, setHasPipeline] = useState(false);
+  const [resolvedObjectId, setResolvedObjectId] = useState<string | null>(null);
+
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset state when the object changes
@@ -129,6 +139,8 @@ export function RecordListPage() {
     setSortDir('asc');
     setLoading(true);
     setError(null);
+    setHasPipeline(false);
+    setResolvedObjectId(null);
   }, [apiName]);
 
   // Debounce search input
@@ -147,7 +159,7 @@ export function RecordListPage() {
     };
   }, []);
 
-  // Fetch list layout columns
+  // Fetch list layout columns and check for pipeline
   useEffect(() => {
     if (!sessionToken || !apiName) return;
 
@@ -170,6 +182,26 @@ export function RecordListPage() {
         }>;
         const obj = allObjects.find((o) => o.apiName === apiName);
         if (!obj || cancelled) return;
+
+        // Store the resolved object ID for pipeline view
+        setResolvedObjectId(obj.id);
+
+        // Check for pipeline existence (best-effort)
+        fetch('/api/admin/pipelines', {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        })
+          .then((resp) => {
+            if (cancelled || !resp.ok) return null;
+            return resp.json();
+          })
+          .then((pipelines) => {
+            if (cancelled || !pipelines) return;
+            const match = (pipelines as Array<{ objectId?: string; object_id?: string }>).find(
+              (p) => (p.objectId ?? p.object_id) === obj.id,
+            );
+            if (!cancelled) setHasPipeline(!!match);
+          })
+          .catch(() => { /* best-effort */ });
 
         // Fetch layouts for this object
         const layoutsResponse = await fetch(
@@ -328,6 +360,34 @@ export function RecordListPage() {
           )}
         </div>
         <div className={styles.toolbarRight}>
+          {hasPipeline && (
+            <div className={styles.viewToggle} data-testid="view-toggle">
+              <button
+                type="button"
+                className={`${styles.viewToggleButton} ${viewMode === 'list' ? styles.viewToggleActive : ''}`}
+                onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path d="M2 3h10M2 7h10M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                List
+              </button>
+              <button
+                type="button"
+                className={`${styles.viewToggleButton} ${viewMode === 'pipeline' ? styles.viewToggleActive : ''}`}
+                onClick={() => setViewMode('pipeline')}
+                aria-pressed={viewMode === 'pipeline'}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <rect x="1" y="1" width="3" height="12" rx="1" stroke="currentColor" strokeWidth="1.25" />
+                  <rect x="5.5" y="1" width="3" height="9" rx="1" stroke="currentColor" strokeWidth="1.25" />
+                  <rect x="10" y="1" width="3" height="6" rx="1" stroke="currentColor" strokeWidth="1.25" />
+                </svg>
+                Pipeline
+              </button>
+            </div>
+          )}
           <Link to={`/objects/${apiName}/new`}>
             <PrimaryButton size="sm">
               <PlusIcon />
@@ -343,7 +403,11 @@ export function RecordListPage() {
         </p>
       )}
 
-      {!loading && !error && records.length === 0 && (
+      {viewMode === 'pipeline' && hasPipeline && resolvedObjectId && apiName && (
+        <KanbanBoard apiName={apiName} objectId={resolvedObjectId} />
+      )}
+
+      {viewMode === 'list' && !loading && !error && records.length === 0 && (
         <div className={styles.emptyState}>
           <div className={styles.iconWrap} aria-hidden="true">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -379,7 +443,7 @@ export function RecordListPage() {
         </div>
       )}
 
-      {!loading && !error && records.length > 0 && (
+      {viewMode === 'list' && !loading && !error && records.length > 0 && (
         <>
           <table className={styles.table}>
             <thead>

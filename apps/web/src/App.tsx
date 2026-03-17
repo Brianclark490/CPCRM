@@ -147,6 +147,16 @@ export function App() {
           }
         />
         <Route
+          path="/objects/:apiName/pipeline"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <RecordListPage initialView="pipeline" />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/objects/:apiName/new"
           element={
             <ProtectedRoute>
