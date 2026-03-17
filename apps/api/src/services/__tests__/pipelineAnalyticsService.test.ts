@@ -46,22 +46,13 @@ const {
     }
 
     // SELECT id, name, expected_days FROM stage_definitions WHERE pipeline_id
-    if (s.includes('ID, NAME, EXPECTED_DAYS') && s.includes('STAGE_DEFINITIONS WHERE PIPELINE_ID')) {
+    // OR: SELECT id, name, stage_type, expected_days FROM stage_definitions WHERE pipeline_id
+    if (s.includes('EXPECTED_DAYS') && s.includes('STAGE_DEFINITIONS WHERE PIPELINE_ID') && !s.includes('DEFAULT_PROBABILITY')) {
       const pipelineId = params![0] as string;
       const rows = [...fakeStages.values()]
         .filter((st) => st.pipeline_id === pipelineId)
         .sort((a, b) => (a.sort_order as number) - (b.sort_order as number))
-        .map((st) => ({ id: st.id, name: st.name, expected_days: st.expected_days }));
-      return { rows };
-    }
-
-    // SELECT id, stage_type FROM stage_definitions WHERE pipeline_id
-    if (s.includes('ID, STAGE_TYPE') && s.includes('STAGE_DEFINITIONS WHERE PIPELINE_ID')) {
-      const pipelineId = params![0] as string;
-      const rows = [...fakeStages.values()]
-        .filter((st) => st.pipeline_id === pipelineId)
-        .sort((a, b) => (a.sort_order as number) - (b.sort_order as number))
-        .map((st) => ({ id: st.id, stage_type: st.stage_type }));
+        .map((st) => ({ id: st.id, name: st.name, stage_type: st.stage_type, expected_days: st.expected_days }));
       return { rows };
     }
 

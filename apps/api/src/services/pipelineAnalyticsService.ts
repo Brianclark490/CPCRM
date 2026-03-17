@@ -275,17 +275,23 @@ export async function getPipelineVelocity(
 
   // Fetch stages
   const stagesResult = await pool.query(
-    'SELECT id, name, expected_days FROM stage_definitions WHERE pipeline_id = $1 ORDER BY sort_order ASC',
+    'SELECT id, name, stage_type, expected_days FROM stage_definitions WHERE pipeline_id = $1 ORDER BY sort_order ASC',
     [pipelineId],
   );
   const stages = stagesResult.rows as Array<Record<string, unknown>>;
 
   const days = periodToDays(period);
 
-  // Build date filter clause
-  const dateFilter = days !== null
-    ? `AND sh.changed_at >= NOW() - INTERVAL '${days} days'`
-    : '';
+  // Compute cutoff date as a parameter (null means no date filter)
+  const cutoffDate = days !== null
+    ? new Date(Date.now() - days * 86400 * 1000)
+    : null;
+
+  // Build parameterised date filter clause
+  const dateFilterClause = cutoffDate !== null ? 'AND sh.changed_at >= $3' : '';
+  const baseParams: unknown[] = cutoffDate !== null
+    ? [pipelineId, ownerId, cutoffDate]
+    : [pipelineId, ownerId];
 
   // Entered: count of records that transitioned INTO each stage
   const enteredResult = await pool.query(
@@ -296,9 +302,9 @@ export async function getPipelineVelocity(
      JOIN records r ON r.id = sh.record_id
      WHERE sh.pipeline_id = $1
        AND r.owner_id = $2
-       ${dateFilter}
+       ${dateFilterClause}
      GROUP BY sh.to_stage_id`,
-    [pipelineId, ownerId],
+    baseParams,
   );
 
   const enteredByStage = new Map<string, number>();
@@ -317,9 +323,9 @@ export async function getPipelineVelocity(
      WHERE sh.pipeline_id = $1
        AND r.owner_id = $2
        AND sh.from_stage_id IS NOT NULL
-       ${dateFilter}
+       ${dateFilterClause}
      GROUP BY sh.from_stage_id`,
-    [pipelineId, ownerId],
+    baseParams,
   );
 
   const exitedByStage = new Map<string, { exited: number; avgDays: number }>();
@@ -353,13 +359,7 @@ export async function getPipelineVelocity(
     .filter((s) => (s.stage_type as string) === 'won')
     .map((s) => s.id as string);
 
-  // Need to also get stage_type for the stages
-  const stagesWithTypeResult = await pool.query(
-    'SELECT id, stage_type FROM stage_definitions WHERE pipeline_id = $1 ORDER BY sort_order ASC',
-    [pipelineId],
-  );
-  const stagesWithType = stagesWithTypeResult.rows as Array<Record<string, unknown>>;
-  const openStageIds = stagesWithType
+  const openStageIds = stages
     .filter((s) => (s.stage_type as string) === 'open')
     .map((s) => s.id as string);
 
@@ -378,6 +378,8 @@ export async function getPipelineVelocity(
   }
 
   // Avg days to close: average total duration from first stage entry to won stage
+  const wonDateFilterClause = cutoffDate !== null ? 'AND sh_won.changed_at >= $3' : '';
+
   const avgDaysToCloseResult = await pool.query(
     `SELECT COALESCE(AVG(duration_days), 0) AS avg_days
      FROM (
@@ -392,10 +394,10 @@ export async function getPipelineVelocity(
        WHERE sh_won.pipeline_id = $1
          AND r.owner_id = $2
          AND sd_won.stage_type = 'won'
-         ${dateFilter.replace(/sh\./g, 'sh_won.')}
+         ${wonDateFilterClause}
        GROUP BY sh_won.record_id, sh_won.changed_at
      ) sub`,
-    [pipelineId, ownerId],
+    baseParams,
   );
 
   const avgDaysToClose = Math.round(
