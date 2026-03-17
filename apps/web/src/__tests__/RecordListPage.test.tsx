@@ -332,4 +332,106 @@ describe('RecordListPage', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Object type not found.');
     });
   });
+
+  it('does not show a duplicate Name column when nameFieldId is set and the field is in the layout', async () => {
+    const response = {
+      data: [
+        {
+          id: 'rec-1',
+          name: 'Acme Corp',
+          fieldValues: { account_name: 'Acme Corp', industry: 'Technology' },
+          fields: [
+            { apiName: 'account_name', label: 'Account Name', fieldType: 'text', value: 'Acme Corp' },
+            { apiName: 'industry', label: 'Industry', fieldType: 'text', value: 'Technology' },
+          ],
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 20,
+      object: {
+        id: 'obj-1',
+        apiName: 'account',
+        label: 'Account',
+        pluralLabel: 'Accounts',
+        isSystem: true,
+        nameFieldId: 'f-name',
+      },
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ id: 'obj-1', apiName: 'account' }],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/layouts/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'layout-1',
+            objectId: 'obj-1',
+            name: 'Default List',
+            layoutType: 'list',
+            isDefault: true,
+            fields: [
+              {
+                fieldId: 'f-name',
+                fieldApiName: 'account_name',
+                fieldLabel: 'Account Name',
+                fieldType: 'text',
+                sortOrder: 0,
+                section: 0,
+                width: 'full',
+              },
+              {
+                fieldId: 'f-industry',
+                fieldApiName: 'industry',
+                fieldLabel: 'Industry',
+                fieldType: 'text',
+                sortOrder: 1,
+                section: 0,
+                width: 'full',
+              },
+            ],
+          }),
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/layouts')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [
+            { id: 'layout-1', objectId: 'obj-1', name: 'Default List', layoutType: 'list', isDefault: true },
+          ],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/objects/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => response,
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage();
+
+    // The "Account Name" column should appear as a clickable link
+    await waitFor(() => {
+      const link = screen.getByRole('link', { name: 'Acme Corp' });
+      expect(link).toHaveAttribute('href', '/objects/account/rec-1');
+    });
+
+    // The column header should show "Account Name", not a separate "Name"
+    const columnHeaders = screen.getAllByRole('columnheader');
+    const headerTexts = columnHeaders.map((th) => th.textContent);
+    expect(headerTexts).toContain('Account Name');
+    expect(headerTexts).toContain('Industry');
+    // There should be no standalone "Name" column header
+    expect(headerTexts).not.toContain('Name');
+  });
 });

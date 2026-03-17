@@ -13,6 +13,7 @@ interface ObjectDefinition {
   label: string;
   pluralLabel: string;
   isSystem: boolean;
+  nameFieldId?: string;
 }
 
 interface RecordField {
@@ -279,12 +280,13 @@ export function RecordListPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Determine columns: prefer layout columns, fall back to record fields
-  const columns: Array<{ apiName: string; label: string; fieldType: string }> =
+  const columns: Array<{ apiName: string; label: string; fieldType: string; fieldId?: string }> =
     layoutColumns
       ? layoutColumns.map((lf) => ({
           apiName: lf.fieldApiName,
           label: lf.fieldLabel,
           fieldType: lf.fieldType,
+          fieldId: lf.fieldId,
         }))
       : records.length > 0
         ? records[0].fields.map((f) => ({
@@ -293,6 +295,15 @@ export function RecordListPage() {
             fieldType: f.fieldType,
           }))
         : [];
+
+  // Determine which column is the name field (renders as a clickable link)
+  const nameFieldId = objectDef?.nameFieldId;
+  const nameColumnApiName = nameFieldId
+    ? columns.find((col) => col.fieldId === nameFieldId)?.apiName ?? null
+    : null;
+
+  // Show a standalone "Name" column only when the name field is not already in the layout
+  const showStandaloneNameColumn = !nameColumnApiName;
 
   const pluralLabel = objectDef?.pluralLabel ?? apiName ?? 'Records';
   const singularLabel = objectDef?.label ?? apiName ?? 'Record';
@@ -373,20 +384,22 @@ export function RecordListPage() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.th}>
-                  <button
-                    type="button"
-                    className={styles.sortButton}
-                    onClick={() => handleSort('name')}
-                  >
-                    Name
-                    <SortIcon
-                      direction={
-                        sortBy === 'name' ? sortDir : null
-                      }
-                    />
-                  </button>
-                </th>
+                {showStandaloneNameColumn && (
+                  <th className={styles.th}>
+                    <button
+                      type="button"
+                      className={styles.sortButton}
+                      onClick={() => handleSort('name')}
+                    >
+                      Name
+                      <SortIcon
+                        direction={
+                          sortBy === 'name' ? sortDir : null
+                        }
+                      />
+                    </button>
+                  </th>
+                )}
                 {columns.map((col) => (
                   <th key={col.apiName} className={styles.th}>
                     <button
@@ -420,23 +433,37 @@ export function RecordListPage() {
                       void navigate(`/objects/${apiName}/${record.id}`)
                     }
                   >
-                    <td className={styles.td}>
-                      <Link
-                        to={`/objects/${apiName}/${record.id}`}
-                        className={styles.nameLink}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {record.name}
-                      </Link>
-                    </td>
+                    {showStandaloneNameColumn && (
+                      <td className={styles.td}>
+                        <Link
+                          to={`/objects/${apiName}/${record.id}`}
+                          className={styles.nameLink}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {record.name}
+                        </Link>
+                      </td>
+                    )}
                     {columns.map((col) => {
                       const field = fieldMap.get(col.apiName);
+                      const isNameColumn = col.apiName === nameColumnApiName;
+
                       return (
                         <td key={col.apiName} className={styles.td}>
-                          <FieldRenderer
-                            fieldType={col.fieldType}
-                            value={field?.value ?? null}
-                          />
+                          {isNameColumn ? (
+                            <Link
+                              to={`/objects/${apiName}/${record.id}`}
+                              className={styles.nameLink}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {record.name}
+                            </Link>
+                          ) : (
+                            <FieldRenderer
+                              fieldType={col.fieldType}
+                              value={field?.value ?? null}
+                            />
+                          )}
                         </td>
                       );
                     })}
