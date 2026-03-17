@@ -300,13 +300,17 @@ export function CreateRecordPage() {
   if (loadError) {
     return (
       <div className={styles.page}>
-        <button
-          type="button"
-          className={styles.backLink}
-          onClick={() => void navigate(`/objects/${apiName}`)}
-        >
-          ← Back to {pluralLabel.toLowerCase()}
-        </button>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <button
+            className={styles.breadcrumbLink}
+            onClick={() => void navigate(`/objects/${apiName}`)}
+            type="button"
+          >
+            {pluralLabel}
+          </button>
+          <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>
+          <span className={styles.breadcrumbCurrent}>Create</span>
+        </nav>
         <p role="alert" className={styles.errorAlert}>
           {loadError}
         </p>
@@ -316,13 +320,17 @@ export function CreateRecordPage() {
 
   return (
     <div className={styles.page}>
-      <button
-        type="button"
-        className={styles.backLink}
-        onClick={() => void navigate(`/objects/${apiName}`)}
-      >
-        ← Back to {pluralLabel.toLowerCase()}
-      </button>
+      <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+        <button
+          className={styles.breadcrumbLink}
+          onClick={() => void navigate(`/objects/${apiName}`)}
+          type="button"
+        >
+          {pluralLabel}
+        </button>
+        <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>
+        <span className={styles.breadcrumbCurrent}>Create</span>
+      </nav>
 
       <h1 className={styles.pageTitle}>Create {singularLabel.toLowerCase()}</h1>
       <p className={styles.pageSubtitle}>
@@ -361,6 +369,7 @@ export function CreateRecordPage() {
                     options={field.fieldOptions}
                     id={`field-${field.fieldApiName}`}
                     name={field.fieldApiName}
+                    label={field.fieldLabel}
                   />
                 </div>
               ))}

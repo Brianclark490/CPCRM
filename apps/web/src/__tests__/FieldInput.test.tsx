@@ -241,7 +241,7 @@ describe('FieldInput', () => {
           options={{ choices: ['A', 'B'] }}
         />,
       );
-      expect(screen.getByText('— Select —')).toBeInTheDocument();
+      expect(screen.getByText('Select option')).toBeInTheDocument();
     });
 
     it('calls onChange when a new option is selected', async () => {
@@ -264,8 +264,21 @@ describe('FieldInput', () => {
       render(<FieldInput fieldType="dropdown" value="" onChange={vi.fn()} />);
       const select = screen.getByRole('combobox');
       expect(select).toBeInTheDocument();
-      // Only the default "— Select —" option
+      // Only the default "Select option" option
       expect(select.querySelectorAll('option')).toHaveLength(1);
+    });
+
+    it('uses label prop in the default option text', () => {
+      render(
+        <FieldInput
+          fieldType="dropdown"
+          value=""
+          onChange={vi.fn()}
+          options={{ choices: ['A', 'B'] }}
+          label="Industry"
+        />,
+      );
+      expect(screen.getByText('Select Industry')).toBeInTheDocument();
     });
   });
 

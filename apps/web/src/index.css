@@ -138,6 +138,16 @@ select {
   font-size: inherit;
 }
 
+/* Focus states for accessibility */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 ul {
   list-style: none;
 }

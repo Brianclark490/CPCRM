@@ -199,10 +199,10 @@ describe('CreateAccountPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/accounts');
   });
 
-  it('navigates to /accounts when back link is clicked', async () => {
+  it('navigates to /accounts when breadcrumb link is clicked', async () => {
     renderPage();
 
-    await userEvent.click(screen.getByRole('button', { name: /Back to Accounts/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Accounts' }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/accounts');
   });

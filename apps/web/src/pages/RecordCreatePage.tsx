@@ -465,6 +465,7 @@ export function RecordCreatePage() {
           options={field.fieldOptions}
           id={`field-${field.fieldApiName}`}
           name={field.fieldApiName}
+          label={field.fieldLabel}
         />
         {error && <span className={styles.fieldError}>{error}</span>}
       </div>
@@ -484,13 +485,17 @@ export function RecordCreatePage() {
   if (loadError) {
     return (
       <div className={styles.page}>
-        <button
-          className={styles.backLink}
-          onClick={() => void navigate(`/objects/${apiName}`)}
-          type="button"
-        >
-          ← Back to {pluralLabel.toLowerCase()}
-        </button>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <button
+            className={styles.breadcrumbLink}
+            onClick={() => void navigate(`/objects/${apiName}`)}
+            type="button"
+          >
+            {pluralLabel}
+          </button>
+          <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>
+          <span className={styles.breadcrumbCurrent}>Create</span>
+        </nav>
         <p role="alert">{loadError}</p>
       </div>
     );
@@ -498,13 +503,17 @@ export function RecordCreatePage() {
 
   return (
     <div className={styles.page}>
-      <button
-        className={styles.backLink}
-        onClick={() => void navigate(`/objects/${apiName}`)}
-        type="button"
-      >
-        ← Back to {pluralLabel.toLowerCase()}
-      </button>
+      <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+        <button
+          className={styles.breadcrumbLink}
+          onClick={() => void navigate(`/objects/${apiName}`)}
+          type="button"
+        >
+          {pluralLabel}
+        </button>
+        <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>
+        <span className={styles.breadcrumbCurrent}>Create</span>
+      </nav>
 
       <h1 className={styles.pageTitle}>
         Create {singularLabel.toLowerCase()}

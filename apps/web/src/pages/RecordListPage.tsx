@@ -326,7 +326,7 @@ export function RecordListPage() {
         {!loading && !error && total > 0 && (
           <div className={styles.pagination}>
             <span className={styles.paginationInfo}>
-              Page {page} of {totalPages}
+              Showing {Math.min((page - 1) * PAGE_SIZE + 1, total)}–{Math.min(page * PAGE_SIZE, total)} of {total} {pluralLabel.toLowerCase()}
             </span>
             <button
               type="button"
@@ -337,6 +337,31 @@ export function RecordListPage() {
             >
               ‹
             </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+              .reduce<Array<number | 'ellipsis'>>((acc, p, idx, arr) => {
+                if (idx > 0 && arr[idx - 1] !== undefined && p - (arr[idx - 1] as number) > 1) {
+                  acc.push('ellipsis');
+                }
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${idx}`} className={styles.paginationEllipsis}>…</span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`${styles.paginationButton} ${page === item ? styles.paginationButtonActive : ''}`}
+                    onClick={() => setPage(item as number)}
+                    aria-label={`Page ${String(item)}`}
+                    aria-current={page === item ? 'page' : undefined}
+                  >
+                    {item}
+                  </button>
+                ),
+              )}
             <button
               type="button"
               className={styles.paginationButton}
@@ -383,6 +408,12 @@ export function RecordListPage() {
           <p className={styles.emptyText}>
             Create your first {singularLabel.toLowerCase()} to get started.
           </p>
+          <Link to={`/objects/${apiName}/new`} className={styles.emptyAction}>
+            <PrimaryButton size="sm">
+              <PlusIcon />
+              Create your first {singularLabel.toLowerCase()}
+            </PrimaryButton>
+          </Link>
         </div>
       )}
 

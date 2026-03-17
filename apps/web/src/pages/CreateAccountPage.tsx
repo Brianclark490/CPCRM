@@ -39,18 +39,6 @@ interface ApiError {
   error: string;
 }
 
-const BackIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-    <path
-      d="M8.5 3L5 7l3.5 4"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[+]?[\d\s()-]{7,}$/;
 
@@ -154,14 +142,17 @@ export function CreateAccountPage() {
 
   return (
     <div className={styles.page}>
-      <button
-        type="button"
-        className={styles.backLink}
-        onClick={() => void navigate('/accounts')}
-      >
-        <BackIcon />
-        Back to Accounts
-      </button>
+      <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+        <button
+          className={styles.breadcrumbLink}
+          onClick={() => void navigate('/accounts')}
+          type="button"
+        >
+          Accounts
+        </button>
+        <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>
+        <span className={styles.breadcrumbCurrent}>Create</span>
+      </nav>
 
       <h1 className={styles.pageTitle}>Create account</h1>
       <p className={styles.pageSubtitle}>Add a new account to your CRM.</p>
