@@ -350,7 +350,7 @@ export async function getPipelineById(
   // Fetch gates for all stages in one query
   const stageIds = stages.map((s) => s.id);
 
-  let gatesByStageId: Record<string, StageGate[]> = {};
+  const gatesByStageId: Record<string, StageGate[]> = {};
 
   if (stageIds.length > 0) {
     const gatesResult = await pool.query(
