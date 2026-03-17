@@ -12,6 +12,8 @@ import {
 } from '../services/recordService.js';
 import { logger } from '../lib/logger.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const recordsRouter = Router({ mergeParams: true });
 
 /**
@@ -144,6 +146,11 @@ export async function handleGetRecord(
   const { apiName, id } = req.params as { apiName: string; id: string };
   const { userId: ownerId } = req.user!;
 
+  if (!UUID_RE.test(id)) {
+    res.status(400).json({ error: 'Invalid record ID format', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
   try {
     const record = await getRecord(apiName, id, ownerId);
     res.status(200).json(record);
@@ -182,6 +189,11 @@ export async function handleUpdateRecord(
 ): Promise<void> {
   const { apiName, id } = req.params as { apiName: string; id: string };
   const { userId: ownerId } = req.user!;
+
+  if (!UUID_RE.test(id)) {
+    res.status(400).json({ error: 'Invalid record ID format', code: 'VALIDATION_ERROR' });
+    return;
+  }
 
   const body = req.body as { fieldValues?: Record<string, unknown> };
   const fieldValues = body.fieldValues ?? {};
@@ -225,6 +237,11 @@ export async function handleDeleteRecord(
 ): Promise<void> {
   const { apiName, id } = req.params as { apiName: string; id: string };
   const { userId: ownerId } = req.user!;
+
+  if (!UUID_RE.test(id)) {
+    res.status(400).json({ error: 'Invalid record ID format', code: 'VALIDATION_ERROR' });
+    return;
+  }
 
   try {
     await deleteRecord(apiName, id, ownerId);
