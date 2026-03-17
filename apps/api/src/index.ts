@@ -16,6 +16,7 @@ import { accountsRouter } from './routes/accounts.js';
 import { profileRouter } from './routes/profile.js';
 import { adminObjectsRouter } from './routes/adminObjects.js';
 import { adminRelationshipsRouter } from './routes/adminRelationships.js';
+import { adminPipelinesRouter } from './routes/adminPipelines.js';
 import { recordsRouter } from './routes/records.js';
 import { recordRelationshipsRouter } from './routes/recordRelationships.js';
 
@@ -51,6 +52,7 @@ app.use('/api/accounts', accountsRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/admin/objects', adminObjectsRouter);
 app.use('/api/admin/relationships', adminRelationshipsRouter);
+app.use('/api/admin/pipelines', adminPipelinesRouter);
 app.use('/api/objects/:apiName/records', recordsRouter);
 app.use('/api/records', recordRelationshipsRouter);
 
