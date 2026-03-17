@@ -688,7 +688,13 @@ export async function deleteRecord(
 
 /**
  * Resolves the record name from field_values.
- * Uses the "name" field if present, otherwise the first text field.
+ *
+ * Resolution order:
+ * 1. Explicit "name" field
+ * 2. Concatenation of "first_name" + "last_name" (e.g. Contact objects)
+ * 3. First required text field with a value
+ * 4. First text field with a value
+ * 5. "Untitled"
  */
 function resolveRecordName(
   fieldValues: Record<string, unknown>,
@@ -697,6 +703,19 @@ function resolveRecordName(
   // Try the "name" field first
   if (fieldValues['name'] !== undefined && fieldValues['name'] !== null) {
     return String(fieldValues['name']);
+  }
+
+  // Try first_name + last_name concatenation (e.g. Contact records)
+  const fieldApiNames = new Set(fieldDefs.map((fd) => fd.apiName));
+  if (fieldApiNames.has('first_name') && fieldApiNames.has('last_name')) {
+    const first = fieldValues['first_name'];
+    const last = fieldValues['last_name'];
+    const parts = [first, last]
+      .filter((v) => v !== undefined && v !== null && String(v).trim().length > 0)
+      .map(String);
+    if (parts.length > 0) {
+      return parts.join(' ');
+    }
   }
 
   // Fall back to the first required text field
