@@ -440,6 +440,9 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
   const stages = pipeline?.stages.slice().sort((a, b) => a.sortOrder - b.sortOrder) ?? [];
 
+  const stageIds = new Set(stages.map((s) => s.id));
+  const firstOpenStage = stages.find((s) => s.stageType === 'open');
+
   const stageRecordMap = new Map<string, KanbanCardRecord[]>();
   for (const stage of stages) {
     const stageRecords = allRecords
@@ -447,6 +450,21 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
       .map((r) => recordToCard(r, stage.expectedDays ?? null));
 
     stageRecordMap.set(stage.id, applyFilters(stageRecords, filters));
+  }
+
+  // Place records without a pipeline/stage assignment into the first open stage
+  if (firstOpenStage) {
+    const unassigned = allRecords
+      .filter((r) => !r.currentStageId || !stageIds.has(r.currentStageId))
+      .map((r) => recordToCard(r, firstOpenStage.expectedDays ?? null));
+
+    if (unassigned.length > 0) {
+      const existing = stageRecordMap.get(firstOpenStage.id) ?? [];
+      stageRecordMap.set(firstOpenStage.id, [
+        ...existing,
+        ...applyFilters(unassigned, filters),
+      ]);
+    }
   }
 
   // Compute totals
