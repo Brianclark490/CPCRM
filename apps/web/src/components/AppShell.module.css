@@ -1,136 +1,12 @@
 /* ============================================================
-   AppShell — Layout: sidebar + header + content
+   AppShell — Layout: top nav + tab bar + content (no sidebar)
    ============================================================ */
 
 .shell {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
-}
-
-/* ── Sidebar ──────────────────────────────────────────────── */
-
-.sidebar {
-  width: var(--sidebar-width);
-  flex-shrink: 0;
-  background-color: var(--color-sidebar-bg);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
-  border-right: 1px solid var(--color-sidebar-border);
-}
-
-.sidebarLogo {
-  height: var(--header-height);
-  display: flex;
-  align-items: center;
-  padding: 0 var(--space-5);
-  border-bottom: 1px solid var(--color-sidebar-border);
-  flex-shrink: 0;
-}
-
-.logoText {
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  background: var(--gradient-accent);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* ── Sidebar navigation ───────────────────────────────────── */
-
-.nav {
-  padding: var(--space-4) var(--space-3);
-  flex: 1;
-}
-
-.navSection {
-  margin-bottom: var(--space-6);
-}
-
-.navLabel {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 0 var(--space-3);
-  margin-bottom: var(--space-2);
-  display: block;
-}
-
-.navList {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.navLink {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  color: var(--color-sidebar-text);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  transition:
-    background-color var(--transition-smooth),
-    color var(--transition-smooth);
-}
-
-.navLink:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-  color: var(--color-sidebar-text-hover);
-}
-
-.navLink:hover .navIcon svg {
-  transform: scale(1.1);
-}
-
-.navLinkActive {
-  background-color: rgba(255, 255, 255, 0.06);
-  color: var(--color-sidebar-active-text);
-  border-left: 2px solid var(--color-primary);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-}
-
-.navLinkActive:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-  color: var(--color-sidebar-active-text);
-}
-
-.navIcon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.navIcon svg {
-  width: 16px;
-  height: 16px;
-  transition: transform var(--transition-smooth);
-}
-
-.navLinkActive .navIcon svg {
-  opacity: 1;
-}
-
-/* ── Main area ────────────────────────────────────────────── */
-
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-  background-color: var(--color-bg);
 }
 
 /* ── Header ───────────────────────────────────────────────── */
@@ -145,51 +21,39 @@
   justify-content: space-between;
   padding: 0 var(--space-6);
   gap: var(--space-4);
-  position: sticky;
-  top: 0;
   z-index: 10;
 }
 
-/* ── Search ───────────────────────────────────────────────── */
-
-.searchWrap {
-  position: relative;
-  flex: 1;
-  max-width: 360px;
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
 }
 
-.searchIcon {
-  position: absolute;
-  left: var(--space-3);
-  top: 50%;
-  transform: translateY(-50%);
-  width: 14px;
-  height: 14px;
-  color: var(--color-text-muted);
-  pointer-events: none;
+.logoText {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.searchInput {
-  width: 100%;
-  padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-3) + 22px);
-  background-color: var(--color-surface-subtle);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+.headerNavLink {
   font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  padding: var(--space-2) 0;
+  transition: color var(--transition-base);
+}
+
+.headerNavLink:hover {
   color: var(--color-text-primary);
-  outline: none;
-  transition:
-    border-color var(--transition-base),
-    box-shadow var(--transition-base);
 }
 
-.searchInput::placeholder {
-  color: var(--color-text-muted);
-}
-
-.searchInput:focus {
-  border-color: rgba(217, 70, 239, 0.4);
-  box-shadow: 0 0 0 3px rgba(217, 70, 239, 0.08);
+.headerNavLinkActive {
+  color: var(--color-text-primary);
 }
 
 /* ── Header actions ───────────────────────────────────────── */
@@ -277,10 +141,67 @@
   border-color: var(--color-text-muted);
 }
 
+/* ── Tab bar ──────────────────────────────────────────────── */
+
+.tabBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-6);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.tabList {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+  transition:
+    color var(--transition-base),
+    border-color var(--transition-base);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tabActive {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.tabIcon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
+.tabAdmin {
+  margin-left: auto;
+}
+
+.adminIcon {
+  width: 14px;
+  height: 14px;
+}
+
 /* ── Content area ─────────────────────────────────────────── */
 
 .content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-8);
+  padding: var(--space-6);
 }

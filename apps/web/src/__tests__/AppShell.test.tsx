@@ -71,7 +71,7 @@ describe('AppShell', () => {
     expect(screen.getByText('CPCRM')).toBeInTheDocument();
   });
 
-  it('renders static navigation links for Dashboard and Admin', () => {
+  it('renders navigation links for Dashboard and Admin', () => {
     render(
       <MemoryRouter>
         <AppShell>
@@ -81,10 +81,10 @@ describe('AppShell', () => {
     );
 
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Admin' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Admin/ })).toBeInTheDocument();
   });
 
-  it('renders dynamic object links when API returns objects', async () => {
+  it('renders dynamic object tabs when API returns objects', async () => {
     mockFetchObjects([
       { apiName: 'account', pluralLabel: 'Accounts', icon: '🏢' },
       { apiName: 'opportunity', pluralLabel: 'Opportunities' },
@@ -104,6 +104,24 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: /Opportunities/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Accounts/ })).toHaveAttribute('href', '/objects/account');
     expect(screen.getByRole('link', { name: /Opportunities/ })).toHaveAttribute('href', '/objects/opportunity');
+  });
+
+  it('renders the tab bar with object navigation role', async () => {
+    mockFetchObjects([
+      { apiName: 'account', pluralLabel: 'Accounts' },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('navigation', { name: 'Object navigation' })).toBeInTheDocument();
+    });
   });
 
   it('renders child content in the main area', () => {
