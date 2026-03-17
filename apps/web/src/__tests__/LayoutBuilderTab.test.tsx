@@ -281,13 +281,12 @@ describe('LayoutBuilderTab', () => {
     mockFetch();
     renderComponent();
 
+    // Email and Amount are not placed — wait for them to appear after layout detail loads
     await waitFor(() => {
       expect(screen.getByText('Available Fields')).toBeInTheDocument();
+      expect(screen.getByText('Email')).toBeInTheDocument();
+      expect(screen.getByText('Amount')).toBeInTheDocument();
     });
-
-    // Email and Amount are not placed
-    expect(screen.getByText('Email')).toBeInTheDocument();
-    expect(screen.getByText('Amount')).toBeInTheDocument();
   });
 
   it('shows "All fields have been placed" when all fields are in the layout', async () => {
