@@ -408,4 +408,223 @@ describe('RecordDetailPage', () => {
       expect(screen.getByText('Active')).toBeInTheDocument();
     });
   });
+
+  // ── Lead conversion tests ──────────────────────────────────────────────────
+
+  describe('Lead conversion', () => {
+    function makeLeadRecord(overrides: Partial<{ fieldValues: Record<string, unknown> }> = {}) {
+      return makeRecordResponse({
+        id: 'lead-1',
+        name: 'Jane Smith',
+        fields: [
+          { apiName: 'first_name', label: 'First Name', fieldType: 'text', value: 'Jane' },
+          { apiName: 'last_name', label: 'Last Name', fieldType: 'text', value: 'Smith' },
+          { apiName: 'email', label: 'Email', fieldType: 'email', value: 'jane@example.com' },
+          { apiName: 'company', label: 'Company', fieldType: 'text', value: 'Acme Corp' },
+          { apiName: 'status', label: 'Status', fieldType: 'dropdown', value: 'New' },
+        ],
+        fieldValues: {
+          first_name: 'Jane',
+          last_name: 'Smith',
+          email: 'jane@example.com',
+          company: 'Acme Corp',
+          status: 'New',
+          ...overrides.fieldValues,
+        },
+      });
+    }
+
+    function mockLeadFetch(leadRecord: ReturnType<typeof makeRecordResponse>) {
+      const fetchMock = vi.fn().mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [
+              { id: 'obj-lead', apiName: 'lead', label: 'Lead', pluralLabel: 'Leads', isSystem: true },
+            ],
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/layouts/')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              id: 'layout-1',
+              objectId: 'obj-lead',
+              name: 'Default Form',
+              layoutType: 'form',
+              isDefault: true,
+              fields: [],
+            }),
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/layouts')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [
+              { id: 'layout-1', objectId: 'obj-lead', name: 'Default Form', layoutType: 'form', isDefault: true },
+            ],
+          } as Response);
+        }
+        if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => leadRecord,
+          } as Response);
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      });
+
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    }
+
+    it('shows Convert Lead button on unconverted leads', async () => {
+      mockLeadFetch(makeLeadRecord());
+      renderPage('lead', 'lead-1');
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Convert Lead' })).toBeInTheDocument();
+      });
+    });
+
+    it('does not show Convert Lead button for non-lead objects', async () => {
+      mockFetch(makeRecordResponse());
+      renderPage('account', 'rec-1');
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Test Record' })).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('button', { name: 'Convert Lead' })).not.toBeInTheDocument();
+    });
+
+    it('shows Converted badge and links when lead is converted', async () => {
+      const convertedLead = makeLeadRecord({
+        fieldValues: {
+          status: 'Converted',
+          converted_account_id: 'acc-1',
+          converted_contact_id: 'con-1',
+          converted_opportunity_id: 'opp-1',
+        },
+      });
+      mockLeadFetch(convertedLead);
+      renderPage('lead', 'lead-1');
+
+      await waitFor(() => {
+        expect(screen.getByText('Converted')).toBeInTheDocument();
+      });
+
+      expect(screen.getByRole('link', { name: 'View Account' })).toHaveAttribute(
+        'href',
+        '/objects/account/acc-1',
+      );
+      expect(screen.getByRole('link', { name: 'View Contact' })).toHaveAttribute(
+        'href',
+        '/objects/contact/con-1',
+      );
+      expect(screen.getByRole('link', { name: 'View Opportunity' })).toHaveAttribute(
+        'href',
+        '/objects/opportunity/opp-1',
+      );
+    });
+
+    it('hides Edit and Delete buttons when lead is converted', async () => {
+      const convertedLead = makeLeadRecord({
+        fieldValues: {
+          status: 'Converted',
+          converted_account_id: 'acc-1',
+          converted_contact_id: 'con-1',
+        },
+      });
+      mockLeadFetch(convertedLead);
+      renderPage('lead', 'lead-1');
+
+      await waitFor(() => {
+        expect(screen.getByText('Converted')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Convert Lead' })).not.toBeInTheDocument();
+    });
+
+    it('opens conversion modal when Convert Lead is clicked', async () => {
+      mockLeadFetch(makeLeadRecord());
+      const user = userEvent.setup();
+      renderPage('lead', 'lead-1');
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Convert Lead' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Convert Lead' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: /Convert Lead: Jane Smith/i })).toBeInTheDocument();
+      });
+    });
+
+    it('shows field mapping preview in conversion modal', async () => {
+      mockLeadFetch(makeLeadRecord());
+      const user = userEvent.setup();
+      renderPage('lead', 'lead-1');
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Convert Lead' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Convert Lead' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Account')).toBeInTheDocument();
+        expect(screen.getByText('Acme Corp')).toBeInTheDocument();
+        expect(screen.getByText('Contact')).toBeInTheDocument();
+        expect(screen.getByText('jane@example.com')).toBeInTheDocument();
+      });
+    });
+
+    it('allows toggling opportunity creation off', async () => {
+      mockLeadFetch(makeLeadRecord());
+      const user = userEvent.setup();
+      renderPage('lead', 'lead-1');
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Convert Lead' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Convert Lead' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Opportunity')).toBeInTheDocument();
+      });
+
+      const checkbox = screen.getByLabelText('Create opportunity');
+      expect(checkbox).toBeChecked();
+
+      await user.click(checkbox);
+      expect(checkbox).not.toBeChecked();
+    });
+
+    it('closes modal when Cancel is clicked', async () => {
+      mockLeadFetch(makeLeadRecord());
+      const user = userEvent.setup();
+      renderPage('lead', 'lead-1');
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Convert Lead' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Convert Lead' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: /Convert Lead/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: /Convert Lead/i })).not.toBeInTheDocument();
+      });
+    });
+  });
 });

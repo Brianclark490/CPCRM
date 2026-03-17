@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { FieldRenderer } from '../components/FieldRenderer.js';
 import { FieldInput } from '../components/FieldInput.js';
+import { ConvertLeadModal } from '../components/ConvertLeadModal.js';
 import styles from './RecordDetailPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -152,6 +153,11 @@ export function RecordDetailPage() {
   // Delete state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Lead conversion state
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   // ── Load record ─────────────────────────────────────────────────────────────
 
@@ -370,6 +376,53 @@ export function RecordDetailPage() {
     setShowDeleteConfirm(false);
   };
 
+  // ── Lead conversion handlers ────────────────────────────────────────────────
+
+  const isLead = apiName === 'lead';
+  const isConverted = isLead && record?.fieldValues['status'] === 'Converted';
+
+  const handleConvert = async (options: {
+    create_account: boolean;
+    account_id: string | null;
+    create_opportunity: boolean;
+  }) => {
+    if (!record || !sessionToken) return;
+
+    setConverting(true);
+    setConvertError(null);
+
+    try {
+      const response = await fetch(
+        `/api/objects/lead/records/${record.id}/convert`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          body: JSON.stringify(options),
+        },
+      );
+
+      if (response.ok) {
+        const result = (await response.json()) as {
+          account: { id: string; name: string };
+          contact: { id: string; name: string };
+          opportunity: { id: string; name: string } | null;
+        };
+        setShowConvertModal(false);
+        void navigate(`/objects/account/${result.account.id}`);
+      } else {
+        const data = (await response.json()) as { error?: string };
+        setConvertError(data.error ?? 'An unexpected error occurred');
+      }
+    } catch {
+      setConvertError('Failed to connect to the server. Please try again.');
+    } finally {
+      setConverting(false);
+    }
+  };
+
   // ── Render helpers ──────────────────────────────────────────────────────────
 
   const pluralLabel = objectDef?.pluralLabel ?? apiName ?? 'Records';
@@ -492,23 +545,72 @@ export function RecordDetailPage() {
 
         {!editing && (
           <div className={styles.headerActions}>
-            <button
-              className={styles.btnPrimary}
-              type="button"
-              onClick={handleEditClick}
-            >
-              Edit
-            </button>
-            <button
-              className={styles.btnDanger}
-              type="button"
-              onClick={handleDeleteClick}
-            >
-              Delete
-            </button>
+            {isLead && !isConverted && (
+              <button
+                className={styles.btnConvert}
+                type="button"
+                onClick={() => {
+                  setConvertError(null);
+                  setShowConvertModal(true);
+                }}
+              >
+                Convert Lead
+              </button>
+            )}
+            {!isConverted && (
+              <>
+                <button
+                  className={styles.btnPrimary}
+                  type="button"
+                  onClick={handleEditClick}
+                >
+                  Edit
+                </button>
+                <button
+                  className={styles.btnDanger}
+                  type="button"
+                  onClick={handleDeleteClick}
+                >
+                  Delete
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
+
+      {/* Converted lead banner */}
+      {isConverted && (
+        <div className={styles.convertedBanner}>
+          <span className={styles.convertedBadge}>Converted</span>
+          <div className={styles.convertedLinks}>
+            {record.fieldValues['converted_account_id'] && (
+              <Link
+                to={`/objects/account/${String(record.fieldValues['converted_account_id'])}`}
+                className={styles.convertedLink}
+              >
+                View Account
+              </Link>
+            )}
+            {record.fieldValues['converted_contact_id'] && (
+              <Link
+                to={`/objects/contact/${String(record.fieldValues['converted_contact_id'])}`}
+                className={styles.convertedLink}
+              >
+                View Contact
+              </Link>
+            )}
+            {record.fieldValues['converted_opportunity_id'] && (
+              <Link
+                to={`/objects/opportunity/${String(record.fieldValues['converted_opportunity_id'])}`}
+                className={styles.convertedLink}
+              >
+                View Opportunity
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Success banner */}
       {saveSuccess && (
@@ -665,6 +767,19 @@ export function RecordDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Lead conversion modal */}
+      {showConvertModal && sessionToken && (
+        <ConvertLeadModal
+          leadName={record.name}
+          fieldValues={record.fieldValues}
+          sessionToken={sessionToken}
+          onConvert={handleConvert}
+          onClose={() => setShowConvertModal(false)}
+          converting={converting}
+          error={convertError}
+        />
       )}
     </div>
   );
