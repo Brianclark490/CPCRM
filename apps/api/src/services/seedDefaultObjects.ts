@@ -10,6 +10,8 @@ interface ObjectSeed {
   pluralLabel: string;
   description: string;
   icon: string;
+  nameFieldApiName?: string;
+  nameTemplate?: string;
 }
 
 interface FieldSeed {
@@ -78,15 +80,15 @@ export interface SeedResult {
 // ─── Object definitions (9 system objects) ────────────────────────────────────
 
 const OBJECT_SEEDS: ObjectSeed[] = [
-  { apiName: 'account',     label: 'Account',     pluralLabel: 'Accounts',      description: 'Companies and organisations',            icon: 'building' },
-  { apiName: 'contact',     label: 'Contact',     pluralLabel: 'Contacts',      description: 'People at accounts',                     icon: 'user' },
-  { apiName: 'lead',        label: 'Lead',        pluralLabel: 'Leads',         description: 'Unqualified prospects',                  icon: 'user-plus' },
-  { apiName: 'opportunity', label: 'Opportunity', pluralLabel: 'Opportunities', description: 'Deals and sales pipeline',               icon: 'trending-up' },
-  { apiName: 'activity',    label: 'Activity',    pluralLabel: 'Activities',    description: 'Tasks, calls, meetings, and events',     icon: 'calendar' },
-  { apiName: 'next_action', label: 'Next Action', pluralLabel: 'Next Actions',  description: 'Follow-up actions on opportunities',     icon: 'check-circle' },
-  { apiName: 'agreement',   label: 'Agreement',   pluralLabel: 'Agreements',    description: 'Contracts, proposals, and agreements',   icon: 'file-text' },
-  { apiName: 'note',        label: 'Note',        pluralLabel: 'Notes',         description: 'Free-text notes linked to any record',   icon: 'message-square' },
-  { apiName: 'file',        label: 'File',        pluralLabel: 'Files',         description: 'Uploaded documents and attachments',     icon: 'paperclip' },
+  { apiName: 'account',     label: 'Account',     pluralLabel: 'Accounts',      description: 'Companies and organisations',            icon: 'building',        nameFieldApiName: 'name' },
+  { apiName: 'contact',     label: 'Contact',     pluralLabel: 'Contacts',      description: 'People at accounts',                     icon: 'user',            nameTemplate: '{first_name} {last_name}' },
+  { apiName: 'lead',        label: 'Lead',        pluralLabel: 'Leads',         description: 'Unqualified prospects',                  icon: 'user-plus',       nameTemplate: '{first_name} {last_name}' },
+  { apiName: 'opportunity', label: 'Opportunity', pluralLabel: 'Opportunities', description: 'Deals and sales pipeline',               icon: 'trending-up',     nameFieldApiName: 'name' },
+  { apiName: 'activity',    label: 'Activity',    pluralLabel: 'Activities',    description: 'Tasks, calls, meetings, and events',     icon: 'calendar',        nameFieldApiName: 'subject' },
+  { apiName: 'next_action', label: 'Next Action', pluralLabel: 'Next Actions',  description: 'Follow-up actions on opportunities',     icon: 'check-circle',    nameFieldApiName: 'title' },
+  { apiName: 'agreement',   label: 'Agreement',   pluralLabel: 'Agreements',    description: 'Contracts, proposals, and agreements',   icon: 'file-text',       nameFieldApiName: 'title' },
+  { apiName: 'note',        label: 'Note',        pluralLabel: 'Notes',         description: 'Free-text notes linked to any record',   icon: 'message-square',  nameFieldApiName: 'title' },
+  { apiName: 'file',        label: 'File',        pluralLabel: 'Files',         description: 'Uploaded documents and attachments',     icon: 'paperclip',       nameFieldApiName: 'filename' },
 ];
 
 // ─── Field definitions ────────────────────────────────────────────────────────
@@ -523,6 +525,9 @@ export async function seedWithClient(
   // Step 2: Seed field definitions
   const fieldIdMap = await seedFields(client, objectIdMap, result);
 
+  // Step 2b: Update name_field_id and name_template on object definitions
+  await seedNameFieldConfig(client, objectIdMap, fieldIdMap);
+
   // Step 3: Seed relationship definitions
   await seedRelationships(client, objectIdMap, result);
 
@@ -634,6 +639,37 @@ async function seedFields(
   );
 
   return fieldIdMap;
+}
+
+async function seedNameFieldConfig(
+  client: QueryClient,
+  objectIdMap: Map<string, string>,
+  fieldIdMap: Map<string, string>,
+): Promise<void> {
+  for (const obj of OBJECT_SEEDS) {
+    const objectId = objectIdMap.get(obj.apiName);
+    if (!objectId) continue;
+
+    if (obj.nameFieldApiName) {
+      const fieldKey = `${obj.apiName}.${obj.nameFieldApiName}`;
+      const fieldId = fieldIdMap.get(fieldKey);
+      if (fieldId) {
+        await client.query(
+          `UPDATE object_definitions SET name_field_id = $1 WHERE id = $2 AND (name_field_id IS NULL OR name_field_id != $1)`,
+          [fieldId, objectId],
+        );
+      }
+    }
+
+    if (obj.nameTemplate) {
+      await client.query(
+        `UPDATE object_definitions SET name_template = $1 WHERE id = $2 AND (name_template IS NULL OR name_template != $1)`,
+        [obj.nameTemplate, objectId],
+      );
+    }
+  }
+
+  logger.info('Updated name_field_id and name_template on object definitions');
 }
 
 async function seedRelationships(

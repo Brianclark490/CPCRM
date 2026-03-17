@@ -189,7 +189,6 @@ export function RecordCreatePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Form state
-  const [name, setName] = useState('');
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [relationshipSelections, setRelationshipSelections] = useState<
     RelationshipSelection[]
@@ -351,11 +350,6 @@ export function RecordCreatePage() {
 
     const errors: Record<string, string> = {};
 
-    // Name is always required
-    if (!name.trim()) {
-      errors.name = 'Name is required';
-    }
-
     // Validate layout fields
     if (layoutSections) {
       for (const section of layoutSections) {
@@ -400,7 +394,7 @@ export function RecordCreatePage() {
           Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
-          fieldValues: { ...formValues, name: name.trim() },
+          fieldValues: formValues,
         }),
       });
 
@@ -523,61 +517,10 @@ export function RecordCreatePage() {
       </p>
 
       <form onSubmit={(e) => void handleSubmit(e)} noValidate>
-        {/* Name field — always shown and always required */}
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>
-              {layoutSections && layoutSections.length > 0
-                ? layoutSections[0].label
-                : `${singularLabel} details`}
-            </span>
-          </div>
-          <div className={styles.cardBody}>
-            <div className={styles.formGrid}>
-              <div className={styles.nameField}>
-                <label className={styles.label} htmlFor="record-name">
-                  Name
-                  <span className={styles.required}>*</span>
-                </label>
-                <input
-                  id="record-name"
-                  className={styles.nameInput}
-                  type="text"
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setFieldErrors((prev) => {
-                      if (prev.name) {
-                        const next = { ...prev };
-                        delete next.name;
-                        return next;
-                      }
-                      return prev;
-                    });
-                    setSubmitError(null);
-                  }}
-                  placeholder={`Enter ${singularLabel.toLowerCase()} name`}
-                  disabled={submitting}
-                  required
-                  maxLength={200}
-                />
-                {fieldErrors.name && (
-                  <span className={styles.fieldError}>{fieldErrors.name}</span>
-                )}
-              </div>
-
-              {/* First section fields */}
-              {layoutSections &&
-                layoutSections.length > 0 &&
-                layoutSections[0].fields.map((field) => renderField(field))}
-            </div>
-          </div>
-        </div>
-
-        {/* Additional sections */}
+        {/* Form sections from layout */}
         {layoutSections &&
-          layoutSections.slice(1).map((section, sIdx) => (
-            <div key={sIdx + 1} className={styles.card}>
+          layoutSections.map((section, sIdx) => (
+            <div key={sIdx} className={styles.card}>
               <div className={styles.cardHeader}>
                 <span className={styles.cardTitle}>{section.label}</span>
               </div>
@@ -588,6 +531,18 @@ export function RecordCreatePage() {
               </div>
             </div>
           ))}
+
+        {/* Fallback when no layout sections */}
+        {!layoutSections && (
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <span className={styles.cardTitle}>{singularLabel} details</span>
+            </div>
+            <div className={styles.cardBody}>
+              <div className={styles.formGrid} />
+            </div>
+          </div>
+        )}
 
         {/* Relationship fields */}
         {relationships.length > 0 && (

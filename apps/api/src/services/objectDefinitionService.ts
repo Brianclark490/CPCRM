@@ -12,6 +12,8 @@ export interface ObjectDefinition {
   description?: string;
   icon?: string;
   isSystem: boolean;
+  nameFieldId?: string;
+  nameTemplate?: string;
   ownerId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -143,6 +145,8 @@ function rowToObjectDefinition(row: Record<string, unknown>): ObjectDefinition {
     description: (row.description as string | null) ?? undefined,
     icon: (row.icon as string | null) ?? undefined,
     isSystem: row.is_system as boolean,
+    nameFieldId: (row.name_field_id as string | null) ?? undefined,
+    nameTemplate: (row.name_template as string | null) ?? undefined,
     ownerId: row.owner_id as string,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),

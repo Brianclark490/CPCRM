@@ -74,6 +74,18 @@ function mockFetch(overrides: {
     isDefault: true,
     fields: [
       {
+        fieldId: 'f0',
+        fieldApiName: 'name',
+        fieldLabel: 'Account Name',
+        fieldType: 'text',
+        fieldRequired: true,
+        fieldOptions: { max_length: 255 },
+        sortOrder: 0,
+        section: 0,
+        sectionLabel: 'Details',
+        width: 'full',
+      },
+      {
         fieldId: 'f1',
         fieldApiName: 'industry',
         fieldLabel: 'Industry',
@@ -211,12 +223,12 @@ describe('RecordCreatePage', () => {
     });
   });
 
-  it('renders the name field', async () => {
+  it('renders the name field from layout', async () => {
     mockFetch();
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Account Name/)).toBeInTheDocument();
     });
   });
 
@@ -239,7 +251,7 @@ describe('RecordCreatePage', () => {
     });
   });
 
-  it('shows validation error when name is empty on submit', async () => {
+  it('shows validation error when required name field is empty on submit', async () => {
     mockFetch();
     const user = userEvent.setup();
     renderPage();
@@ -251,7 +263,7 @@ describe('RecordCreatePage', () => {
     await user.click(screen.getByRole('button', { name: /Create account/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Name is required')).toBeInTheDocument();
+      expect(screen.getByText('Account Name is required')).toBeInTheDocument();
     });
   });
 
@@ -264,6 +276,18 @@ describe('RecordCreatePage', () => {
         layoutType: 'form',
         isDefault: true,
         fields: [
+          {
+            fieldId: 'f0',
+            fieldApiName: 'name',
+            fieldLabel: 'Account Name',
+            fieldType: 'text',
+            fieldRequired: true,
+            fieldOptions: { max_length: 255 },
+            sortOrder: 0,
+            section: 0,
+            sectionLabel: 'Details',
+            width: 'full',
+          },
           {
             fieldId: 'f1',
             fieldApiName: 'industry',
@@ -286,8 +310,8 @@ describe('RecordCreatePage', () => {
       expect(screen.getByLabelText(/Industry/)).toBeInTheDocument();
     });
 
-    // Fill in name but leave required field empty
-    await user.type(screen.getByLabelText(/Name/), 'Test Record');
+    // Fill in Account Name but leave required field empty
+    await user.type(screen.getByLabelText(/Account Name/), 'Test Record');
     await user.click(screen.getByRole('button', { name: /Create account/i }));
 
     await waitFor(() => {
@@ -304,6 +328,18 @@ describe('RecordCreatePage', () => {
         layoutType: 'form',
         isDefault: true,
         fields: [
+          {
+            fieldId: 'f0',
+            fieldApiName: 'name',
+            fieldLabel: 'Account Name',
+            fieldType: 'text',
+            fieldRequired: true,
+            fieldOptions: { max_length: 255 },
+            sortOrder: 0,
+            section: 0,
+            sectionLabel: 'Details',
+            width: 'full',
+          },
           {
             fieldId: 'f2',
             fieldApiName: 'email',
@@ -326,7 +362,7 @@ describe('RecordCreatePage', () => {
       expect(screen.getByLabelText('Email')).toBeInTheDocument();
     });
 
-    await user.type(screen.getByLabelText(/Name/), 'Test Record');
+    await user.type(screen.getByLabelText(/Account Name/), 'Test Record');
     await user.type(screen.getByLabelText('Email'), 'not-an-email');
     await user.click(screen.getByRole('button', { name: /Create account/i }));
 
@@ -341,10 +377,10 @@ describe('RecordCreatePage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Account Name/)).toBeInTheDocument();
     });
 
-    await user.type(screen.getByLabelText(/Name/), 'New Account');
+    await user.type(screen.getByLabelText(/Account Name/), 'New Account');
     await user.click(screen.getByRole('button', { name: /Create account/i }));
 
     await waitFor(() => {
@@ -371,10 +407,10 @@ describe('RecordCreatePage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Account Name/)).toBeInTheDocument();
     });
 
-    await user.type(screen.getByLabelText(/Name/), 'Test Account');
+    await user.type(screen.getByLabelText(/Account Name/), 'Test Account');
     await user.click(screen.getByRole('button', { name: /Create account/i }));
 
     await waitFor(() => {
@@ -455,7 +491,7 @@ describe('RecordCreatePage', () => {
     });
 
     // Try to submit without selecting a relationship
-    await user.type(screen.getByLabelText(/Name/), 'Test Record');
+    await user.type(screen.getByLabelText(/Account Name/), 'Test Record');
     await user.click(screen.getByRole('button', { name: /Create account/i }));
 
     await waitFor(() => {
@@ -529,21 +565,21 @@ describe('RecordCreatePage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Account Name/)).toBeInTheDocument();
     });
 
     // Submit to trigger validation
     await user.click(screen.getByRole('button', { name: /Create account/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Name is required')).toBeInTheDocument();
+      expect(screen.getByText('Account Name is required')).toBeInTheDocument();
     });
 
     // Type to clear error
-    await user.type(screen.getByLabelText(/Name/), 'A');
+    await user.type(screen.getByLabelText(/Account Name/), 'A');
 
     await waitFor(() => {
-      expect(screen.queryByText('Name is required')).not.toBeInTheDocument();
+      expect(screen.queryByText('Account Name is required')).not.toBeInTheDocument();
     });
   });
 
@@ -556,6 +592,18 @@ describe('RecordCreatePage', () => {
         layoutType: 'form',
         isDefault: true,
         fields: [
+          {
+            fieldId: 'f0',
+            fieldApiName: 'name',
+            fieldLabel: 'Account Name',
+            fieldType: 'text',
+            fieldRequired: true,
+            fieldOptions: { max_length: 255 },
+            sortOrder: 0,
+            section: 0,
+            sectionLabel: 'Details',
+            width: 'full',
+          },
           {
             fieldId: 'f1',
             fieldApiName: 'amount',
@@ -578,7 +626,7 @@ describe('RecordCreatePage', () => {
       expect(screen.getByLabelText('Amount')).toBeInTheDocument();
     });
 
-    await user.type(screen.getByLabelText(/Name/), 'Test');
+    await user.type(screen.getByLabelText(/Account Name/), 'Test');
     // The FieldInput's number handler will convert "2000" to Number(2000)
     // We need to fire change manually since FieldInput onChange returns a number
     await user.type(screen.getByLabelText('Amount'), '2000');

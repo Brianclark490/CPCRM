@@ -33,6 +33,8 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
             label: 'Account',
             plural_label: 'Accounts',
             is_system: true,
+            name_field_id: 'field-name-id',
+            name_template: null,
             owner_id: 'SYSTEM',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),

@@ -22,6 +22,8 @@ export interface ObjectDefinitionRow {
   label: string;
   pluralLabel: string;
   isSystem: boolean;
+  nameFieldId?: string;
+  nameTemplate?: string;
 }
 
 export interface RecordRow {
@@ -120,6 +122,8 @@ function rowToObjectDefinition(row: Record<string, unknown>): ObjectDefinitionRo
     label: row.label as string,
     pluralLabel: row.plural_label as string,
     isSystem: row.is_system as boolean,
+    nameFieldId: (row.name_field_id as string | null) ?? undefined,
+    nameTemplate: (row.name_template as string | null) ?? undefined,
   };
 }
 
@@ -413,7 +417,7 @@ export async function createRecord(
   validateFieldValues(cleanedValues, fieldDefs, false);
 
   // Determine the record name from field_values
-  const name = resolveRecordName(cleanedValues, fieldDefs);
+  const name = resolveRecordName(cleanedValues, fieldDefs, objectDef);
 
   const recordId = randomUUID();
   const now = new Date();
@@ -673,7 +677,7 @@ export async function updateRecord(
   const mergedValues = { ...existingRecord.fieldValues, ...cleanedValues };
 
   // Determine the new record name
-  const name = resolveRecordName(mergedValues, fieldDefs);
+  const name = resolveRecordName(mergedValues, fieldDefs, objectDef);
 
   const now = new Date();
 
@@ -718,25 +722,50 @@ export async function deleteRecord(
 // ─── Internal Helpers ────────────────────────────────────────────────────────
 
 /**
- * Resolves the record name from field_values.
+ * Resolves the record name from field_values using the object definition's
+ * name_field_id or name_template configuration.
  *
  * Resolution order:
- * 1. Explicit "name" field
- * 2. Concatenation of "first_name" + "last_name" (e.g. Contact objects)
- * 3. First required text field with a value
- * 4. First text field with a value
- * 5. "Untitled"
+ * 1. name_template — if set, interpolate field values into the template (e.g. "{first_name} {last_name}")
+ * 2. name_field_id — if set, use the value of the designated name field
+ * 3. Explicit "name" field in field_values
+ * 4. Concatenation of "first_name" + "last_name" (e.g. Contact objects)
+ * 5. First required text field with a value
+ * 6. First text field with a value
+ * 7. "Untitled"
  */
 function resolveRecordName(
   fieldValues: Record<string, unknown>,
   fieldDefs: FieldDefinitionRow[],
+  objectDef: ObjectDefinitionRow,
 ): string {
-  // Try the "name" field first
+  // 1. Use name_template if configured (e.g. "{first_name} {last_name}")
+  if (objectDef.nameTemplate) {
+    const result = objectDef.nameTemplate.replace(/\{(\w+)\}/g, (_match: string, key: string) => {
+      const val = fieldValues[key];
+      return val !== undefined && val !== null ? String(val).trim() : '';
+    });
+    const trimmed = result.trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+
+  // 2. Use name_field_id if configured
+  if (objectDef.nameFieldId) {
+    const nameField = fieldDefs.find((fd) => fd.id === objectDef.nameFieldId);
+    if (nameField) {
+      const val = fieldValues[nameField.apiName];
+      if (val !== undefined && val !== null && String(val).trim().length > 0) {
+        return String(val).trim();
+      }
+    }
+  }
+
+  // 3. Try the "name" field directly
   if (fieldValues['name'] !== undefined && fieldValues['name'] !== null) {
     return String(fieldValues['name']);
   }
 
-  // Try first_name + last_name concatenation (e.g. Contact records)
+  // 4. Try first_name + last_name concatenation (e.g. Contact records)
   const fieldApiNames = new Set(fieldDefs.map((fd) => fd.apiName));
   if (fieldApiNames.has('first_name') && fieldApiNames.has('last_name')) {
     const first = fieldValues['first_name'];
@@ -749,7 +778,7 @@ function resolveRecordName(
     }
   }
 
-  // Fall back to the first required text field
+  // 5. Fall back to the first required text field
   const sortedDefs = [...fieldDefs].sort((a, b) => a.sortOrder - b.sortOrder);
 
   for (const fd of sortedDefs) {
@@ -761,7 +790,7 @@ function resolveRecordName(
     }
   }
 
-  // Fall back to the first text field with a value
+  // 6. Fall back to the first text field with a value
   for (const fd of sortedDefs) {
     if (fd.fieldType === 'text') {
       const val = fieldValues[fd.apiName];
