@@ -115,6 +115,11 @@
   flex-shrink: 0;
 }
 
+.stageBarItem {
+  display: flex;
+  align-items: stretch;
+}
+
 .stageBarTerminalSep {
   display: flex;
   align-items: center;
@@ -220,6 +225,12 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-5);
+}
+
+.stageEditActions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
 }
 
 .stageEditTitle {
@@ -448,6 +459,11 @@
   padding: var(--space-3) 0;
 }
 
+.loadingText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 /* ── Add gate form ────────────────────────────────────────── */
 
 .addGateForm {
@@ -461,6 +477,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+.gateErrorMessageField {
+  margin-top: var(--space-3);
 }
 
 .addGateLabel {

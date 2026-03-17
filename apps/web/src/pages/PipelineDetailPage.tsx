@@ -534,7 +534,7 @@ export function PipelineDetailPage() {
   if (loading) {
     return (
       <div className={styles.page}>
-        <p style={{ color: 'var(--color-text-muted)' }}>Loading pipeline…</p>
+        <p className={styles.loadingText}>Loading pipeline…</p>
       </div>
     );
   }
@@ -592,7 +592,7 @@ export function PipelineDetailPage() {
       {/* Visual stage bar */}
       <div className={styles.stageBar} role="list" aria-label="Pipeline stages">
         {openStages.map((stage, idx) => (
-          <div key={stage.id} style={{ display: 'flex', alignItems: 'stretch' }}>
+          <div key={stage.id} className={styles.stageBarItem}>
             {idx > 0 && <span className={styles.stageBarSeparator}>→</span>}
             <div
               className={`${styles.stagePill} ${selectedStageId === stage.id ? styles.stagePillSelected : ''}`}
@@ -681,7 +681,7 @@ export function PipelineDetailPage() {
         <div className={styles.stageEditPanel}>
           <div className={styles.stageEditHeader}>
             <h3 className={styles.stageEditTitle}>Edit Stage: {selectedStage.name}</h3>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div className={styles.stageEditActions}>
               <button
                 type="button"
                 className={styles.deleteButton}
@@ -909,7 +909,7 @@ export function PipelineDetailPage() {
             </div>
 
             {/* Optional error message field */}
-            <div style={{ marginTop: 'var(--space-3)' }}>
+            <div className={styles.gateErrorMessageField}>
               <div className={styles.addGateFormField}>
                 <label className={styles.addGateLabel} htmlFor="gate-error-message">
                   Custom error message (optional)
