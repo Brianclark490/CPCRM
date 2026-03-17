@@ -286,7 +286,7 @@ describe('RecordListPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
+      expect(screen.getByText(/Showing 1/)).toBeInTheDocument();
     });
 
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();

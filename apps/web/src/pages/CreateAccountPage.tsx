@@ -154,14 +154,17 @@ export function CreateAccountPage() {
 
   return (
     <div className={styles.page}>
-      <button
-        type="button"
-        className={styles.backLink}
-        onClick={() => void navigate('/accounts')}
-      >
-        <BackIcon />
-        Back to Accounts
-      </button>
+      <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+        <button
+          className={styles.breadcrumbLink}
+          onClick={() => void navigate('/accounts')}
+          type="button"
+        >
+          Accounts
+        </button>
+        <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>
+        <span className={styles.breadcrumbCurrent}>Create</span>
+      </nav>
 
       <h1 className={styles.pageTitle}>Create account</h1>
       <p className={styles.pageSubtitle}>Add a new account to your CRM.</p>

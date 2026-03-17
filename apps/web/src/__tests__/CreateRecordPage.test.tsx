@@ -141,12 +141,12 @@ describe('CreateRecordPage', () => {
     });
   });
 
-  it('renders a back link to the list page', async () => {
+  it('renders a breadcrumb navigation to the list page', async () => {
     mockFetchWithFields(DEFAULT_FIELDS);
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/Back to contacts/i)).toBeInTheDocument();
+      expect(screen.getByText('Contacts')).toBeInTheDocument();
     });
   });
 
