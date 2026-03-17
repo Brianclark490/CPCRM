@@ -275,7 +275,7 @@ describe('convertLead', () => {
         }
       }
       if (typeof originalImpl === 'function') {
-        return originalImpl(sql, params);
+        return (originalImpl as (...args: unknown[]) => unknown)(sql, params);
       }
       return { rows: [] };
     });
