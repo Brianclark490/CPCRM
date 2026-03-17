@@ -299,80 +299,31 @@ export function RecordListPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.pageTitle}>{pluralLabel}</h1>
-          <p className={styles.pageSubtitle}>
-            Manage your {pluralLabel.toLowerCase()}
-          </p>
-        </div>
-        <Link to={`/objects/${apiName}/new`}>
-          <PrimaryButton size="sm">
-            <PlusIcon />
-            New {singularLabel.toLowerCase()}
-          </PrimaryButton>
-        </Link>
-      </div>
-
       <div className={styles.toolbar}>
-        <input
-          type="search"
-          placeholder={`Search ${pluralLabel.toLowerCase()}…`}
-          className={styles.searchInput}
-          aria-label={`Search ${pluralLabel.toLowerCase()}`}
-          value={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
-        />
-        {!loading && !error && total > 0 && (
-          <div className={styles.pagination}>
-            <span className={styles.paginationInfo}>
-              Showing {Math.min((page - 1) * PAGE_SIZE + 1, total)}–{Math.min(page * PAGE_SIZE, total)} of {total} {pluralLabel.toLowerCase()}
+        <div className={styles.toolbarLeft}>
+          <h1 className={styles.pageTitle}>{pluralLabel}</h1>
+          <input
+            type="search"
+            placeholder={`Search ${pluralLabel.toLowerCase()}…`}
+            className={styles.searchInput}
+            aria-label={`Search ${pluralLabel.toLowerCase()}`}
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
+          {!loading && !error && (
+            <span className={styles.recordCount}>
+              {total} {total === 1 ? singularLabel.toLowerCase() : pluralLabel.toLowerCase()}
             </span>
-            <button
-              type="button"
-              className={styles.paginationButton}
-              aria-label="Previous page"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              ‹
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-              .reduce<Array<number | 'ellipsis'>>((acc, p, idx, arr) => {
-                if (idx > 0 && arr[idx - 1] !== undefined && p - (arr[idx - 1] as number) > 1) {
-                  acc.push('ellipsis');
-                }
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((item, idx) =>
-                item === 'ellipsis' ? (
-                  <span key={`ellipsis-${idx}`} className={styles.paginationEllipsis}>…</span>
-                ) : (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`${styles.paginationButton} ${page === item ? styles.paginationButtonActive : ''}`}
-                    onClick={() => setPage(item as number)}
-                    aria-label={`Page ${String(item)}`}
-                    aria-current={page === item ? 'page' : undefined}
-                  >
-                    {item}
-                  </button>
-                ),
-              )}
-            <button
-              type="button"
-              className={styles.paginationButton}
-              aria-label="Next page"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              ›
-            </button>
-          </div>
-        )}
+          )}
+        </div>
+        <div className={styles.toolbarRight}>
+          <Link to={`/objects/${apiName}/new`}>
+            <PrimaryButton size="sm">
+              <PlusIcon />
+              New {singularLabel.toLowerCase()}
+            </PrimaryButton>
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -418,7 +369,7 @@ export function RecordListPage() {
       )}
 
       {!loading && !error && records.length > 0 && (
-        <div className={styles.tableCard}>
+        <>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -494,7 +445,60 @@ export function RecordListPage() {
               })}
             </tbody>
           </table>
-        </div>
+
+          {total > PAGE_SIZE && (
+            <div className={styles.pagination}>
+              <span className={styles.paginationInfo}>
+                Showing {Math.min((page - 1) * PAGE_SIZE + 1, total)}–{Math.min(page * PAGE_SIZE, total)} of {total}
+              </span>
+              <div className={styles.paginationButtons}>
+                <button
+                  type="button"
+                  className={styles.paginationButton}
+                  aria-label="Previous page"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  ‹
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                  .reduce<Array<number | 'ellipsis'>>((acc, p, idx, arr) => {
+                    if (idx > 0 && arr[idx - 1] !== undefined && p - (arr[idx - 1] as number) > 1) {
+                      acc.push('ellipsis');
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((item, idx) =>
+                    item === 'ellipsis' ? (
+                      <span key={`ellipsis-${idx}`} className={styles.paginationEllipsis}>…</span>
+                    ) : (
+                      <button
+                        key={item}
+                        type="button"
+                        className={`${styles.paginationButton} ${page === item ? styles.paginationButtonActive : ''}`}
+                        onClick={() => setPage(item as number)}
+                        aria-label={`Page ${String(item)}`}
+                        aria-current={page === item ? 'page' : undefined}
+                      >
+                        {item}
+                      </button>
+                    ),
+                  )}
+                <button
+                  type="button"
+                  className={styles.paginationButton}
+                  aria-label="Next page"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

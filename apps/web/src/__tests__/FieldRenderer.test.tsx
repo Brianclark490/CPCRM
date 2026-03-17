@@ -5,19 +5,19 @@ import { FieldRenderer } from '../components/FieldRenderer.js';
 describe('FieldRenderer', () => {
   // ─── Null / empty values ──────────────────────────────────────────────────
 
-  it('renders em-dash for null value', () => {
+  it('renders a dash for null value', () => {
     render(<FieldRenderer fieldType="text" value={null} />);
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('-')).toBeInTheDocument();
   });
 
-  it('renders em-dash for undefined value', () => {
+  it('renders a dash for undefined value', () => {
     render(<FieldRenderer fieldType="text" value={undefined} />);
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('-')).toBeInTheDocument();
   });
 
-  it('renders em-dash for empty string value', () => {
+  it('renders a dash for empty string value', () => {
     render(<FieldRenderer fieldType="text" value="" />);
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('-')).toBeInTheDocument();
   });
 
   // ─── text ─────────────────────────────────────────────────────────────────
@@ -145,21 +145,30 @@ describe('FieldRenderer', () => {
   // ─── dropdown ─────────────────────────────────────────────────────────────
 
   describe('dropdown field type', () => {
-    it('renders the selected value', () => {
+    it('renders the selected value as a badge', () => {
       render(<FieldRenderer fieldType="dropdown" value="Active" />);
       expect(screen.getByText('Active')).toBeInTheDocument();
+    });
+
+    it('renders a badge with coloured background', () => {
+      const { container } = render(<FieldRenderer fieldType="dropdown" value="Active" />);
+      const badge = container.querySelector('span[style]');
+      expect(badge).toBeTruthy();
+      expect(badge?.getAttribute('style')).toContain('background-color');
     });
   });
 
   // ─── multi_select ─────────────────────────────────────────────────────────
 
   describe('multi_select field type', () => {
-    it('renders array values joined with commas', () => {
+    it('renders array values as individual badges', () => {
       render(<FieldRenderer fieldType="multi_select" value={['Red', 'Blue', 'Green']} />);
-      expect(screen.getByText('Red, Blue, Green')).toBeInTheDocument();
+      expect(screen.getByText('Red')).toBeInTheDocument();
+      expect(screen.getByText('Blue')).toBeInTheDocument();
+      expect(screen.getByText('Green')).toBeInTheDocument();
     });
 
-    it('renders a single string value', () => {
+    it('renders a single string value as a badge', () => {
       render(<FieldRenderer fieldType="multi_select" value="Red" />);
       expect(screen.getByText('Red')).toBeInTheDocument();
     });

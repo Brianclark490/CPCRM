@@ -1,45 +1,49 @@
 /* ============================================================
-   RecordListPage — Dynamic object list
+   RecordListPage — Dynamic object list (full-width, no card)
    ============================================================ */
 
 .page {
-  max-width: 1200px;
+  width: 100%;
 }
 
-/* ── Page header ──────────────────────────────────────────── */
-
-.pageHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: var(--space-8);
-}
-
-.pageTitle {
-  font-size: var(--font-size-2xl);
-  font-weight: 700;
-  color: var(--color-text-primary);
-  letter-spacing: -0.025em;
-  margin-bottom: var(--space-1);
-}
-
-.pageSubtitle {
-  font-size: var(--font-size-md);
-  color: var(--color-text-secondary);
-}
-
-/* ── Toolbar (search + pagination) ────────────────────────── */
+/* ── Toolbar ──────────────────────────────────────────────── */
 
 .toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
   gap: var(--space-4);
 }
 
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pageTitle {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+.recordCount {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .searchInput {
-  width: 320px;
+  width: 260px;
   padding: var(--space-2) var(--space-3);
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
@@ -56,60 +60,6 @@
 
 .searchInput:focus {
   border-color: var(--color-primary);
-}
-
-/* ── Pagination ───────────────────────────────────────────── */
-
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.paginationInfo {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.paginationButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  cursor: pointer;
-  transition:
-    background-color var(--transition-base),
-    color var(--transition-base);
-}
-
-.paginationButton:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-primary);
-}
-
-.paginationButton:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.paginationButtonActive {
-  background-color: var(--color-primary-subtle);
-  color: var(--color-primary-text);
-  border-color: var(--color-primary);
-  font-weight: 600;
-}
-
-.paginationEllipsis {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  padding: 0 var(--space-1);
 }
 
 /* ── Error alert ──────────────────────────────────────────── */
@@ -166,15 +116,7 @@
   margin-top: var(--space-5);
 }
 
-/* ── Records table ────────────────────────────────────────── */
-
-.tableCard {
-  background-color: var(--color-surface-subtle);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
-}
+/* ── Records table (no card wrapper) ─────────────────────── */
 
 .table {
   width: 100%;
@@ -190,14 +132,13 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   border-bottom: 1px solid var(--color-border);
-  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .sortButton {
   display: inline-flex;
   align-items: center;
   width: 100%;
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   background: none;
   border: none;
   color: inherit;
@@ -225,22 +166,85 @@
 }
 
 .tr:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(255, 255, 255, 0.04);
 }
 
 .td {
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   vertical-align: middle;
 }
 
 .nameLink {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-primary);
   transition: color var(--transition-base);
 }
 
 .nameLink:hover {
   color: var(--color-primary-text);
+}
+
+/* ── Pagination (bottom) ─────────────────────────────────── */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) 0;
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.paginationInfo {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.paginationButtons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.paginationButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base);
+}
+
+.paginationButton:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+}
+
+.paginationButton:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.paginationButtonActive {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.paginationEllipsis {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: 0 var(--space-1);
 }
