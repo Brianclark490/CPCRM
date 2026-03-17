@@ -38,6 +38,14 @@ vi.mock('../../services/leadConversionService.js', () => ({
   convertLead: mockConvertLead,
 }));
 
+// ─── Mock the stage movement service ─────────────────────────────────────────
+
+const mockMoveRecordStage = vi.fn();
+
+vi.mock('../../services/stageMovementService.js', () => ({
+  moveRecordStage: mockMoveRecordStage,
+}));
+
 // ─── Mock logger so tests stay silent ────────────────────────────────────────
 
 vi.mock('../../lib/logger.js', () => ({
@@ -51,6 +59,7 @@ const {
   handleUpdateRecord,
   handleDeleteRecord,
   handleConvertLead,
+  handleMoveStage,
 } = await import('../records.js');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -721,5 +730,177 @@ describe('POST /objects/lead/records/:id/convert', () => {
       createOpportunity: false,
     });
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+});
+
+// ─── Tests: POST /objects/:apiName/records/:id/move-stage ──────────────────
+
+describe('POST /objects/:apiName/records/:id/move-stage', () => {
+  beforeEach(() => {
+    mockMoveRecordStage.mockReset();
+  });
+
+  it('returns 200 with updated record on success', async () => {
+    const moveResult = {
+      id: VALID_UUID,
+      objectId: 'obj-id',
+      name: 'Test Opportunity',
+      fieldValues: { name: 'Test Opportunity', probability: 25 },
+      ownerId: 'user-123',
+      pipelineId: 'pipeline-id',
+      currentStageId: VALID_UUID_2,
+      stageEnteredAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    mockMoveRecordStage.mockResolvedValue(moveResult);
+
+    const req = mockReq(
+      { target_stage_id: VALID_UUID_2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(mockMoveRecordStage).toHaveBeenCalledWith('opportunity', VALID_UUID, VALID_UUID_2, 'user-123');
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(moveResult);
+  });
+
+  it('returns 400 for non-UUID record ID', async () => {
+    const req = mockReq(
+      { target_stage_id: VALID_UUID_2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: 'not-a-uuid' },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(mockMoveRecordStage).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Invalid record ID format',
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('returns 400 for missing target_stage_id', async () => {
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(mockMoveRecordStage).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'target_stage_id must be a valid UUID',
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('returns 400 for invalid target_stage_id format', async () => {
+    const req = mockReq(
+      { target_stage_id: 'not-a-uuid' },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(mockMoveRecordStage).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('returns 422 when gate validation fails', async () => {
+    const err = Object.assign(
+      new Error('Cannot move to Proposal — missing required fields'),
+      {
+        code: 'GATE_VALIDATION_FAILED',
+        failures: [
+          { field: 'close_date', label: 'Close Date', gate: 'required', message: 'Expected close date is required' },
+        ],
+      },
+    );
+    mockMoveRecordStage.mockRejectedValue(err);
+
+    const req = mockReq(
+      { target_stage_id: VALID_UUID_2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Cannot move to Proposal — missing required fields',
+      code: 'GATE_VALIDATION_FAILED',
+      failures: [
+        { field: 'close_date', label: 'Close Date', gate: 'required', message: 'Expected close date is required' },
+      ],
+    });
+  });
+
+  it('returns 404 when record not found', async () => {
+    const err = Object.assign(new Error('Record not found'), { code: 'NOT_FOUND' });
+    mockMoveRecordStage.mockRejectedValue(err);
+
+    const req = mockReq(
+      { target_stage_id: VALID_UUID_2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Record not found', code: 'NOT_FOUND' });
+  });
+
+  it('returns 400 when validation error occurs', async () => {
+    const err = Object.assign(new Error('Record is already in this stage'), { code: 'VALIDATION_ERROR' });
+    mockMoveRecordStage.mockRejectedValue(err);
+
+    const req = mockReq(
+      { target_stage_id: VALID_UUID_2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Record is already in this stage',
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('returns 500 on unexpected error', async () => {
+    mockMoveRecordStage.mockRejectedValue(new Error('Database error'));
+
+    const req = mockReq(
+      { target_stage_id: VALID_UUID_2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'An unexpected error occurred' });
   });
 });

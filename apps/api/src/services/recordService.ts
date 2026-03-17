@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../lib/logger.js';
 import { pool } from '../db/client.js';
+import { assignDefaultPipeline } from './stageMovementService.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -417,17 +418,39 @@ export async function createRecord(
   const recordId = randomUUID();
   const now = new Date();
 
-  const result = await pool.query(
-    `INSERT INTO records (id, object_id, name, field_values, owner_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING *`,
-    [recordId, objectDef.id, name, JSON.stringify(cleanedValues), ownerId, now, now],
-  );
+  // Use a transaction so pipeline assignment is atomic with record creation
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record created');
+    await client.query(
+      `INSERT INTO records (id, object_id, name, field_values, owner_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [recordId, objectDef.id, name, JSON.stringify(cleanedValues), ownerId, now, now],
+    );
 
-  const record = rowToRecord(result.rows[0]);
-  return resolveFieldLabels(record, fieldDefs);
+    // Auto-assign default pipeline if one exists for this object
+    await assignDefaultPipeline(client, recordId, objectDef.id, ownerId);
+
+    // Re-fetch the record to pick up pipeline columns
+    const finalResult = await client.query(
+      'SELECT * FROM records WHERE id = $1',
+      [recordId],
+    );
+
+    await client.query('COMMIT');
+
+    logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record created');
+
+    const record = rowToRecord(finalResult.rows[0]);
+    return resolveFieldLabels(record, fieldDefs);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**

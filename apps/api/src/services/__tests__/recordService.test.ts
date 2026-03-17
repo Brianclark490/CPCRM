@@ -16,7 +16,7 @@ vi.mock('../../lib/logger.js', () => ({
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
 
-const { fakeRecords, mockQuery } = vi.hoisted(() => {
+const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
   const fakeRecords = new Map<string, Record<string, unknown>>();
 
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
@@ -105,6 +105,11 @@ const { fakeRecords, mockQuery } = vi.hoisted(() => {
       };
     }
 
+    // BEGIN / COMMIT / ROLLBACK (transaction support)
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+
     // INSERT INTO records
     if (s.startsWith('INSERT INTO RECORDS')) {
       const [id, object_id, name, field_values, owner_id, created_at, updated_at] =
@@ -114,6 +119,14 @@ const { fakeRecords, mockQuery } = vi.hoisted(() => {
       };
       fakeRecords.set(id as string, row);
       return { rows: [row] };
+    }
+
+    // SELECT * FROM records WHERE id = $1 (re-fetch after insert)
+    if (s.startsWith('SELECT * FROM RECORDS WHERE ID = $1') && !s.includes('OBJECT_ID')) {
+      const id = params![0] as string;
+      const record = fakeRecords.get(id);
+      if (record) return { rows: [record] };
+      return { rows: [] };
     }
 
     // SELECT COUNT (list records count)
@@ -167,11 +180,25 @@ const { fakeRecords, mockQuery } = vi.hoisted(() => {
     return { rows: [] };
   });
 
-  return { fakeRecords, mockQuery };
+  const mockClient = {
+    query: mockQuery,
+    release: vi.fn(),
+  };
+
+  const mockConnect = vi.fn(async () => mockClient);
+
+  return { fakeRecords, mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
+}));
+
+// Mock the stageMovementService to prevent circular dependency issues
+const mockAssignDefaultPipeline = vi.fn(async () => false);
+
+vi.mock('../stageMovementService.js', () => ({
+  assignDefaultPipeline: mockAssignDefaultPipeline,
 }));
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
