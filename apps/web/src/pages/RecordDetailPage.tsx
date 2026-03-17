@@ -584,25 +584,25 @@ export function RecordDetailPage() {
         <div className={styles.convertedBanner}>
           <span className={styles.convertedBadge}>Converted</span>
           <div className={styles.convertedLinks}>
-            {record.fieldValues['converted_account_id'] && (
+            {typeof record.fieldValues['converted_account_id'] === 'string' && (
               <Link
-                to={`/objects/account/${String(record.fieldValues['converted_account_id'])}`}
+                to={`/objects/account/${record.fieldValues['converted_account_id']}`}
                 className={styles.convertedLink}
               >
                 View Account
               </Link>
             )}
-            {record.fieldValues['converted_contact_id'] && (
+            {typeof record.fieldValues['converted_contact_id'] === 'string' && (
               <Link
-                to={`/objects/contact/${String(record.fieldValues['converted_contact_id'])}`}
+                to={`/objects/contact/${record.fieldValues['converted_contact_id']}`}
                 className={styles.convertedLink}
               >
                 View Contact
               </Link>
             )}
-            {record.fieldValues['converted_opportunity_id'] && (
+            {typeof record.fieldValues['converted_opportunity_id'] === 'string' && (
               <Link
-                to={`/objects/opportunity/${String(record.fieldValues['converted_opportunity_id'])}`}
+                to={`/objects/opportunity/${record.fieldValues['converted_opportunity_id']}`}
                 className={styles.convertedLink}
               >
                 View Opportunity

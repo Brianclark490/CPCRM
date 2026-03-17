@@ -104,7 +104,7 @@ export function ConvertLeadModal({
             <AccountSearchDropdown
               sessionToken={sessionToken}
               value={existingAccountId}
-              valueName={existingAccountName}
+              valueName={existingAccountName ?? undefined}
               onChange={(id, name) => {
                 setExistingAccountId(id);
                 setExistingAccountName(name);
