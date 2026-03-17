@@ -44,6 +44,11 @@ const {
   handleDeleteRecord,
 } = await import('../records.js');
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const VALID_UUID = '00000000-0000-0000-0000-000000000001';
+const VALID_UUID_2 = '00000000-0000-0000-0000-000000000002';
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function mockReq(
@@ -279,7 +284,7 @@ describe('GET /objects/:apiName/records/:id', () => {
   it('returns 200 with the record and relationships', async () => {
     const now = new Date();
     const record = {
-      id: 'rec-uuid',
+      id: VALID_UUID,
       objectId: 'obj-id',
       name: 'Acme Corp',
       fieldValues: { name: 'Acme Corp' },
@@ -295,13 +300,13 @@ describe('GET /objects/:apiName/records/:id', () => {
     const req = mockReq(
       {},
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'rec-uuid' },
+      { apiName: 'account', id: VALID_UUID },
     );
     const res = mockRes();
 
     await handleGetRecord(req, res);
 
-    expect(mockGetRecord).toHaveBeenCalledWith('account', 'rec-uuid', 'user-123');
+    expect(mockGetRecord).toHaveBeenCalledWith('account', VALID_UUID, 'user-123');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(record);
   });
@@ -313,7 +318,7 @@ describe('GET /objects/:apiName/records/:id', () => {
     const req = mockReq(
       {},
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'missing-id' },
+      { apiName: 'account', id: VALID_UUID_2 },
     );
     const res = mockRes();
 
@@ -329,13 +334,31 @@ describe('GET /objects/:apiName/records/:id', () => {
     const req = mockReq(
       {},
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'rec-uuid' },
+      { apiName: 'account', id: VALID_UUID },
     );
     const res = mockRes();
 
     await handleGetRecord(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  it('returns 400 for non-UUID record ID', async () => {
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'account', id: 'new' },
+    );
+    const res = mockRes();
+
+    await handleGetRecord(req, res);
+
+    expect(mockGetRecord).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Invalid record ID format',
+      code: 'VALIDATION_ERROR',
+    });
   });
 });
 
@@ -349,7 +372,7 @@ describe('PUT /objects/:apiName/records/:id', () => {
   it('returns 200 with the updated record on success', async () => {
     const now = new Date();
     const updatedRecord = {
-      id: 'rec-uuid',
+      id: VALID_UUID,
       objectId: 'obj-id',
       name: 'Updated Corp',
       fieldValues: { name: 'Updated Corp' },
@@ -364,7 +387,7 @@ describe('PUT /objects/:apiName/records/:id', () => {
     const req = mockReq(
       { fieldValues: { name: 'Updated Corp' } },
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'rec-uuid' },
+      { apiName: 'account', id: VALID_UUID },
     );
     const res = mockRes();
 
@@ -372,7 +395,7 @@ describe('PUT /objects/:apiName/records/:id', () => {
 
     expect(mockUpdateRecord).toHaveBeenCalledWith(
       'account',
-      'rec-uuid',
+      VALID_UUID,
       { name: 'Updated Corp' },
       'user-123',
     );
@@ -389,7 +412,7 @@ describe('PUT /objects/:apiName/records/:id', () => {
     const req = mockReq(
       { fieldValues: { email: 'bad' } },
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'rec-uuid' },
+      { apiName: 'account', id: VALID_UUID },
     );
     const res = mockRes();
 
@@ -409,7 +432,7 @@ describe('PUT /objects/:apiName/records/:id', () => {
     const req = mockReq(
       { fieldValues: { name: 'X' } },
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'missing-id' },
+      { apiName: 'account', id: VALID_UUID_2 },
     );
     const res = mockRes();
 
@@ -424,13 +447,31 @@ describe('PUT /objects/:apiName/records/:id', () => {
     const req = mockReq(
       { fieldValues: { name: 'X' } },
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'rec-uuid' },
+      { apiName: 'account', id: VALID_UUID },
     );
     const res = mockRes();
 
     await handleUpdateRecord(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  it('returns 400 for non-UUID record ID', async () => {
+    const req = mockReq(
+      { fieldValues: { name: 'X' } },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'account', id: 'not-a-uuid' },
+    );
+    const res = mockRes();
+
+    await handleUpdateRecord(req, res);
+
+    expect(mockUpdateRecord).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Invalid record ID format',
+      code: 'VALIDATION_ERROR',
+    });
   });
 });
 
@@ -447,13 +488,13 @@ describe('DELETE /objects/:apiName/records/:id', () => {
     const req = mockReq(
       {},
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'rec-uuid' },
+      { apiName: 'account', id: VALID_UUID },
     );
     const res = mockRes();
 
     await handleDeleteRecord(req, res);
 
-    expect(mockDeleteRecord).toHaveBeenCalledWith('account', 'rec-uuid', 'user-123');
+    expect(mockDeleteRecord).toHaveBeenCalledWith('account', VALID_UUID, 'user-123');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -465,7 +506,7 @@ describe('DELETE /objects/:apiName/records/:id', () => {
     const req = mockReq(
       {},
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'missing-id' },
+      { apiName: 'account', id: VALID_UUID_2 },
     );
     const res = mockRes();
 
@@ -481,12 +522,30 @@ describe('DELETE /objects/:apiName/records/:id', () => {
     const req = mockReq(
       {},
       { userId: 'user-123', tenantId: 'tenant-abc' },
-      { apiName: 'account', id: 'rec-uuid' },
+      { apiName: 'account', id: VALID_UUID },
     );
     const res = mockRes();
 
     await handleDeleteRecord(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  it('returns 400 for non-UUID record ID', async () => {
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'account', id: 'new' },
+    );
+    const res = mockRes();
+
+    await handleDeleteRecord(req, res);
+
+    expect(mockDeleteRecord).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Invalid record ID format',
+      code: 'VALIDATION_ERROR',
+    });
   });
 });
