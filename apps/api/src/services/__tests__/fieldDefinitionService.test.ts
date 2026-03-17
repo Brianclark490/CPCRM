@@ -628,6 +628,47 @@ describe('updateFieldDefinition', () => {
     });
     expect(result).toBeDefined();
   });
+
+  it('allows updating required on system fields', async () => {
+    seedField('f1', objectId, { is_system: true, required: false });
+
+    const result = await updateFieldDefinition(objectId, 'f1', { required: true });
+    expect(result.required).toBe(true);
+  });
+
+  it('allows updating default_value on system fields', async () => {
+    seedField('f1', objectId, { is_system: true, default_value: null });
+
+    const result = await updateFieldDefinition(objectId, 'f1', { defaultValue: 'new_default' });
+    expect(result.defaultValue).toBe('new_default');
+  });
+
+  it('allows updating description on system fields', async () => {
+    seedField('f1', objectId, { is_system: true, description: null });
+
+    const result = await updateFieldDefinition(objectId, 'f1', { description: 'Updated description' });
+    expect(result.description).toBe('Updated description');
+  });
+
+  it('allows updating label on system fields', async () => {
+    seedField('f1', objectId, { is_system: true, label: 'Old Label' });
+
+    const result = await updateFieldDefinition(objectId, 'f1', { label: 'New Label' });
+    expect(result.label).toBe('New Label');
+  });
+
+  it('allows updating dropdown choices on system fields', async () => {
+    seedField('f1', objectId, {
+      is_system: true,
+      field_type: 'dropdown',
+      options: { choices: ['Option A', 'Option B'] },
+    });
+
+    const result = await updateFieldDefinition(objectId, 'f1', {
+      options: { choices: ['Option A', 'Option B', 'Option C'] },
+    });
+    expect(result.options).toEqual({ choices: ['Option A', 'Option B', 'Option C'] });
+  });
 });
 
 // ─── deleteFieldDefinition ──────────────────────────────────────────────────
