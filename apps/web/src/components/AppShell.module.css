@@ -207,9 +207,6 @@
 }
 
 .contentContainer {
-  max-width: 1200px;
-  margin-left: auto;
-  margin-right: auto;
   padding-left: clamp(var(--space-6), 4vw, var(--space-16));
   padding-right: clamp(var(--space-6), 4vw, var(--space-16));
   width: 100%;
