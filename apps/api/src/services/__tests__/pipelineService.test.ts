@@ -209,7 +209,21 @@ const {
       return { rows };
     }
 
-    // UPDATE stage_definitions SET sort_order
+    // UPDATE stage_definitions SET sort_order = sort_order + 1 WHERE pipeline_id AND sort_order >=
+    // (must come before the simpler sort_order check below)
+    if (s.includes('SORT_ORDER = SORT_ORDER + 1') && s.includes('STAGE_DEFINITIONS')) {
+      const pipelineId = params![0] as string;
+      const minSort = params![1] as number;
+      for (const [key, stage] of fakeStages.entries()) {
+        if (stage.pipeline_id === pipelineId && (stage.sort_order as number) >= minSort) {
+          stage.sort_order = (stage.sort_order as number) + 1;
+          fakeStages.set(key, stage);
+        }
+      }
+      return { rowCount: 0 };
+    }
+
+    // UPDATE stage_definitions SET sort_order = $1 WHERE id = $2 AND pipeline_id = $3
     if (s.startsWith('UPDATE STAGE_DEFINITIONS SET SORT_ORDER')) {
       const sortOrder = params![0] as number;
       const stageId = params![1] as string;
@@ -231,19 +245,6 @@ const {
       const updated = { ...existing };
       fakeStages.set(stageId, updated);
       return { rows: [updated] };
-    }
-
-    // UPDATE stage_definitions SET sort_order = sort_order + 1 WHERE pipeline_id AND sort_order >=
-    if (s.includes('SORT_ORDER = SORT_ORDER + 1') && s.includes('STAGE_DEFINITIONS')) {
-      const pipelineId = params![0] as string;
-      const minSort = params![1] as number;
-      for (const [key, stage] of fakeStages.entries()) {
-        if (stage.pipeline_id === pipelineId && (stage.sort_order as number) >= minSort) {
-          stage.sort_order = (stage.sort_order as number) + 1;
-          fakeStages.set(key, stage);
-        }
-      }
-      return { rowCount: 0 };
     }
 
     // DELETE FROM stage_definitions WHERE id = $1 AND pipeline_id = $2
