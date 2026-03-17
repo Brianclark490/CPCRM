@@ -30,6 +30,14 @@ vi.mock('../../services/recordService.js', () => ({
   deleteRecord: mockDeleteRecord,
 }));
 
+// ─── Mock the lead conversion service ────────────────────────────────────────
+
+const mockConvertLead = vi.fn();
+
+vi.mock('../../services/leadConversionService.js', () => ({
+  convertLead: mockConvertLead,
+}));
+
 // ─── Mock logger so tests stay silent ────────────────────────────────────────
 
 vi.mock('../../lib/logger.js', () => ({
@@ -42,6 +50,7 @@ const {
   handleGetRecord,
   handleUpdateRecord,
   handleDeleteRecord,
+  handleConvertLead,
 } = await import('../records.js');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -547,5 +556,170 @@ describe('DELETE /objects/:apiName/records/:id', () => {
       error: 'Invalid record ID format',
       code: 'VALIDATION_ERROR',
     });
+  });
+});
+
+// ─── Tests: POST /objects/lead/records/:id/convert ──────────────────────────
+
+describe('POST /objects/lead/records/:id/convert', () => {
+  beforeEach(() => {
+    mockConvertLead.mockReset();
+  });
+
+  it('returns 200 with conversion result on success', async () => {
+    const conversionResult = {
+      account: { id: 'acc-uuid', name: 'Acme Corp' },
+      contact: { id: 'con-uuid', name: 'John Smith' },
+      opportunity: { id: 'opp-uuid', name: 'Acme Corp - Opportunity' },
+      lead: { id: VALID_UUID, status: 'Converted' },
+    };
+
+    mockConvertLead.mockResolvedValue(conversionResult);
+
+    const req = mockReq(
+      { create_account: true, create_opportunity: true },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'lead', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleConvertLead(req, res);
+
+    expect(mockConvertLead).toHaveBeenCalledWith(VALID_UUID, 'user-123', {
+      createAccount: true,
+      accountId: undefined,
+      createOpportunity: true,
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(conversionResult);
+  });
+
+  it('returns 400 when object type is not lead', async () => {
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'account', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleConvertLead(req, res);
+
+    expect(mockConvertLead).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Conversion is only supported for lead records',
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('returns 400 for non-UUID record ID', async () => {
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'lead', id: 'not-a-uuid' },
+    );
+    const res = mockRes();
+
+    await handleConvertLead(req, res);
+
+    expect(mockConvertLead).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('returns 400 for invalid account_id format', async () => {
+    const req = mockReq(
+      { account_id: 'not-a-uuid' },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'lead', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleConvertLead(req, res);
+
+    expect(mockConvertLead).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('returns 400 when lead is already converted', async () => {
+    const err = Object.assign(new Error('Lead has already been converted'), {
+      code: 'ALREADY_CONVERTED',
+    });
+    mockConvertLead.mockRejectedValue(err);
+
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'lead', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleConvertLead(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Lead has already been converted',
+      code: 'ALREADY_CONVERTED',
+    });
+  });
+
+  it('returns 404 when lead not found', async () => {
+    const err = Object.assign(new Error('Lead not found'), { code: 'NOT_FOUND' });
+    mockConvertLead.mockRejectedValue(err);
+
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'lead', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleConvertLead(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Lead not found',
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('returns 500 on unexpected error', async () => {
+    mockConvertLead.mockRejectedValue(new Error('Database error'));
+
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'lead', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleConvertLead(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'An unexpected error occurred' });
+  });
+
+  it('passes account_id to service when provided', async () => {
+    mockConvertLead.mockResolvedValue({
+      account: { id: VALID_UUID_2, name: 'Existing Corp' },
+      contact: { id: 'con-uuid', name: 'John Smith' },
+      opportunity: null,
+      lead: { id: VALID_UUID, status: 'Converted' },
+    });
+
+    const req = mockReq(
+      { account_id: VALID_UUID_2, create_opportunity: false },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'lead', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleConvertLead(req, res);
+
+    expect(mockConvertLead).toHaveBeenCalledWith(VALID_UUID, 'user-123', {
+      createAccount: undefined,
+      accountId: VALID_UUID_2,
+      createOpportunity: false,
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 });
