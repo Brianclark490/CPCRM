@@ -26,12 +26,6 @@ interface ConversionMapping {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function throwValidationError(message: string): never {
-  const err = new Error(message) as Error & { code: string };
-  err.code = 'VALIDATION_ERROR';
-  throw err;
-}
-
 function throwNotFoundError(message: string): never {
   const err = new Error(message) as Error & { code: string };
   err.code = 'NOT_FOUND';
