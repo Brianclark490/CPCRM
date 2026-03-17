@@ -84,6 +84,12 @@
   color: var(--color-error-text);
 }
 
+.fieldError {
+  font-size: var(--font-size-xs);
+  color: var(--color-error-text);
+  margin-top: var(--space-1);
+}
+
 .fieldInput {
   width: 100%;
   padding: var(--space-2) var(--space-3);
@@ -125,7 +131,7 @@
   color: var(--color-text-primary);
 }
 
-.fillButton {
+.saveButton {
   padding: var(--space-2) var(--space-4);
   border: none;
   border-radius: var(--radius-md);
@@ -137,11 +143,11 @@
   transition: opacity var(--transition-base);
 }
 
-.fillButton:hover {
+.saveButton:hover {
   opacity: 0.9;
 }
 
-.fillButton:disabled {
+.saveButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

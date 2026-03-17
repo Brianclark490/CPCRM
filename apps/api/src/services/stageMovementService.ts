@@ -10,6 +10,9 @@ export interface GateFailure {
   label: string;
   gate: string;
   message: string;
+  fieldType: string;
+  currentValue: unknown;
+  options: Record<string, unknown>;
 }
 
 export interface MoveStageResult {
@@ -42,6 +45,7 @@ interface GateRow {
   gateType: string;
   gateValue: string | null;
   errorMessage: string | null;
+  fieldOptions: Record<string, unknown>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -78,15 +82,23 @@ function throwGateValidationError(
 function evaluateGate(
   gate: GateRow,
   fieldValues: Record<string, unknown>,
+  fieldOptions: Record<string, unknown>,
 ): GateFailure | null {
   const value = fieldValues[gate.fieldApiName];
+
+  const baseFailure = {
+    field: gate.fieldApiName,
+    label: gate.fieldLabel,
+    fieldType: gate.fieldType,
+    currentValue: value ?? null,
+    options: fieldOptions,
+  };
 
   switch (gate.gateType) {
     case 'required': {
       if (value === undefined || value === null || value === '') {
         return {
-          field: gate.fieldApiName,
-          label: gate.fieldLabel,
+          ...baseFailure,
           gate: 'required',
           message:
             gate.errorMessage ??
@@ -102,8 +114,7 @@ function evaluateGate(
 
       if (value === undefined || value === null || value === '') {
         return {
-          field: gate.fieldApiName,
-          label: gate.fieldLabel,
+          ...baseFailure,
           gate: 'min_value',
           message:
             gate.errorMessage ??
@@ -113,8 +124,7 @@ function evaluateGate(
 
       if (isNaN(numValue) || numValue < minValue) {
         return {
-          field: gate.fieldApiName,
-          label: gate.fieldLabel,
+          ...baseFailure,
           gate: 'min_value',
           message:
             gate.errorMessage ??
@@ -127,8 +137,7 @@ function evaluateGate(
     case 'specific_value': {
       if (String(value) !== gate.gateValue) {
         return {
-          field: gate.fieldApiName,
-          label: gate.fieldLabel,
+          ...baseFailure,
           gate: 'specific_value',
           message:
             gate.errorMessage ??
@@ -165,6 +174,7 @@ function rowToGate(row: Record<string, unknown>): GateRow {
     gateType: row.gate_type as string,
     gateValue: (row.gate_value as string | null) ?? null,
     errorMessage: (row.error_message as string | null) ?? null,
+    fieldOptions: (row.field_options as Record<string, unknown>) ?? {},
   };
 }
 
@@ -261,7 +271,8 @@ export async function moveRecordStage(
       // Fetch gates for the target stage with field metadata
       const gatesResult = await client.query(
         `SELECT sg.field_id, sg.gate_type, sg.gate_value, sg.error_message,
-                fd.api_name AS field_api_name, fd.label AS field_label, fd.field_type
+                fd.api_name AS field_api_name, fd.label AS field_label, fd.field_type,
+                fd.options AS field_options
          FROM stage_gates sg
          JOIN field_definitions fd ON fd.id = sg.field_id
          WHERE sg.stage_id = $1`,
@@ -273,7 +284,7 @@ export async function moveRecordStage(
 
       const failures: GateFailure[] = [];
       for (const gate of gates) {
-        const failure = evaluateGate(gate, fieldValues);
+        const failure = evaluateGate(gate, fieldValues, gate.fieldOptions);
         if (failure) {
           failures.push(failure);
         }
