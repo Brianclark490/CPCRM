@@ -214,7 +214,9 @@ export function AppShell({ children }: AppShellProps) {
         </NavLink>
       </nav>
 
-      <main className={styles.content}>{children}</main>
+      <main className={styles.content}>
+        <div className={styles.contentContainer}>{children}</div>
+      </main>
     </div>
   );
 }
