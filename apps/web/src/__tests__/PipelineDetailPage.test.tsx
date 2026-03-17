@@ -86,6 +86,27 @@ function mockFetchPipeline(data: unknown = samplePipeline) {
   } as Response);
 }
 
+function mockFetchPipelineWithGates() {
+  const mockFetch = vi.fn();
+  // First call: fetch pipeline detail
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => samplePipeline,
+  } as Response);
+  // Second call: fetch fields for object (best-effort, returns empty array)
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => [],
+  } as Response);
+  // Third call (and beyond): fetch gates for selected stage
+  mockFetch.mockResolvedValue({
+    ok: true,
+    json: async () => [],
+  } as Response);
+  vi.stubGlobal('fetch', mockFetch);
+  return mockFetch;
+}
+
 describe('PipelineDetailPage', () => {
   beforeEach(() => {
     vi.mocked(useSession).mockReturnValue({
@@ -111,7 +132,7 @@ describe('PipelineDetailPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Sales Pipeline')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Sales Pipeline' })).toBeInTheDocument();
     });
 
     expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
@@ -152,7 +173,7 @@ describe('PipelineDetailPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('14 days')).toBeInTheDocument();
+      expect(screen.getAllByText('14 days').length).toBeGreaterThan(0);
     });
   });
 
@@ -166,7 +187,7 @@ describe('PipelineDetailPage', () => {
   });
 
   it('opens stage edit panel when a stage pill is clicked', async () => {
-    mockFetchPipeline();
+    mockFetchPipelineWithGates();
     const user = userEvent.setup();
 
     renderPage();
@@ -234,7 +255,7 @@ describe('PipelineDetailPage', () => {
   });
 
   it('shows qualification gates section when a stage is selected', async () => {
-    mockFetchPipeline();
+    mockFetchPipelineWithGates();
     const user = userEvent.setup();
 
     renderPage();
@@ -265,7 +286,7 @@ describe('PipelineDetailPage', () => {
   });
 
   it('shows delete button in stage edit panel', async () => {
-    mockFetchPipeline();
+    mockFetchPipelineWithGates();
     const user = userEvent.setup();
 
     renderPage();
@@ -284,7 +305,7 @@ describe('PipelineDetailPage', () => {
   });
 
   it('opens delete stage confirmation modal', async () => {
-    mockFetchPipeline();
+    mockFetchPipelineWithGates();
     const user = userEvent.setup();
 
     renderPage();
