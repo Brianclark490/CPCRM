@@ -58,13 +58,13 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
 
     // INSERT INTO field_definitions ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO FIELD_DEFINITIONS')) {
-      const [id, objectId, apiName] = params as string[];
+      const [id, objectId, apiName, label, fieldType, required, options, sortOrder] = params as unknown[];
       const existing = [...db.fields.values()].find(
         (f) => f.object_id === objectId && f.api_name === apiName,
       );
       if (existing) return { rows: [] };
-      const row: FakeRow = { id, object_id: objectId, api_name: apiName };
-      db.fields.set(id, row);
+      const row: FakeRow = { id: id as string, object_id: objectId, api_name: apiName, label, field_type: fieldType, required, options, sort_order: sortOrder };
+      db.fields.set(id as string, row);
       return { rows: [{ id }] };
     }
 
@@ -88,12 +88,12 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
 
     // INSERT INTO relationship_definitions ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO RELATIONSHIP_DEFINITIONS')) {
-      const [id, sourceObjectId, , , apiName] = params as string[];
+      const [id, sourceObjectId, targetObjectId, relationshipType, apiName] = params as string[];
       const existing = [...db.relationships.values()].find(
         (r) => r.source_object_id === sourceObjectId && r.api_name === apiName,
       );
       if (existing) return { rows: [] };
-      const row: FakeRow = { id, source_object_id: sourceObjectId, api_name: apiName };
+      const row: FakeRow = { id, source_object_id: sourceObjectId, target_object_id: targetObjectId, relationship_type: relationshipType, api_name: apiName };
       db.relationships.set(id, row);
       return { rows: [{ id }] };
     }
@@ -130,13 +130,13 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
 
     // INSERT INTO layout_fields ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO LAYOUT_FIELDS')) {
-      const [id, layoutId, fieldId] = params as string[];
+      const [id, layoutId, fieldId, section, sectionLabel, sortOrder, width] = params as unknown[];
       const existing = [...db.layoutFields.values()].find(
         (lf) => lf.layout_id === layoutId && lf.field_id === fieldId,
       );
       if (existing) return { rows: [] };
-      const row: FakeRow = { id, layout_id: layoutId, field_id: fieldId };
-      db.layoutFields.set(id, row);
+      const row: FakeRow = { id: id as string, layout_id: layoutId, field_id: fieldId, section, section_label: sectionLabel, sort_order: sortOrder, width };
+      db.layoutFields.set(id as string, row);
       return { rows: [{ id }] };
     }
 
@@ -276,5 +276,147 @@ describe('seedDefaultObjects', () => {
     expect(totalCreated('relationshipsCreated')).toBe(16);
     expect(totalCreated('layoutsCreated')).toBe(18);
     expect(totalCreated('leadConversionMappingsCreated')).toBe(15);
+  });
+
+  it('creates all 9 objects with the expected api_names', async () => {
+    await seedWithClient(client, 'tenant-1');
+
+    const expectedApiNames = [
+      'account', 'contact', 'lead', 'opportunity', 'activity',
+      'next_action', 'agreement', 'note', 'file',
+    ];
+    const actualApiNames = [...db.objects.values()]
+      .map((o) => o.api_name as string)
+      .sort();
+    expect(actualApiNames).toEqual([...expectedApiNames].sort());
+  });
+
+  it('creates fields with correct types and options', async () => {
+    await seedWithClient(client, 'tenant-1');
+
+    const findField = (objectApiName: string, fieldApiName: string) => {
+      return [...db.fields.values()].find((f) => {
+        const obj = [...db.objects.values()].find((o) => o.id === f.object_id);
+        return obj?.api_name === objectApiName && f.api_name === fieldApiName;
+      });
+    };
+
+    // Account name is a required text field with max_length
+    const accountName = findField('account', 'name');
+    expect(accountName).toBeDefined();
+    expect(accountName!.field_type).toBe('text');
+    expect(JSON.parse(accountName!.options as string)).toEqual({ max_length: 255 });
+
+    // Lead status is a required dropdown with choices
+    const leadStatus = findField('lead', 'status');
+    expect(leadStatus).toBeDefined();
+    expect(leadStatus!.field_type).toBe('dropdown');
+    const statusOptions = JSON.parse(leadStatus!.options as string);
+    expect(statusOptions.choices).toEqual(
+      expect.arrayContaining(['New', 'Contacted', 'Qualified', 'Unqualified', 'Converted']),
+    );
+
+    // Opportunity value is currency with precision
+    const oppValue = findField('opportunity', 'value');
+    expect(oppValue).toBeDefined();
+    expect(oppValue!.field_type).toBe('currency');
+    expect(JSON.parse(oppValue!.options as string)).toEqual({ min: 0, precision: 2 });
+
+    // Contact email is an email field
+    const contactEmail = findField('contact', 'email');
+    expect(contactEmail).toBeDefined();
+    expect(contactEmail!.field_type).toBe('email');
+
+    // Activity due_date is a datetime field
+    const activityDueDate = findField('activity', 'due_date');
+    expect(activityDueDate).toBeDefined();
+    expect(activityDueDate!.field_type).toBe('datetime');
+  });
+
+  it('creates relationships between correct objects', async () => {
+    await seedWithClient(client, 'tenant-1');
+
+    const getApiName = (objectId: string) => {
+      const obj = [...db.objects.values()].find((o) => o.id === objectId);
+      return obj?.api_name;
+    };
+
+    // opportunity_account: opportunity → account
+    const oppAcct = [...db.relationships.values()].find((r) => r.api_name === 'opportunity_account');
+    expect(oppAcct).toBeDefined();
+    expect(getApiName(oppAcct!.source_object_id as string)).toBe('opportunity');
+    expect(getApiName(oppAcct!.target_object_id as string)).toBe('account');
+
+    // contact_account: contact → account
+    const contactAcct = [...db.relationships.values()].find((r) => r.api_name === 'contact_account');
+    expect(contactAcct).toBeDefined();
+    expect(getApiName(contactAcct!.source_object_id as string)).toBe('contact');
+    expect(getApiName(contactAcct!.target_object_id as string)).toBe('account');
+
+    // next_action_opportunity: next_action → opportunity
+    const nextActionOpp = [...db.relationships.values()].find((r) => r.api_name === 'next_action_opportunity');
+    expect(nextActionOpp).toBeDefined();
+    expect(getApiName(nextActionOpp!.source_object_id as string)).toBe('next_action');
+    expect(getApiName(nextActionOpp!.target_object_id as string)).toBe('opportunity');
+
+    // agreement_account: agreement → account
+    const agreementAcct = [...db.relationships.values()].find((r) => r.api_name === 'agreement_account');
+    expect(agreementAcct).toBeDefined();
+    expect(getApiName(agreementAcct!.source_object_id as string)).toBe('agreement');
+    expect(getApiName(agreementAcct!.target_object_id as string)).toBe('account');
+
+    // file_agreement: file → agreement
+    const fileAgreement = [...db.relationships.values()].find((r) => r.api_name === 'file_agreement');
+    expect(fileAgreement).toBeDefined();
+    expect(getApiName(fileAgreement!.source_object_id as string)).toBe('file');
+    expect(getApiName(fileAgreement!.target_object_id as string)).toBe('agreement');
+  });
+
+  it('creates layouts with correct sections and field arrangement', async () => {
+    await seedWithClient(client, 'tenant-1');
+
+    // Find account "Default form" layout
+    const accountFormLayout = [...db.layouts.values()].find((l) => {
+      const obj = [...db.objects.values()].find((o) => o.id === l.object_id);
+      return obj?.api_name === 'account' && l.name === 'Default form';
+    });
+    expect(accountFormLayout).toBeDefined();
+
+    // Get layout fields for account form
+    const accountFormFields = [...db.layoutFields.values()]
+      .filter((lf) => lf.layout_id === accountFormLayout!.id);
+    expect(accountFormFields.length).toBe(16);
+
+    // Verify sort orders start at 1 and are unique
+    const sortOrders = accountFormFields
+      .map((lf) => lf.sort_order as number)
+      .sort((a, b) => a - b);
+    expect(sortOrders[0]).toBe(1);
+    const uniqueSortOrders = new Set(sortOrders);
+    expect(uniqueSortOrders.size).toBe(sortOrders.length);
+
+    // Verify multiple sections exist (Details, Contact info, Address, Additional)
+    const sections = new Set(accountFormFields.map((lf) => lf.section));
+    expect(sections.size).toBe(4);
+
+    // Verify width values are valid
+    for (const lf of accountFormFields) {
+      expect(['half', 'full']).toContain(lf.width);
+    }
+
+    // Verify lead "Default Form" has expected section labels
+    const leadFormLayout = [...db.layouts.values()].find((l) => {
+      const obj = [...db.objects.values()].find((o) => o.id === l.object_id);
+      return obj?.api_name === 'lead' && l.name === 'Default Form';
+    });
+    expect(leadFormLayout).toBeDefined();
+    const leadFormFields = [...db.layoutFields.values()]
+      .filter((lf) => lf.layout_id === leadFormLayout!.id);
+    const leadSectionLabels = new Set(
+      leadFormFields.map((lf) => lf.section_label).filter((l) => l !== null),
+    );
+    expect(leadSectionLabels).toContain('Contact Info');
+    expect(leadSectionLabels).toContain('Company');
+    expect(leadSectionLabels).toContain('Lead Details');
   });
 });

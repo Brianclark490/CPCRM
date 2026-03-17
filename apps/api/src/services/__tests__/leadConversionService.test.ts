@@ -317,4 +317,67 @@ describe('convertLead', () => {
 
     expect(result.opportunity).not.toBeNull();
   });
+
+  it('applies field mappings correctly from lead to created records', async () => {
+    setupLeadConversionMocks();
+
+    await convertLead('lead-1', 'user-123', {});
+
+    // Find INSERT INTO records calls
+    const insertCalls = clientQuery.mock.calls.filter((c: unknown[]) => {
+      const sql = (c[0] as string).replace(/\s+/g, ' ').trim().toUpperCase();
+      return sql.startsWith('INSERT INTO RECORDS');
+    });
+
+    expect(insertCalls.length).toBe(3); // account, contact, opportunity
+
+    // Account: lead.company → account.name, lead.industry → account.industry, etc.
+    const accountParams = insertCalls[0][1] as unknown[];
+    const accountFieldValues = JSON.parse(accountParams[3] as string);
+    expect(accountFieldValues.name).toBe('Acme Corp');
+    expect(accountFieldValues.industry).toBe('Technology');
+    expect(accountFieldValues.website).toBe('https://acme.com');
+    expect(accountFieldValues.phone).toBe('555-1234');
+    expect(accountFieldValues.email).toBe('john@acme.com');
+    expect(accountFieldValues.address_line1).toBe('123 Main St');
+
+    // Contact: lead.first_name → contact.first_name, etc.
+    const contactParams = insertCalls[1][1] as unknown[];
+    const contactFieldValues = JSON.parse(contactParams[3] as string);
+    expect(contactFieldValues.first_name).toBe('John');
+    expect(contactFieldValues.last_name).toBe('Smith');
+    expect(contactFieldValues.email).toBe('john@acme.com');
+    expect(contactFieldValues.phone).toBe('555-1234');
+    expect(contactFieldValues.job_title).toBe('CEO');
+
+    // Opportunity: lead.estimated_value → opportunity.value, etc.
+    const oppParams = insertCalls[2][1] as unknown[];
+    const oppFieldValues = JSON.parse(oppParams[3] as string);
+    expect(oppFieldValues.value).toBe(50000);
+    expect(oppFieldValues.source).toBe('Website');
+    expect(oppFieldValues.description).toBe('A great lead');
+  });
+
+  it('sets converted lead status and metadata after conversion', async () => {
+    setupLeadConversionMocks();
+
+    const result = await convertLead('lead-1', 'user-123', {});
+
+    // Find UPDATE records call
+    const updateCalls = clientQuery.mock.calls.filter((c: unknown[]) => {
+      const sql = (c[0] as string).replace(/\s+/g, ' ').trim().toUpperCase();
+      return sql.startsWith('UPDATE RECORDS');
+    });
+
+    expect(updateCalls.length).toBe(1);
+
+    const updateParams = updateCalls[0][1] as unknown[];
+    const updatedFieldValues = JSON.parse(updateParams[0] as string);
+
+    expect(updatedFieldValues.status).toBe('Converted');
+    expect(updatedFieldValues.converted_at).toBeDefined();
+    expect(updatedFieldValues.converted_account_id).toBe(result.account.id);
+    expect(updatedFieldValues.converted_contact_id).toBe(result.contact.id);
+    expect(updatedFieldValues.converted_opportunity_id).toBe(result.opportunity!.id);
+  });
 });
