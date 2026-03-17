@@ -341,8 +341,9 @@ describe('LayoutBuilderTab', () => {
     const user = userEvent.setup();
     renderComponent();
 
+    // Wait for layout detail to fully load (Basic Info comes from formLayoutDetail)
     await waitFor(() => {
-      expect(screen.getByText('Form Preview')).toBeInTheDocument();
+      expect(screen.getByText('Basic Info')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: /Add section/ }));
@@ -359,8 +360,9 @@ describe('LayoutBuilderTab', () => {
     const user = userEvent.setup();
     renderComponent();
 
+    // Wait for layout detail to fully load (Basic Info comes from formLayoutDetail)
     await waitFor(() => {
-      expect(screen.getByText('Form Preview')).toBeInTheDocument();
+      expect(screen.getByText('Basic Info')).toBeInTheDocument();
     });
 
     // Add a second section first so we can remove one
