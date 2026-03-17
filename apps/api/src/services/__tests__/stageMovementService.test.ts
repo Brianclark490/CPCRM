@@ -15,6 +15,11 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
     const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
 
+    // Transaction statements
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+
     // Object definitions lookup
     if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE API_NAME')) {
       const apiName = params![0] as string;
@@ -67,8 +72,8 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Update records for move-stage
-    if (s.startsWith('UPDATE RECORDS') && s.includes('CURRENT_STAGE_ID')) {
+    // Update records for move-stage (does NOT set pipeline_id)
+    if (s.startsWith('UPDATE RECORDS') && s.includes('CURRENT_STAGE_ID') && !s.includes('PIPELINE_ID')) {
       const targetStageId = params![0] as string;
       const fieldValuesJson = params![1] as string;
       const recordId = params![2] as string;
