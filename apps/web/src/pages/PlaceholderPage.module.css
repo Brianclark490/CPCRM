@@ -33,6 +33,8 @@
   padding: var(--space-16) var(--space-8);
   text-align: center;
   max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .iconWrap {
