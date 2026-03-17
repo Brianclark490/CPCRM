@@ -11,6 +11,8 @@ import {
   deleteRecord,
 } from '../services/recordService.js';
 import { convertLead } from '../services/leadConversionService.js';
+import { moveRecordStage } from '../services/stageMovementService.js';
+import type { GateValidationError } from '../services/stageMovementService.js';
 import { logger } from '../lib/logger.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -339,6 +341,74 @@ export async function handleConvertLead(
   }
 }
 
+/**
+ * POST /objects/:apiName/records/:id/move-stage
+ *
+ * Moves a record to a new pipeline stage with gate validation.
+ *
+ * Request body (JSON):
+ *   { "target_stage_id": "uuid" }
+ *
+ * Responses:
+ *   200  – updated record after successful move
+ *   400  – validation error (e.g. not in a pipeline, same stage)
+ *   401  – missing or invalid Bearer token
+ *   403  – no active tenant context
+ *   404  – record or target stage not found
+ *   422  – gate validation failed (with field-level detail)
+ *   500  – unexpected server error
+ */
+export async function handleMoveStage(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const { apiName, id } = req.params as { apiName: string; id: string };
+  const { userId: ownerId } = req.user!;
+
+  if (!UUID_RE.test(id)) {
+    res.status(400).json({ error: 'Invalid record ID format', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  const body = req.body as { target_stage_id?: string };
+
+  if (!body.target_stage_id || !UUID_RE.test(body.target_stage_id)) {
+    res.status(400).json({ error: 'target_stage_id must be a valid UUID', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  try {
+    const result = await moveRecordStage(apiName, id, body.target_stage_id, ownerId);
+    res.status(200).json(result);
+  } catch (err: unknown) {
+    const code = (err as Error & { code?: string }).code;
+
+    if (code === 'GATE_VALIDATION_FAILED') {
+      const gateErr = err as GateValidationError;
+      res.status(422).json({
+        error: gateErr.message,
+        code: 'GATE_VALIDATION_FAILED',
+        failures: gateErr.failures,
+      });
+      return;
+    }
+
+    if (code === 'VALIDATION_ERROR') {
+      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR' });
+      return;
+    }
+
+    if (code === 'NOT_FOUND') {
+      res.status(404).json({ error: (err as Error).message, code: 'NOT_FOUND' });
+      return;
+    }
+
+    logger.error({ err, apiName, recordId: id, ownerId }, 'Unexpected error moving record stage');
+    res.status(500).json({ error: 'An unexpected error occurred' });
+  }
+}
+
+recordsRouter.post('/:id/move-stage', requireAuth, requireTenant, handleMoveStage);
 recordsRouter.post('/:id/convert', requireAuth, requireTenant, handleConvertLead);
 recordsRouter.post('/', requireAuth, requireTenant, handleCreateRecord);
 recordsRouter.get('/', requireAuth, requireTenant, handleListRecords);
