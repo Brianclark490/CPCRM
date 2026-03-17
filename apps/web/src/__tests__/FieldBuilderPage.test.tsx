@@ -818,10 +818,10 @@ describe('FieldBuilderPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Status')).toBeInTheDocument();
+      expect(screen.getAllByText('Status')[0]).toBeInTheDocument();
     });
 
-    const statusRow = screen.getByText('Status').closest('tr')!;
+    const statusRow = screen.getAllByText('Status')[0].closest('tr')!;
     await user.click(statusRow);
 
     expect(screen.getByRole('dialog', { name: 'Edit field' })).toBeInTheDocument();
