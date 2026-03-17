@@ -10,6 +10,7 @@ import {
   updateRecord,
   deleteRecord,
 } from '../services/recordService.js';
+import { convertLead } from '../services/leadConversionService.js';
 import { logger } from '../lib/logger.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -259,6 +260,86 @@ export async function handleDeleteRecord(
   }
 }
 
+/**
+ * POST /objects/:apiName/records/:id/convert
+ *
+ * Converts a Lead record into an Account + Contact + Opportunity.
+ * Only valid for the "lead" object type.
+ *
+ * Request body (JSON):
+ *   {
+ *     "create_account": true,
+ *     "account_id": null,
+ *     "create_opportunity": true
+ *   }
+ *
+ * Responses:
+ *   200  – conversion result with created/linked records
+ *   400  – lead already converted or validation error
+ *   401  – missing or invalid Bearer token
+ *   403  – no active tenant context
+ *   404  – lead not found
+ *   500  – unexpected server error
+ */
+export async function handleConvertLead(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const { apiName, id } = req.params as { apiName: string; id: string };
+  const { userId: ownerId } = req.user!;
+
+  if (apiName !== 'lead') {
+    res.status(400).json({ error: 'Conversion is only supported for lead records', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  if (!UUID_RE.test(id)) {
+    res.status(400).json({ error: 'Invalid record ID format', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  const body = req.body as {
+    create_account?: boolean;
+    account_id?: string | null;
+    create_opportunity?: boolean;
+  };
+
+  if (body.account_id && !UUID_RE.test(body.account_id)) {
+    res.status(400).json({ error: 'Invalid account ID format', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  try {
+    const result = await convertLead(id, ownerId, {
+      createAccount: body.create_account,
+      accountId: body.account_id,
+      createOpportunity: body.create_opportunity,
+    });
+    res.status(200).json(result);
+  } catch (err: unknown) {
+    const code = (err as Error & { code?: string }).code;
+
+    if (code === 'ALREADY_CONVERTED') {
+      res.status(400).json({ error: (err as Error).message, code: 'ALREADY_CONVERTED' });
+      return;
+    }
+
+    if (code === 'VALIDATION_ERROR') {
+      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR' });
+      return;
+    }
+
+    if (code === 'NOT_FOUND') {
+      res.status(404).json({ error: (err as Error).message, code: 'NOT_FOUND' });
+      return;
+    }
+
+    logger.error({ err, recordId: id, ownerId }, 'Unexpected error converting lead');
+    res.status(500).json({ error: 'An unexpected error occurred' });
+  }
+}
+
+recordsRouter.post('/:id/convert', requireAuth, requireTenant, handleConvertLead);
 recordsRouter.post('/', requireAuth, requireTenant, handleCreateRecord);
 recordsRouter.get('/', requireAuth, requireTenant, handleListRecords);
 recordsRouter.get('/:id', requireAuth, requireTenant, handleGetRecord);
