@@ -195,7 +195,10 @@ vi.mock('../../db/client.js', () => ({
 }));
 
 // Mock the stageMovementService to prevent circular dependency issues
-const mockAssignDefaultPipeline = vi.fn(async () => false);
+const { mockAssignDefaultPipeline } = vi.hoisted(() => {
+  const mockAssignDefaultPipeline = vi.fn(async () => false);
+  return { mockAssignDefaultPipeline };
+});
 
 vi.mock('../stageMovementService.js', () => ({
   assignDefaultPipeline: mockAssignDefaultPipeline,
