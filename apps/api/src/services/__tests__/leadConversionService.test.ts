@@ -274,7 +274,10 @@ describe('convertLead', () => {
           throw new Error('Database error');
         }
       }
-      return originalImpl!(sql, params);
+      if (typeof originalImpl === 'function') {
+        return originalImpl(sql, params);
+      }
+      return { rows: [] };
     });
 
     await expect(
