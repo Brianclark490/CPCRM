@@ -558,6 +558,37 @@ export interface LayoutField {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Metadata engine — lead conversion mappings
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Allowed target objects for lead conversion.
+ */
+export type LeadConversionTarget = 'account' | 'contact' | 'opportunity';
+
+/**
+ * A LeadConversionMapping defines how a single field on a Lead maps to a
+ * field on a target object (Account, Contact, or Opportunity) during
+ * lead conversion.
+ *
+ * Special cases handled by the application layer:
+ * - Lead "name" is "{first_name} {last_name}".
+ * - Opportunity "name" is "{company} - Opportunity".
+ */
+export interface LeadConversionMapping {
+  /** UUID primary key */
+  id: string;
+  /** The api_name of the field on the lead object */
+  leadFieldApiName: string;
+  /** The target object that receives the value */
+  targetObject: LeadConversionTarget;
+  /** The api_name of the field on the target object */
+  targetFieldApiName: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Admin API — Object Definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
