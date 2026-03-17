@@ -137,6 +137,13 @@ export interface Account {
 
 /**
  * A Contact is an individual person associated with an Account.
+ *
+ * In the metadata-driven model, contact data is stored in the `records` table
+ * with field values in the JSONB `field_values` column. This interface
+ * documents the expected field shape.
+ *
+ * The record `name` column is set to "{first_name} {last_name}" — the API
+ * concatenates these automatically when creating or updating a contact record.
  */
 export interface Contact {
   /** UUID primary key */
@@ -147,7 +154,17 @@ export interface Contact {
   firstName: string;
   lastName: string;
   email?: string;
+  phone?: string;
+  mobile?: string;
   jobTitle?: string;
+  department?: string;
+  /** One of: "Active", "Inactive", "Do Not Contact" */
+  status?: string;
+  linkedinUrl?: string;
+  mailingAddress?: string;
+  dateOfBirth?: string;
+  /** Free-text notes */
+  description?: string;
   createdAt: Date;
   updatedAt: Date;
   /** Descope userId of the user who created this record */
