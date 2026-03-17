@@ -237,7 +237,10 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
           setPipeline(detail);
         }
       } catch {
-        if (!cancelled) setError('Failed to connect to the server.');
+        if (!cancelled) {
+          setError('Failed to connect to the server.');
+          setLoading(false);
+        }
       }
     };
 
