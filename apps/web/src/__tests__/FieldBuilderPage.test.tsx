@@ -748,6 +748,96 @@ describe('FieldBuilderPage', () => {
     expect(labelInput.value).toBe('Amount');
   });
 
+  it('opens the edit field modal when clicking a system field row', async () => {
+    mockFetchObject();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Name')).toBeInTheDocument();
+    });
+
+    // Click the system field "Name" row to edit it
+    const nameRow = screen.getByText('Name').closest('tr')!;
+    await user.click(nameRow);
+
+    expect(screen.getByRole('dialog', { name: 'Edit field' })).toBeInTheDocument();
+    const labelInput = screen.getByLabelText(/^Label/) as HTMLInputElement;
+    expect(labelInput.value).toBe('Name');
+  });
+
+  it('disables field type and api name but allows other inputs when editing a system field', async () => {
+    mockFetchObject();
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Name')).toBeInTheDocument();
+    });
+
+    const nameRow = screen.getByText('Name').closest('tr')!;
+    await user.click(nameRow);
+
+    expect(screen.getByRole('dialog', { name: 'Edit field' })).toBeInTheDocument();
+
+    // API name and field type should be disabled
+    expect(screen.getByLabelText(/^API name/)).toBeDisabled();
+    expect(screen.getByLabelText(/^Field type/)).toBeDisabled();
+
+    // Label, description, required, and default value should be enabled
+    expect(screen.getByLabelText(/^Label/)).not.toBeDisabled();
+    expect(screen.getByLabelText(/^Description/)).not.toBeDisabled();
+    expect(screen.getByLabelText(/^Default value/)).not.toBeDisabled();
+
+    // System field type hint should be visible
+    expect(screen.getByText('Field type cannot be changed on system fields.')).toBeInTheDocument();
+  });
+
+  it('allows editing dropdown choices on a system dropdown field', async () => {
+    const objectWithSystemDropdown = {
+      ...sampleObject,
+      fields: [
+        {
+          id: 'field-sys-dropdown',
+          objectId: 'obj-1',
+          apiName: 'status',
+          label: 'Status',
+          fieldType: 'dropdown',
+          required: true,
+          options: { choices: ['Active', 'Inactive'] },
+          sortOrder: 1,
+          isSystem: true,
+        },
+      ],
+    };
+    mockFetchObject(objectWithSystemDropdown);
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('cell', { name: 'Status' })).toBeInTheDocument();
+    });
+
+    const statusCell = screen.getByRole('cell', { name: 'Status' });
+    const statusRow = statusCell.closest('tr')!;
+    await user.click(statusRow);
+
+    expect(screen.getByRole('dialog', { name: 'Edit field' })).toBeInTheDocument();
+
+    // Choices editor should be visible with existing choices
+    expect(screen.getByText('Choices')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Add choice/ })).toBeInTheDocument();
+
+    // Existing choices should be populated
+    const choiceInputs = screen.getAllByPlaceholderText(/Choice \d+/);
+    expect(choiceInputs).toHaveLength(2);
+    expect((choiceInputs[0] as HTMLInputElement).value).toBe('Active');
+    expect((choiceInputs[1] as HTMLInputElement).value).toBe('Inactive');
+  });
+
   it('calls the reorder API when moving a field', async () => {
     const mockFetch = vi.fn();
     // First call: fetch object

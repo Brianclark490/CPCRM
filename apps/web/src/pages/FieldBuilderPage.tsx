@@ -650,11 +650,15 @@ export function FieldBuilderPage() {
 
     const payload: Record<string, unknown> = {
       label: trimmedLabel,
-      fieldType: fieldForm.fieldType,
       description: fieldForm.description.trim() || undefined,
       required: fieldForm.required,
       defaultValue: fieldForm.defaultValue.trim() || undefined,
     };
+
+    // System fields cannot have their field_type changed
+    if (!editingField?.isSystem) {
+      payload.fieldType = fieldForm.fieldType;
+    }
 
     if (options) {
       payload.options = options;
@@ -880,9 +884,7 @@ export function FieldBuilderPage() {
                       key={field.id}
                       className={styles.tr}
                       onClick={() => {
-                        if (!field.isSystem) {
-                          openEditFieldModal(field);
-                        }
+                        openEditFieldModal(field);
                       }}
                     >
                       <td className={styles.td}>
@@ -1137,7 +1139,7 @@ export function FieldBuilderPage() {
                   className={styles.select}
                   value={fieldForm.fieldType}
                   onChange={handleFieldFormChange}
-                  disabled={saving}
+                  disabled={saving || (!!editingField && editingField.isSystem)}
                 >
                   {FIELD_TYPE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -1145,6 +1147,11 @@ export function FieldBuilderPage() {
                     </option>
                   ))}
                 </select>
+                {editingField?.isSystem && (
+                  <span className={styles.fieldHint}>
+                    Field type cannot be changed on system fields.
+                  </span>
+                )}
               </div>
 
               {/* Conditional: Choices editor */}
