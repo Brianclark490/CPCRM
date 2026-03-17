@@ -25,6 +25,10 @@ export function AdminPage() {
           <Link to="/admin/objects">Object Manager</Link> — manage object definitions, fields,
           and layouts.
         </p>
+        <p className={styles.emptyText}>
+          <Link to="/admin/pipelines">Pipeline Manager</Link> — manage pipelines, stages, and
+          qualification gates.
+        </p>
       </div>
     </div>
   );

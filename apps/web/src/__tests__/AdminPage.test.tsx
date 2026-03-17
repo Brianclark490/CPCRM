@@ -24,4 +24,11 @@ describe('AdminPage', () => {
     const link = screen.getByRole('link', { name: 'Object Manager' });
     expect(link).toHaveAttribute('href', '/admin/objects');
   });
+
+  it('renders a link to the Pipeline Manager', () => {
+    renderPage();
+
+    const link = screen.getByRole('link', { name: 'Pipeline Manager' });
+    expect(link).toHaveAttribute('href', '/admin/pipelines');
+  });
 });

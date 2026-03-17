@@ -7,6 +7,8 @@ import { AccountDetailPage } from './pages/AccountDetailPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { ObjectManagerPage } from './pages/ObjectManagerPage.js';
 import { FieldBuilderPage } from './pages/FieldBuilderPage.js';
+import { PipelineManagerPage } from './pages/PipelineManagerPage.js';
+import { PipelineDetailPage } from './pages/PipelineDetailPage.js';
 import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
 import { CreateOpportunityPage } from './pages/CreateOpportunityPage.js';
 import { OpportunityDetailPage } from './pages/OpportunityDetailPage.js';
@@ -122,6 +124,26 @@ export function App() {
             <ProtectedRoute>
               <AppShell>
                 <FieldBuilderPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/pipelines"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <PipelineManagerPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/pipelines/:id"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <PipelineDetailPage />
               </AppShell>
             </ProtectedRoute>
           }
