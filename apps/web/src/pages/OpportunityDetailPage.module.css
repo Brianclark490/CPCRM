@@ -3,7 +3,7 @@
    ============================================================ */
 
 .page {
-  max-width: 900px;
+  max-width: 960px;
 }
 
 /* ── Page header ──────────────────────────────────────────── */
@@ -76,16 +76,16 @@
 }
 
 .cardHeader {
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--color-border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .cardTitle {
-  font-size: var(--font-size-base);
-  font-weight: 600;
+  font-size: var(--font-size-lg);
+  font-weight: 500;
   color: var(--color-text-primary);
 }
 
@@ -98,7 +98,7 @@
 .fieldsGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-5) var(--space-8);
+  gap: var(--space-5) var(--space-4);
 }
 
 .fieldFull {
@@ -142,7 +142,7 @@
 .formGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-5) var(--space-8);
+  gap: var(--space-5) var(--space-4);
 }
 
 .formFieldFull {

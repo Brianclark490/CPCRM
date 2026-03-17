@@ -479,6 +479,7 @@ export function RecordDetailPage() {
           options={field.fieldOptions}
           id={`field-${field.fieldApiName}`}
           name={field.fieldApiName}
+          label={field.fieldLabel}
         />
       </div>
     );
@@ -497,13 +498,17 @@ export function RecordDetailPage() {
   if (loadError || !record) {
     return (
       <div className={styles.page}>
-        <button
-          className={styles.backLink}
-          onClick={() => void navigate(`/objects/${apiName}`)}
-          type="button"
-        >
-          ← Back to {pluralLabel.toLowerCase()}
-        </button>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <button
+            className={styles.breadcrumbLink}
+            onClick={() => void navigate(`/objects/${apiName}`)}
+            type="button"
+          >
+            {pluralLabel}
+          </button>
+          <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>
+          <span className={styles.breadcrumbCurrent}>Detail</span>
+        </nav>
         <p role="alert">{loadError ?? 'Record not found.'}</p>
       </div>
     );
@@ -533,14 +538,21 @@ export function RecordDetailPage() {
       {/* Page header */}
       <div className={styles.pageHeader}>
         <div className={styles.headerLeft}>
-          <button
-            className={styles.backLink}
-            onClick={() => void navigate(`/objects/${apiName}`)}
-            type="button"
-          >
-            ← Back to {pluralLabel.toLowerCase()}
-          </button>
+          <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+            <button
+              className={styles.breadcrumbLink}
+              onClick={() => void navigate(`/objects/${apiName}`)}
+              type="button"
+            >
+              {pluralLabel}
+            </button>
+            <span className={styles.breadcrumbSeparator} aria-hidden="true">›</span>
+            <span className={styles.breadcrumbCurrent}>{record.name}</span>
+          </nav>
           <h1 className={styles.pageTitle}>{record.name}</h1>
+          <p className={styles.pageSubtitle}>
+            Last updated {formatDate(record.updatedAt)}
+          </p>
         </div>
 
         {!editing && (

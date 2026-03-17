@@ -11,6 +11,7 @@ interface FieldInputProps {
   options?: Record<string, unknown>;
   id?: string;
   name?: string;
+  label?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ export function FieldInput({
   options = {},
   id,
   name,
+  label,
 }: FieldInputProps) {
   const stringValue = value !== null && value !== undefined ? String(value) : '';
 
@@ -90,6 +92,7 @@ export function FieldInput({
           step="0.01"
           min={(options.min as number) ?? undefined}
           max={(options.max as number) ?? undefined}
+          placeholder="0.00"
         />
       );
 
@@ -132,6 +135,7 @@ export function FieldInput({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           required={required}
+          placeholder="name@company.com"
         />
       );
 
@@ -146,6 +150,7 @@ export function FieldInput({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           required={required}
+          placeholder="+44 1234 567890"
         />
       );
 
@@ -160,6 +165,7 @@ export function FieldInput({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           required={required}
+          placeholder="https://www.example.com/"
         />
       );
 
@@ -192,7 +198,7 @@ export function FieldInput({
           disabled={disabled}
           required={required}
         >
-          <option value="">— Select —</option>
+          <option value="">Select {label ?? 'option'}</option>
           {choices.map((choice) => (
             <option key={choice} value={choice}>
               {choice}

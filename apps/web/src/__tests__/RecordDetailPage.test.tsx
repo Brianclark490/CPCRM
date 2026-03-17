@@ -160,12 +160,12 @@ describe('RecordDetailPage', () => {
     expect(emailLink).toHaveAttribute('href', 'mailto:test@example.com');
   });
 
-  it('renders a back link to the list page', async () => {
+  it('renders a breadcrumb navigation to the list page', async () => {
     mockFetch(makeRecordResponse());
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/Back to accounts/i)).toBeInTheDocument();
+      expect(screen.getByText('Accounts')).toBeInTheDocument();
     });
   });
 

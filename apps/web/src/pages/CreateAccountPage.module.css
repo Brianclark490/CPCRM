@@ -3,7 +3,7 @@
    ============================================================ */
 
 .page {
-  max-width: 720px;
+  max-width: 960px;
 }
 
 /* ── Back link ────────────────────────────────────────────── */
@@ -63,7 +63,7 @@
 .fieldRow {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .field {

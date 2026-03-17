@@ -99,6 +99,19 @@
   cursor: not-allowed;
 }
 
+.paginationButtonActive {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.paginationEllipsis {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: 0 var(--space-1);
+}
+
 /* ── Error alert ──────────────────────────────────────────── */
 
 .errorAlert {
@@ -146,6 +159,11 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.6;
+}
+
+.emptyAction {
+  display: inline-block;
+  margin-top: var(--space-5);
 }
 
 /* ── Records table ────────────────────────────────────────── */
