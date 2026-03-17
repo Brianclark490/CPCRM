@@ -260,9 +260,8 @@ describe('LayoutBuilderTab', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Available Fields')).toBeInTheDocument();
+      expect(screen.getByText('Form Preview')).toBeInTheDocument();
     });
-
-    expect(screen.getByText('Form Preview')).toBeInTheDocument();
   });
 
   it('shows placed fields in the section', async () => {
