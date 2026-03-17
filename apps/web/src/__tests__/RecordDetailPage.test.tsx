@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { RecordDetailPage } from '../pages/RecordDetailPage.js';
@@ -575,11 +575,14 @@ describe('RecordDetailPage', () => {
 
       await user.click(screen.getByRole('button', { name: 'Convert Lead' }));
 
+      const dialog = await screen.findByRole('dialog', { name: /Convert Lead: Jane Smith/i });
+      const modal = within(dialog);
+
       await waitFor(() => {
-        expect(screen.getByText('Account')).toBeInTheDocument();
-        expect(screen.getByText('Acme Corp')).toBeInTheDocument();
-        expect(screen.getByText('Contact')).toBeInTheDocument();
-        expect(screen.getByText('jane@example.com')).toBeInTheDocument();
+        expect(modal.getByText('Account')).toBeInTheDocument();
+        expect(modal.getByText('Acme Corp')).toBeInTheDocument();
+        expect(modal.getByText('Contact')).toBeInTheDocument();
+        expect(modal.getByText('jane@example.com')).toBeInTheDocument();
       });
     });
 
