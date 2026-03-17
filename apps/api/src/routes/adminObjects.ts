@@ -8,6 +8,7 @@ import {
   getObjectDefinitionById,
   updateObjectDefinition,
   deleteObjectDefinition,
+  reorderObjectDefinitions,
 } from '../services/objectDefinitionService.js';
 import type { UpdateObjectDefinitionParams } from '../services/objectDefinitionService.js';
 import { adminFieldsRouter } from './adminFields.js';
@@ -258,6 +259,46 @@ export async function handleDeleteObject(
   }
 }
 
+/**
+ * PUT /admin/objects/reorder
+ *
+ * Reorders object definitions. Accepts an ordered array of object definition
+ * IDs; position in the array determines the new display order.
+ *
+ * Requires: valid Bearer token (requireAuth).
+ *
+ * Request body (JSON):
+ *   { "orderedIds": ["uuid-1", "uuid-2", "uuid-3", ...] }
+ *
+ * Responses:
+ *   204  – reorder applied
+ *   400  – validation error
+ *   401  – missing or invalid Bearer token
+ *   500  – unexpected server error
+ */
+export async function handleReorderObjects(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const body = req.body as { orderedIds?: string[] };
+
+  try {
+    await reorderObjectDefinitions(body.orderedIds ?? []);
+    res.status(204).end();
+  } catch (err: unknown) {
+    const code = (err as Error & { code?: string }).code;
+
+    if (code === 'VALIDATION_ERROR') {
+      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR' });
+      return;
+    }
+
+    logger.error({ err }, 'Unexpected error reordering object definitions');
+    res.status(500).json({ error: 'An unexpected error occurred' });
+  }
+}
+
+adminObjectsRouter.put('/reorder', requireAuth, handleReorderObjects);
 adminObjectsRouter.post('/', requireAuth, handleCreateObject);
 adminObjectsRouter.get('/', requireAuth, handleListObjects);
 adminObjectsRouter.get('/:id', requireAuth, handleGetObject);

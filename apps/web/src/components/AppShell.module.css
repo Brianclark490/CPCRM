@@ -189,6 +189,15 @@
   line-height: 1;
 }
 
+.tabDragging {
+  opacity: 0.4;
+}
+
+.tabDragOver {
+  border-bottom-color: var(--color-primary);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
 .tabAdmin {
   margin-left: auto;
 }

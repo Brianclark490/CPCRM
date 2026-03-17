@@ -14,6 +14,7 @@ export interface ObjectDefinition {
   isSystem: boolean;
   nameFieldId?: string;
   nameTemplate?: string;
+  sortOrder: number;
   ownerId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -147,6 +148,7 @@ function rowToObjectDefinition(row: Record<string, unknown>): ObjectDefinition {
     isSystem: row.is_system as boolean,
     nameFieldId: (row.name_field_id as string | null) ?? undefined,
     nameTemplate: (row.name_template as string | null) ?? undefined,
+    sortOrder: (row.sort_order as number) ?? 0,
     ownerId: row.owner_id as string,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
@@ -258,12 +260,18 @@ export async function createObjectDefinition(
   const objectId = randomUUID();
   const now = new Date();
 
+  // Determine the next sort_order value
+  const maxResult = await pool.query(
+    'SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM object_definitions',
+  );
+  const nextSortOrder = (parseInt(maxResult.rows[0].max_sort_order as string, 10) || 0) + 1;
+
   logger.info({ objectId, apiName, ownerId }, 'Creating new object definition');
 
   const result = await pool.query(
     `INSERT INTO object_definitions
-       (id, api_name, label, plural_label, description, icon, is_system, owner_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       objectId,
@@ -273,6 +281,7 @@ export async function createObjectDefinition(
       description?.trim() ?? null,
       icon?.trim() ?? null,
       false,
+      nextSortOrder,
       ownerId,
       now,
       now,
@@ -306,7 +315,7 @@ export async function listObjectDefinitions(): Promise<ObjectDefinitionListItem[
             (SELECT COUNT(*) FROM field_definitions fd WHERE fd.object_id = od.id) AS field_count,
             (SELECT COUNT(*) FROM records r WHERE r.object_id = od.id) AS record_count
      FROM object_definitions od
-     ORDER BY od.is_system DESC, od.created_at ASC`,
+     ORDER BY od.sort_order ASC, od.created_at ASC`,
   );
 
   return result.rows.map((row: Record<string, unknown>) => ({
@@ -468,4 +477,43 @@ export async function deleteObjectDefinition(id: string): Promise<void> {
   await pool.query('DELETE FROM object_definitions WHERE id = $1', [id]);
 
   logger.info({ objectId: id }, 'Object definition deleted');
+}
+
+/**
+ * Reorders object definitions by setting sort_order for each ID in the provided list.
+ * The position in the array determines the new sort_order (1-based).
+ *
+ * @throws {Error} VALIDATION_ERROR — empty or invalid list
+ */
+export async function reorderObjectDefinitions(orderedIds: string[]): Promise<void> {
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+    throwValidationError('orderedIds must be a non-empty array of object definition IDs');
+  }
+
+  // Validate all entries are non-empty strings
+  for (const id of orderedIds) {
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      throwValidationError('Each entry in orderedIds must be a non-empty string');
+    }
+  }
+
+  // Build a single UPDATE using a VALUES list for efficiency
+  const values: unknown[] = [];
+  const placeholders: string[] = [];
+  for (let i = 0; i < orderedIds.length; i++) {
+    const paramId = i * 2 + 1;
+    const paramOrder = i * 2 + 2;
+    placeholders.push(`($${paramId}::uuid, $${paramOrder}::integer)`);
+    values.push(orderedIds[i], i + 1);
+  }
+
+  await pool.query(
+    `UPDATE object_definitions AS od
+     SET sort_order = v.new_order, updated_at = NOW()
+     FROM (VALUES ${placeholders.join(', ')}) AS v(id, new_order)
+     WHERE od.id = v.id`,
+    values,
+  );
+
+  logger.info({ count: orderedIds.length }, 'Object definitions reordered');
 }

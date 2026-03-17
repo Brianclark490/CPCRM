@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useUser, useDescope, useSession } from '@descope/react-sdk';
 import { sessionHistory } from '../store/sessionHistory.js';
@@ -9,6 +9,7 @@ interface AppShellProps {
 }
 
 interface ObjectDefinitionNavItem {
+  id: string;
   apiName: string;
   pluralLabel: string;
   icon?: string;
@@ -61,6 +62,9 @@ export function AppShell({ children }: AppShellProps) {
   const navigate = useNavigate();
 
   const [objectNavItems, setObjectNavItems] = useState<ObjectDefinitionNavItem[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const dragCounterRef = useRef(0);
 
   // Fetch object definitions for dynamic tab bar
   useEffect(() => {
@@ -77,6 +81,7 @@ export function AppShell({ children }: AppShellProps) {
         if (cancelled || !response.ok) return;
 
         const objects = (await response.json()) as Array<{
+          id: string;
           apiName: string;
           pluralLabel: string;
           icon?: string;
@@ -85,6 +90,7 @@ export function AppShell({ children }: AppShellProps) {
         if (!cancelled) {
           setObjectNavItems(
             objects.map((o) => ({
+              id: o.id,
               apiName: o.apiName,
               pluralLabel: o.pluralLabel,
               icon: o.icon,
@@ -102,6 +108,87 @@ export function AppShell({ children }: AppShellProps) {
       cancelled = true;
     };
   }, [sessionToken]);
+
+  const persistOrder = useCallback(
+    async (items: ObjectDefinitionNavItem[]) => {
+      if (!sessionToken) return;
+      try {
+        await fetch('/api/admin/objects/reorder', {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ orderedIds: items.map((item) => item.id) }),
+        });
+      } catch {
+        // Reorder persist is best-effort
+      }
+    },
+    [sessionToken],
+  );
+
+  const handleDragStart = useCallback((index: number, e: React.DragEvent) => {
+    setDragIndex(index);
+    dragCounterRef.current = 0;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  }, []);
+
+  const handleDragEnter = useCallback(
+    (index: number, e: React.DragEvent) => {
+      e.preventDefault();
+      if (dragIndex === null || index === dragIndex) return;
+      dragCounterRef.current += 1;
+      setDragOverIndex(index);
+    },
+    [dragIndex],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDragLeave = useCallback(
+    (index: number) => {
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current <= 0 && dragOverIndex === index) {
+        dragCounterRef.current = 0;
+        setDragOverIndex(null);
+      }
+    },
+    [dragOverIndex],
+  );
+
+  const handleDrop = useCallback(
+    (targetIndex: number, e: React.DragEvent) => {
+      e.preventDefault();
+      if (dragIndex === null || dragIndex === targetIndex) {
+        setDragIndex(null);
+        setDragOverIndex(null);
+        return;
+      }
+
+      setObjectNavItems((prev) => {
+        const updated = [...prev];
+        const [moved] = updated.splice(dragIndex, 1);
+        updated.splice(targetIndex, 0, moved);
+        void persistOrder(updated);
+        return updated;
+      });
+
+      setDragIndex(null);
+      setDragOverIndex(null);
+    },
+    [dragIndex, persistOrder],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDragIndex(null);
+    setDragOverIndex(null);
+    dragCounterRef.current = 0;
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -172,12 +259,26 @@ export function AppShell({ children }: AppShellProps) {
 
       <nav aria-label="Object navigation" className={styles.tabBar}>
         <div className={styles.tabList}>
-          {objectNavItems.map(({ apiName, pluralLabel, icon }) => (
+          {objectNavItems.map(({ apiName, pluralLabel, icon }, index) => (
             <NavLink
               key={apiName}
               to={`/objects/${apiName}`}
+              draggable
+              onDragStart={(e) => handleDragStart(index, e)}
+              onDragEnter={(e) => handleDragEnter(index, e)}
+              onDragOver={handleDragOver}
+              onDragLeave={() => handleDragLeave(index)}
+              onDrop={(e) => handleDrop(index, e)}
+              onDragEnd={handleDragEnd}
               className={({ isActive }) =>
-                `${styles.tab} ${isActive ? styles.tabActive : ''}`
+                [
+                  styles.tab,
+                  isActive ? styles.tabActive : '',
+                  dragIndex === index ? styles.tabDragging : '',
+                  dragOverIndex === index ? styles.tabDragOver : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')
               }
             >
               {icon && (
