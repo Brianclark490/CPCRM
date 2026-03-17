@@ -27,6 +27,16 @@ interface GateFailureModalProps {
   loading?: boolean;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildInitialValues(failures: GateFailure[]): Record<string, unknown> {
+  const initial: Record<string, unknown> = {};
+  for (const failure of failures) {
+    initial[failure.field] = failure.currentValue ?? '';
+  }
+  return initial;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function GateFailureModal({
@@ -36,25 +46,16 @@ export function GateFailureModal({
   onCancel,
   loading = false,
 }: GateFailureModalProps) {
-  const [values, setValues] = useState<Record<string, unknown>>(() => {
-    const initial: Record<string, unknown> = {};
-    for (const failure of failures) {
-      initial[failure.field] = failure.currentValue ?? '';
-    }
-    return initial;
-  });
-
+  const [values, setValues] = useState<Record<string, unknown>>(() => buildInitialValues(failures));
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
 
   // Reset values when failures change (e.g. still-failing gates after retry)
-  useEffect(() => {
-    const updated: Record<string, unknown> = {};
-    for (const failure of failures) {
-      updated[failure.field] = failure.currentValue ?? '';
-    }
-    setValues(updated);
+  const [prevFailures, setPrevFailures] = useState(failures);
+  if (failures !== prevFailures) {
+    setPrevFailures(failures);
+    setValues(buildInitialValues(failures));
     setFieldErrors([]);
-  }, [failures]);
+  }
 
   const modalRef = useRef<HTMLDivElement>(null);
 
