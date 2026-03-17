@@ -12,7 +12,7 @@ import { CreateOpportunityPage } from './pages/CreateOpportunityPage.js';
 import { OpportunityDetailPage } from './pages/OpportunityDetailPage.js';
 import { CreateAccountPage } from './pages/CreateAccountPage.js';
 import { RecordListPage } from './pages/RecordListPage.js';
-import { CreateRecordPage } from './pages/CreateRecordPage.js';
+import { RecordCreatePage } from './pages/RecordCreatePage.js';
 import { RecordDetailPage } from './pages/RecordDetailPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
@@ -151,7 +151,7 @@ export function App() {
           element={
             <ProtectedRoute>
               <AppShell>
-                <CreateRecordPage />
+                <RecordCreatePage />
               </AppShell>
             </ProtectedRoute>
           }
