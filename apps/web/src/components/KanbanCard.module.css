@@ -1,0 +1,126 @@
+/* ============================================================
+   KanbanCard — Pipeline board card
+   ============================================================ */
+
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  cursor: grab;
+  transition:
+    box-shadow var(--transition-base),
+    border-color var(--transition-base),
+    transform var(--transition-base);
+  user-select: none;
+}
+
+.card:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.card:active {
+  cursor: grabbing;
+}
+
+.cardDragging {
+  opacity: 0.5;
+  box-shadow: var(--shadow-md);
+  transform: rotate(2deg);
+}
+
+.cardName {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-base);
+}
+
+.cardName:hover {
+  color: var(--color-primary-text);
+}
+
+.cardRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.cardValue {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.cardDate {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.overdueBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 600;
+  background-color: var(--color-error-subtle);
+  color: var(--color-error-text);
+  margin-left: var(--space-1);
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.ownerAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(217, 70, 239, 0.25), rgba(99, 102, 241, 0.25));
+  color: var(--color-primary-text);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.daysIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}
+
+.daysGreen {
+  background-color: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+.daysAmber {
+  background-color: var(--color-warning-subtle);
+  color: var(--color-warning);
+}
+
+.daysRed {
+  background-color: var(--color-error-subtle);
+  color: var(--color-error-text);
+}
