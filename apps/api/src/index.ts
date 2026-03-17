@@ -20,6 +20,7 @@ import { adminPipelinesRouter } from './routes/adminPipelines.js';
 import { recordsRouter } from './routes/records.js';
 import { recordRelationshipsRouter } from './routes/recordRelationships.js';
 import { adminStageGatesRouter } from './routes/adminStageGates.js';
+import { pipelineAnalyticsRouter } from './routes/pipelineAnalytics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -57,6 +58,7 @@ app.use('/api/admin/pipelines', adminPipelinesRouter);
 app.use('/api/objects/:apiName/records', recordsRouter);
 app.use('/api/records', recordRelationshipsRouter);
 app.use('/api/admin/stages/:stageId/gates', adminStageGatesRouter);
+app.use('/api/pipelines', pipelineAnalyticsRouter);
 
 if (config.env === 'production') {
   // In production the CI pipeline copies the built frontend to public/ alongside
