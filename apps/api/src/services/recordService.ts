@@ -29,6 +29,9 @@ export interface RecordRow {
   name: string;
   fieldValues: Record<string, unknown>;
   ownerId: string;
+  pipelineId?: string;
+  currentStageId?: string;
+  stageEnteredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -99,6 +102,11 @@ function rowToRecord(row: Record<string, unknown>): RecordRow {
     name: row.name as string,
     fieldValues: (row.field_values as Record<string, unknown>) ?? {},
     ownerId: row.owner_id as string,
+    pipelineId: (row.pipeline_id as string) ?? undefined,
+    currentStageId: (row.current_stage_id as string) ?? undefined,
+    stageEnteredAt: row.stage_entered_at
+      ? new Date(row.stage_entered_at as string)
+      : undefined,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };

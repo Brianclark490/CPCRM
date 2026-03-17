@@ -493,6 +493,12 @@ export interface CrmRecord {
   fieldValues: Record<string, unknown>;
   /** Descope user ID of the record owner */
   ownerId: string;
+  /** The pipeline this record follows (optional — only for pipeline-enabled objects) */
+  pipelineId?: string;
+  /** Current stage within the pipeline */
+  currentStageId?: string;
+  /** When the record entered the current stage */
+  stageEnteredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -660,4 +666,117 @@ export interface ObjectDefinitionDetail extends ObjectDefinition {
   fields: FieldDefinition[];
   relationships: RelationshipDefinition[];
   layouts: LayoutDefinition[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pipeline & Stage definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lifecycle category for a pipeline stage.
+ * - open: deal is still in progress
+ * - won: deal was successfully closed
+ * - lost: deal was lost
+ */
+export type StageType = 'open' | 'won' | 'lost';
+
+/**
+ * Gate types for stage qualification rules.
+ * - required: field must have a value
+ * - min_value: field must be >= gate_value (for number/currency fields)
+ * - specific_value: field must equal gate_value (for dropdown fields)
+ */
+export type GateType = 'required' | 'min_value' | 'specific_value';
+
+/**
+ * A PipelineDefinition describes a sales pipeline for a CRM object.
+ * For example, the "Sales Pipeline" for Opportunity with stages like
+ * Prospecting → Qualification → Proposal → Negotiation → Closed Won.
+ */
+export interface PipelineDefinition {
+  /** UUID primary key */
+  id: string;
+  /** The object this pipeline belongs to (e.g. opportunity) */
+  objectId: string;
+  /** Human-readable name (e.g. "Sales Pipeline") */
+  name: string;
+  /** Machine name, snake_case (e.g. "sales_pipeline") */
+  apiName: string;
+  description?: string;
+  /** Whether this is the default pipeline for the object */
+  isDefault: boolean;
+  /** True for built-in pipelines */
+  isSystem: boolean;
+  /** Descope user ID of the creator */
+  ownerId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * A StageDefinition describes a single stage within a pipeline.
+ * Stages are ordered by sortOrder and categorised by stageType.
+ */
+export interface StageDefinition {
+  /** UUID primary key */
+  id: string;
+  /** The pipeline this stage belongs to */
+  pipelineId: string;
+  /** Human-readable name (e.g. "Qualification") */
+  name: string;
+  /** Machine name, snake_case (e.g. "qualification") */
+  apiName: string;
+  /** Position in the pipeline (0, 1, 2...) */
+  sortOrder: number;
+  /** Lifecycle category: open, won, or lost */
+  stageType: StageType;
+  /** Colour ramp name for the board UI */
+  colour: string;
+  /** Auto-set probability (0–100) when a deal enters this stage */
+  defaultProbability?: number;
+  /** Expected number of days deals should spend in this stage */
+  expectedDays?: number;
+  description?: string;
+  createdAt: Date;
+}
+
+/**
+ * A StageGate defines a qualification rule that must be satisfied before
+ * a record can enter a particular stage.
+ */
+export interface StageGate {
+  /** UUID primary key */
+  id: string;
+  /** The stage this gate applies to */
+  stageId: string;
+  /** The field that must be validated */
+  fieldId: string;
+  /** Type of validation to perform */
+  gateType: GateType;
+  /** Value used with min_value and specific_value gate types */
+  gateValue?: string;
+  /** Custom error message shown when the gate fails */
+  errorMessage?: string;
+}
+
+/**
+ * A StageHistory entry records a single stage transition for a record.
+ * Used for pipeline analytics (velocity, conversion rates, etc.).
+ */
+export interface StageHistory {
+  /** UUID primary key */
+  id: string;
+  /** The record that moved stages */
+  recordId: string;
+  /** The pipeline the transition occurred in */
+  pipelineId: string;
+  /** The stage the record was in before (null for initial stage) */
+  fromStageId?: string;
+  /** The stage the record moved to */
+  toStageId: string;
+  /** Descope user ID of the user who made the change */
+  changedBy: string;
+  changedAt: Date;
+  /** Number of days the record spent in the previous stage */
+  daysInPreviousStage?: number;
 }
