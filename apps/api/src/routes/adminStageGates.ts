@@ -8,6 +8,7 @@ import {
   updateStageGate,
   deleteStageGate,
 } from '../services/stageGateService.js';
+import type { UpdateStageGateParams } from '../services/stageGateService.js';
 import { logger } from '../lib/logger.js';
 
 export const adminStageGatesRouter = Router({ mergeParams: true });
@@ -154,7 +155,7 @@ export async function handleUpdateGate(
     errorMessage?: string | null;
   };
 
-  const params: Record<string, unknown> = {};
+  const params: UpdateStageGateParams = {};
   if ('gate_type' in body) params.gateType = body.gate_type;
   if ('gateType' in body && !('gate_type' in body)) params.gateType = body.gateType;
   if ('gate_value' in body) params.gateValue = body.gate_value;
@@ -163,11 +164,7 @@ export async function handleUpdateGate(
   if ('errorMessage' in body && !('error_message' in body)) params.errorMessage = body.errorMessage;
 
   try {
-    const gate = await updateStageGate(stageId, id, params as {
-      gateType?: string;
-      gateValue?: string | null;
-      errorMessage?: string | null;
-    });
+    const gate = await updateStageGate(stageId, id, params);
 
     res.status(200).json(gate);
   } catch (err: unknown) {
