@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import type pg from 'pg';
 import { pool } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 
@@ -445,7 +444,9 @@ const LEAD_CONVERSION_MAPPING_SEEDS: LeadConversionMappingSeed[] = [
 // IMPLEMENTATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type QueryClient = Pick<pg.PoolClient, 'query'>;
+interface QueryClient {
+  query(text: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+}
 
 /**
  * Seeds all default CRM objects, fields, relationships, layouts, and lead
