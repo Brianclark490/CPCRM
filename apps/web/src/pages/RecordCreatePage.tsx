@@ -534,11 +534,6 @@ export function RecordCreatePage() {
             </div>
           </div>
         )}
-                  {section.fields.map((field) => renderField(field))}
-                </div>
-              </div>
-            </div>
-          ))}
 
         {/* Relationship fields */}
         {relationships.length > 0 && (
