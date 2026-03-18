@@ -16,15 +16,21 @@ vi.mock('../../lib/logger.js', () => ({
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
 
-const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, mockQuery } = vi.hoisted(() => {
+const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fakePermissions, mockQuery, mockConnect } = vi.hoisted(() => {
   const fakeObjects = new Map<string, Record<string, unknown>>();
   const fakeFields = new Map<string, Record<string, unknown>>();
   const fakeRecords = new Map<string, Record<string, unknown>>();
   const fakeRelationships = new Map<string, Record<string, unknown>>();
   const fakeLayouts = new Map<string, Record<string, unknown>>();
+  const fakePermissions = new Map<string, Record<string, unknown>>();
 
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
     const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+
+    // Transaction control statements — no-ops in the fake
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
 
     // SELECT MAX(sort_order) for new object creation
     if (s.includes('MAX(SORT_ORDER)')) {
@@ -67,6 +73,26 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, mo
           is_default: params[11], created_at: params[12], updated_at: params[13],
         };
         fakeLayouts.set(params[7] as string, row2);
+      }
+      return { rows: [] };
+    }
+
+    // INSERT INTO object_permissions (batch insert for default permissions)
+    if (s.startsWith('INSERT INTO OBJECT_PERMISSIONS')) {
+      if (params) {
+        // Each permission row has 7 params: id, object_id, role, can_create, can_read, can_update, can_delete
+        for (let i = 0; i + 6 < params.length; i += 7) {
+          const row: Record<string, unknown> = {
+            id: params[i],
+            object_id: params[i + 1],
+            role: params[i + 2],
+            can_create: params[i + 3],
+            can_read: params[i + 4],
+            can_update: params[i + 5],
+            can_delete: params[i + 6],
+          };
+          fakePermissions.set(params[i] as string, row);
+        }
       }
       return { rows: [] };
     }
@@ -135,9 +161,12 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, mo
       const id = params![0] as string;
       const existed = fakeObjects.has(id);
       fakeObjects.delete(id);
-      // Also clean up related layouts
+      // Cascade: clean up related layouts and permissions
       for (const [key, layout] of fakeLayouts.entries()) {
         if (layout.object_id === id) fakeLayouts.delete(key);
+      }
+      for (const [key, perm] of fakePermissions.entries()) {
+        if (perm.object_id === id) fakePermissions.delete(key);
       }
       return { rowCount: existed ? 1 : 0 };
     }
@@ -145,11 +174,16 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, mo
     return { rows: [] };
   });
 
-  return { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: mockQuery,
+    release: vi.fn(),
+  }));
+
+  return { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fakePermissions, mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 // ─── Validation tests ─────────────────────────────────────────────────────────
@@ -260,6 +294,7 @@ describe('createObjectDefinition', () => {
     fakeRecords.clear();
     fakeRelationships.clear();
     fakeLayouts.clear();
+    fakePermissions.clear();
   });
 
   it('returns the created object definition', async () => {
@@ -339,6 +374,44 @@ describe('createObjectDefinition', () => {
     expect(result.description).toBe('A custom project object');
     expect(result.icon).toBe('folder');
   });
+
+  it('auto-creates default permissions for all four roles', async () => {
+    const result = await createObjectDefinition(baseParams);
+
+    const objectPerms = [...fakePermissions.values()].filter(
+      (p) => p.object_id === result.id,
+    );
+    expect(objectPerms).toHaveLength(4);
+
+    const roles = objectPerms.map((p) => p.role).sort();
+    expect(roles).toEqual(['admin', 'manager', 'read_only', 'user']);
+
+    const adminPerm = objectPerms.find((p) => p.role === 'admin')!;
+    expect(adminPerm.can_create).toBe(true);
+    expect(adminPerm.can_read).toBe(true);
+    expect(adminPerm.can_update).toBe(true);
+    expect(adminPerm.can_delete).toBe(true);
+
+    const readOnlyPerm = objectPerms.find((p) => p.role === 'read_only')!;
+    expect(readOnlyPerm.can_create).toBe(false);
+    expect(readOnlyPerm.can_read).toBe(true);
+    expect(readOnlyPerm.can_update).toBe(false);
+    expect(readOnlyPerm.can_delete).toBe(false);
+  });
+
+  it('wraps creation in a transaction', async () => {
+    await createObjectDefinition(baseParams);
+
+    // Verify that pool.connect was called (transaction path)
+    expect(mockConnect).toHaveBeenCalled();
+
+    // Verify BEGIN and COMMIT were issued on the client
+    const calls = mockQuery.mock.calls.map(([sql]: [string]) =>
+      sql.replace(/\s+/g, ' ').trim().toUpperCase(),
+    );
+    expect(calls).toContain('BEGIN');
+    expect(calls).toContain('COMMIT');
+  });
 });
 
 // ─── listObjectDefinitions ───────────────────────────────────────────────────
@@ -351,6 +424,7 @@ describe('listObjectDefinitions', () => {
     fakeRecords.clear();
     fakeRelationships.clear();
     fakeLayouts.clear();
+    fakePermissions.clear();
   });
 
   it('returns empty array when no objects exist', async () => {
@@ -385,6 +459,7 @@ describe('getObjectDefinitionById', () => {
     fakeRecords.clear();
     fakeRelationships.clear();
     fakeLayouts.clear();
+    fakePermissions.clear();
   });
 
   it('returns the object with nested fields, relationships, and layouts', async () => {
@@ -420,6 +495,7 @@ describe('updateObjectDefinition', () => {
     fakeRecords.clear();
     fakeRelationships.clear();
     fakeLayouts.clear();
+    fakePermissions.clear();
   });
 
   it('returns the updated object definition', async () => {
@@ -483,6 +559,7 @@ describe('deleteObjectDefinition', () => {
     fakeRecords.clear();
     fakeRelationships.clear();
     fakeLayouts.clear();
+    fakePermissions.clear();
   });
 
   it('deletes the object successfully', async () => {
@@ -554,5 +631,28 @@ describe('deleteObjectDefinition', () => {
       message: 'Delete all records first',
       code: 'DELETE_BLOCKED',
     });
+  });
+
+  it('cascades permission deletion when object is deleted', async () => {
+    const created = await createObjectDefinition({
+      apiName: 'custom_eight',
+      label: 'Custom Eight',
+      pluralLabel: 'Custom Eights',
+      ownerId: 'user-123',
+    });
+
+    // Verify permissions were created
+    const permsBefore = [...fakePermissions.values()].filter(
+      (p) => p.object_id === created.id,
+    );
+    expect(permsBefore).toHaveLength(4);
+
+    await deleteObjectDefinition(created.id);
+
+    // Verify permissions were cleaned up (simulating ON DELETE CASCADE)
+    const permsAfter = [...fakePermissions.values()].filter(
+      (p) => p.object_id === created.id,
+    );
+    expect(permsAfter).toHaveLength(0);
   });
 });
