@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -389,7 +391,7 @@ describe('createPipeline', () => {
   });
 
   it('returns the created pipeline with terminal stages', async () => {
-    const result = await createPipeline(baseParams);
+    const result = await createPipeline(TENANT_ID, baseParams);
 
     expect(result.name).toBe('Custom Pipeline');
     expect(result.apiName).toBe('custom_pipeline');
@@ -403,13 +405,13 @@ describe('createPipeline', () => {
   });
 
   it('sets isDefault to true for first pipeline on object', async () => {
-    const result = await createPipeline(baseParams);
+    const result = await createPipeline(TENANT_ID, baseParams);
     expect(result.isDefault).toBe(true);
   });
 
   it('sets isDefault to false for subsequent pipelines on same object', async () => {
-    await createPipeline(baseParams);
-    const second = await createPipeline({
+    await createPipeline(TENANT_ID, baseParams);
+    const second = await createPipeline(TENANT_ID, {
       ...baseParams,
       name: 'Second Pipeline',
       apiName: 'second_pipeline',
@@ -419,7 +421,7 @@ describe('createPipeline', () => {
 
   it('throws VALIDATION_ERROR for empty name', async () => {
     await expect(
-      createPipeline({ ...baseParams, name: '' }),
+      createPipeline(TENANT_ID, { ...baseParams, name: '' }),
     ).rejects.toMatchObject({
       message: 'name is required',
       code: 'VALIDATION_ERROR',
@@ -428,7 +430,7 @@ describe('createPipeline', () => {
 
   it('throws VALIDATION_ERROR for invalid api_name', async () => {
     await expect(
-      createPipeline({ ...baseParams, apiName: '' }),
+      createPipeline(TENANT_ID, { ...baseParams, apiName: '' }),
     ).rejects.toMatchObject({
       message: 'api_name is required',
       code: 'VALIDATION_ERROR',
@@ -437,7 +439,7 @@ describe('createPipeline', () => {
 
   it('throws NOT_FOUND when object_id does not exist', async () => {
     await expect(
-      createPipeline({ ...baseParams, objectId: 'missing' }),
+      createPipeline(TENANT_ID, { ...baseParams, objectId: 'missing' }),
     ).rejects.toMatchObject({
       message: 'Object definition not found',
       code: 'NOT_FOUND',
@@ -445,9 +447,9 @@ describe('createPipeline', () => {
   });
 
   it('throws CONFLICT when api_name already exists', async () => {
-    await createPipeline(baseParams);
+    await createPipeline(TENANT_ID, baseParams);
     await expect(
-      createPipeline(baseParams),
+      createPipeline(TENANT_ID, baseParams),
     ).rejects.toMatchObject({
       code: 'CONFLICT',
     });
@@ -468,19 +470,19 @@ describe('listPipelines', () => {
   });
 
   it('returns empty array when no pipelines exist', async () => {
-    const result = await listPipelines();
+    const result = await listPipelines(TENANT_ID);
     expect(result).toEqual([]);
   });
 
   it('returns all pipelines', async () => {
-    await createPipeline({
+    await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
       ownerId: 'user-123',
     });
 
-    const result = await listPipelines();
+    const result = await listPipelines(TENANT_ID);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('Test Pipeline');
   });
@@ -500,14 +502,14 @@ describe('getPipelineById', () => {
   });
 
   it('returns pipeline with stages and gates', async () => {
-    const created = await createPipeline({
+    const created = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
       ownerId: 'user-123',
     });
 
-    const result = await getPipelineById(created.id);
+    const result = await getPipelineById(TENANT_ID, created.id);
 
     expect(result).not.toBeNull();
     expect(result!.name).toBe('Test Pipeline');
@@ -516,7 +518,7 @@ describe('getPipelineById', () => {
   });
 
   it('returns null when pipeline does not exist', async () => {
-    const result = await getPipelineById('missing-id');
+    const result = await getPipelineById(TENANT_ID, 'missing-id');
     expect(result).toBeNull();
   });
 });
@@ -535,20 +537,20 @@ describe('updatePipeline', () => {
   });
 
   it('returns the updated pipeline', async () => {
-    const created = await createPipeline({
+    const created = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
       ownerId: 'user-123',
     });
 
-    const result = await updatePipeline(created.id, { name: 'Updated Name' });
+    const result = await updatePipeline(TENANT_ID, created.id, { name: 'Updated Name' });
     expect(result).toBeDefined();
   });
 
   it('throws NOT_FOUND when pipeline does not exist', async () => {
     await expect(
-      updatePipeline('missing-id', { name: 'Updated' }),
+      updatePipeline(TENANT_ID, 'missing-id', { name: 'Updated' }),
     ).rejects.toMatchObject({
       message: 'Pipeline not found',
       code: 'NOT_FOUND',
@@ -556,7 +558,7 @@ describe('updatePipeline', () => {
   });
 
   it('throws VALIDATION_ERROR when name is empty', async () => {
-    const created = await createPipeline({
+    const created = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
@@ -564,21 +566,21 @@ describe('updatePipeline', () => {
     });
 
     await expect(
-      updatePipeline(created.id, { name: '' }),
+      updatePipeline(TENANT_ID, created.id, { name: '' }),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
   });
 
   it('returns unchanged pipeline when no params are provided', async () => {
-    const created = await createPipeline({
+    const created = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
       ownerId: 'user-123',
     });
 
-    const result = await updatePipeline(created.id, {});
+    const result = await updatePipeline(TENANT_ID, created.id, {});
     expect(result.name).toBe('Test Pipeline');
   });
 });
@@ -597,19 +599,19 @@ describe('deletePipeline', () => {
   });
 
   it('deletes the pipeline successfully', async () => {
-    const created = await createPipeline({
+    const created = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
       ownerId: 'user-123',
     });
 
-    await expect(deletePipeline(created.id)).resolves.toBeUndefined();
+    await expect(deletePipeline(TENANT_ID, created.id)).resolves.toBeUndefined();
   });
 
   it('throws NOT_FOUND when pipeline does not exist', async () => {
     await expect(
-      deletePipeline('missing-id'),
+      deletePipeline(TENANT_ID, 'missing-id'),
     ).rejects.toMatchObject({
       message: 'Pipeline not found',
       code: 'NOT_FOUND',
@@ -631,7 +633,7 @@ describe('deletePipeline', () => {
     });
 
     await expect(
-      deletePipeline(id),
+      deletePipeline(TENANT_ID, id),
     ).rejects.toMatchObject({
       message: 'Cannot delete system pipelines',
       code: 'DELETE_BLOCKED',
@@ -639,7 +641,7 @@ describe('deletePipeline', () => {
   });
 
   it('throws DELETE_BLOCKED when records exist using the pipeline', async () => {
-    const created = await createPipeline({
+    const created = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
@@ -657,7 +659,7 @@ describe('deletePipeline', () => {
     });
 
     await expect(
-      deletePipeline(created.id),
+      deletePipeline(TENANT_ID, created.id),
     ).rejects.toMatchObject({
       message: 'Cannot delete pipeline with existing records',
       code: 'DELETE_BLOCKED',
@@ -679,7 +681,7 @@ describe('createStage', () => {
     fakeRecords.clear();
     seedObject();
 
-    const pipeline = await createPipeline({
+    const pipeline = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
@@ -689,7 +691,7 @@ describe('createStage', () => {
   });
 
   it('creates a stage successfully', async () => {
-    const result = await createStage(pipelineId, {
+    const result = await createStage(TENANT_ID, pipelineId, {
       name: 'Discovery',
       apiName: 'discovery',
       stageType: 'open',
@@ -704,7 +706,7 @@ describe('createStage', () => {
 
   it('throws VALIDATION_ERROR for empty name', async () => {
     await expect(
-      createStage(pipelineId, {
+      createStage(TENANT_ID, pipelineId, {
         name: '',
         apiName: 'test_stage',
         stageType: 'open',
@@ -717,7 +719,7 @@ describe('createStage', () => {
 
   it('throws VALIDATION_ERROR for invalid stage_type', async () => {
     await expect(
-      createStage(pipelineId, {
+      createStage(TENANT_ID, pipelineId, {
         name: 'Test',
         apiName: 'test_stage',
         stageType: 'invalid',
@@ -730,7 +732,7 @@ describe('createStage', () => {
 
   it('throws VALIDATION_ERROR for empty colour', async () => {
     await expect(
-      createStage(pipelineId, {
+      createStage(TENANT_ID, pipelineId, {
         name: 'Test',
         apiName: 'test_stage',
         stageType: 'open',
@@ -743,7 +745,7 @@ describe('createStage', () => {
 
   it('throws NOT_FOUND when pipeline does not exist', async () => {
     await expect(
-      createStage('missing-pipe', {
+      createStage(TENANT_ID, 'missing-pipe', {
         name: 'Test',
         apiName: 'test_stage',
         stageType: 'open',
@@ -755,7 +757,7 @@ describe('createStage', () => {
   });
 
   it('throws CONFLICT when api_name already exists on pipeline', async () => {
-    await createStage(pipelineId, {
+    await createStage(TENANT_ID, pipelineId, {
       name: 'Discovery',
       apiName: 'discovery',
       stageType: 'open',
@@ -763,7 +765,7 @@ describe('createStage', () => {
     });
 
     await expect(
-      createStage(pipelineId, {
+      createStage(TENANT_ID, pipelineId, {
         name: 'Discovery 2',
         apiName: 'discovery',
         stageType: 'open',
@@ -790,7 +792,7 @@ describe('updateStage', () => {
     fakeRecords.clear();
     seedObject();
 
-    const pipeline = await createPipeline({
+    const pipeline = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
@@ -798,7 +800,7 @@ describe('updateStage', () => {
     });
     pipelineId = pipeline.id;
 
-    const stage = await createStage(pipelineId, {
+    const stage = await createStage(TENANT_ID, pipelineId, {
       name: 'Discovery',
       apiName: 'discovery',
       stageType: 'open',
@@ -808,13 +810,13 @@ describe('updateStage', () => {
   });
 
   it('returns the updated stage', async () => {
-    const result = await updateStage(pipelineId, stageId, { name: 'Updated' });
+    const result = await updateStage(TENANT_ID, pipelineId, stageId, { name: 'Updated' });
     expect(result).toBeDefined();
   });
 
   it('throws NOT_FOUND when pipeline does not exist', async () => {
     await expect(
-      updateStage('missing-pipe', stageId, { name: 'Updated' }),
+      updateStage(TENANT_ID, 'missing-pipe', stageId, { name: 'Updated' }),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
@@ -822,7 +824,7 @@ describe('updateStage', () => {
 
   it('throws NOT_FOUND when stage does not exist', async () => {
     await expect(
-      updateStage(pipelineId, 'missing-stage', { name: 'Updated' }),
+      updateStage(TENANT_ID, pipelineId, 'missing-stage', { name: 'Updated' }),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
@@ -830,7 +832,7 @@ describe('updateStage', () => {
 
   it('throws VALIDATION_ERROR for empty name', async () => {
     await expect(
-      updateStage(pipelineId, stageId, { name: '' }),
+      updateStage(TENANT_ID, pipelineId, stageId, { name: '' }),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
@@ -838,14 +840,14 @@ describe('updateStage', () => {
 
   it('throws VALIDATION_ERROR for invalid stage_type', async () => {
     await expect(
-      updateStage(pipelineId, stageId, { stageType: 'invalid' }),
+      updateStage(TENANT_ID, pipelineId, stageId, { stageType: 'invalid' }),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
   });
 
   it('returns unchanged stage when no params are provided', async () => {
-    const result = await updateStage(pipelineId, stageId, {});
+    const result = await updateStage(TENANT_ID, pipelineId, stageId, {});
     expect(result.name).toBe('Discovery');
   });
 });
@@ -864,7 +866,7 @@ describe('deleteStage', () => {
     fakeRecords.clear();
     seedObject();
 
-    const pipeline = await createPipeline({
+    const pipeline = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
@@ -874,19 +876,19 @@ describe('deleteStage', () => {
   });
 
   it('deletes a stage successfully', async () => {
-    const stage = await createStage(pipelineId, {
+    const stage = await createStage(TENANT_ID, pipelineId, {
       name: 'Discovery',
       apiName: 'discovery',
       stageType: 'open',
       colour: 'blue',
     });
 
-    await expect(deleteStage(pipelineId, stage.id)).resolves.toBeUndefined();
+    await expect(deleteStage(TENANT_ID, pipelineId, stage.id)).resolves.toBeUndefined();
   });
 
   it('throws NOT_FOUND when pipeline does not exist', async () => {
     await expect(
-      deleteStage('missing-pipe', 'some-stage'),
+      deleteStage(TENANT_ID, 'missing-pipe', 'some-stage'),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
@@ -894,14 +896,14 @@ describe('deleteStage', () => {
 
   it('throws NOT_FOUND when stage does not exist', async () => {
     await expect(
-      deleteStage(pipelineId, 'missing-stage'),
+      deleteStage(TENANT_ID, pipelineId, 'missing-stage'),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
   });
 
   it('throws DELETE_BLOCKED when records are in the stage', async () => {
-    const stage = await createStage(pipelineId, {
+    const stage = await createStage(TENANT_ID, pipelineId, {
       name: 'Discovery',
       apiName: 'discovery',
       stageType: 'open',
@@ -919,7 +921,7 @@ describe('deleteStage', () => {
     });
 
     await expect(
-      deleteStage(pipelineId, stage.id),
+      deleteStage(TENANT_ID, pipelineId, stage.id),
     ).rejects.toMatchObject({
       message: 'Cannot delete stage with existing records',
       code: 'DELETE_BLOCKED',
@@ -927,14 +929,13 @@ describe('deleteStage', () => {
   });
 
   it('throws DELETE_BLOCKED when deleting the last won stage', async () => {
-    // Pipeline has one won stage (Closed Won) from auto-creation
     const wonStages = [...fakeStages.values()].filter(
       (s) => s.pipeline_id === pipelineId && s.stage_type === 'won',
     );
     expect(wonStages).toHaveLength(1);
 
     await expect(
-      deleteStage(pipelineId, wonStages[0].id as string),
+      deleteStage(TENANT_ID, pipelineId, wonStages[0].id as string),
     ).rejects.toMatchObject({
       message: 'Cannot delete the last won stage',
       code: 'DELETE_BLOCKED',
@@ -948,7 +949,7 @@ describe('deleteStage', () => {
     expect(lostStages).toHaveLength(1);
 
     await expect(
-      deleteStage(pipelineId, lostStages[0].id as string),
+      deleteStage(TENANT_ID, pipelineId, lostStages[0].id as string),
     ).rejects.toMatchObject({
       message: 'Cannot delete the last lost stage',
       code: 'DELETE_BLOCKED',
@@ -956,7 +957,6 @@ describe('deleteStage', () => {
   });
 
   it('throws DELETE_BLOCKED when deleting from system pipeline', async () => {
-    // Create a system pipeline manually
     const sysPipeId = 'sys-pipe-id';
     fakePipelines.set(sysPipeId, {
       id: sysPipeId,
@@ -982,7 +982,7 @@ describe('deleteStage', () => {
     });
 
     await expect(
-      deleteStage(sysPipeId, sysStageId),
+      deleteStage(TENANT_ID, sysPipeId, sysStageId),
     ).rejects.toMatchObject({
       message: 'Cannot delete stages from system pipelines',
       code: 'DELETE_BLOCKED',
@@ -1004,7 +1004,7 @@ describe('reorderStages', () => {
     fakeRecords.clear();
     seedObject();
 
-    const pipeline = await createPipeline({
+    const pipeline = await createPipeline(TENANT_ID, {
       name: 'Test Pipeline',
       apiName: 'test_pipeline',
       objectId: 'obj-1',
@@ -1014,7 +1014,7 @@ describe('reorderStages', () => {
   });
 
   it('reorders stages successfully', async () => {
-    const stage = await createStage(pipelineId, {
+    const stage = await createStage(TENANT_ID, pipelineId, {
       name: 'Discovery',
       apiName: 'discovery',
       stageType: 'open',
@@ -1025,7 +1025,7 @@ describe('reorderStages', () => {
     const wonStage = allStages.find((s) => s.stage_type === 'won');
     const lostStage = allStages.find((s) => s.stage_type === 'lost');
 
-    const result = await reorderStages(pipelineId, [
+    const result = await reorderStages(TENANT_ID, pipelineId, [
       stage.id,
       wonStage!.id as string,
       lostStage!.id as string,
@@ -1036,7 +1036,7 @@ describe('reorderStages', () => {
 
   it('throws NOT_FOUND when pipeline does not exist', async () => {
     await expect(
-      reorderStages('missing-pipe', ['s1']),
+      reorderStages(TENANT_ID, 'missing-pipe', ['s1']),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
@@ -1044,7 +1044,7 @@ describe('reorderStages', () => {
 
   it('throws VALIDATION_ERROR for empty stage_ids', async () => {
     await expect(
-      reorderStages(pipelineId, []),
+      reorderStages(TENANT_ID, pipelineId, []),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
@@ -1052,14 +1052,14 @@ describe('reorderStages', () => {
 
   it('throws VALIDATION_ERROR when stage_id does not belong to pipeline', async () => {
     await expect(
-      reorderStages(pipelineId, ['not-a-stage']),
+      reorderStages(TENANT_ID, pipelineId, ['not-a-stage']),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
   });
 
   it('throws VALIDATION_ERROR when won/lost stages are not at the end', async () => {
-    const stage = await createStage(pipelineId, {
+    const stage = await createStage(TENANT_ID, pipelineId, {
       name: 'Discovery',
       apiName: 'discovery',
       stageType: 'open',
@@ -1072,7 +1072,7 @@ describe('reorderStages', () => {
 
     // Try to put won before open
     await expect(
-      reorderStages(pipelineId, [
+      reorderStages(TENANT_ID, pipelineId, [
         wonStage!.id as string,
         stage.id,
         lostStage!.id as string,
