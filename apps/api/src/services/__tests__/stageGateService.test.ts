@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -221,7 +223,7 @@ describe('listStageGates', () => {
     seedField('field-1', 'obj-1', { label: 'Value', field_type: 'currency' });
     seedGate('gate-1', 'stage-1', 'field-1', { error_message: 'Value is required' });
 
-    const gates = await listStageGates('stage-1');
+    const gates = await listStageGates(TENANT_ID, 'stage-1');
 
     expect(gates).toHaveLength(1);
     expect(gates[0]).toEqual({
@@ -238,12 +240,12 @@ describe('listStageGates', () => {
     seedPipeline('pipe-1', 'obj-1');
     seedStage('stage-1', 'pipe-1');
 
-    const gates = await listStageGates('stage-1');
+    const gates = await listStageGates(TENANT_ID, 'stage-1');
     expect(gates).toHaveLength(0);
   });
 
   it('throws NOT_FOUND when stage does not exist', async () => {
-    await expect(listStageGates('nonexistent')).rejects.toThrow('Stage not found');
+    await expect(listStageGates(TENANT_ID, 'nonexistent')).rejects.toThrow('Stage not found');
   });
 });
 
@@ -255,7 +257,7 @@ describe('createStageGate', () => {
     seedStage('stage-1', 'pipe-1');
     seedField('field-1', 'obj-1', { label: 'Value', field_type: 'currency' });
 
-    const gate = await createStageGate('stage-1', {
+    const gate = await createStageGate(TENANT_ID, 'stage-1', {
       fieldId: 'field-1',
       gateType: 'required',
       errorMessage: 'Deal value is required',
@@ -275,7 +277,7 @@ describe('createStageGate', () => {
     seedStage('stage-1', 'pipe-1');
     seedField('field-1', 'obj-1', { label: 'Amount', field_type: 'number' });
 
-    const gate = await createStageGate('stage-1', {
+    const gate = await createStageGate(TENANT_ID, 'stage-1', {
       fieldId: 'field-1',
       gateType: 'min_value',
       gateValue: '100',
@@ -290,7 +292,7 @@ describe('createStageGate', () => {
     seedStage('stage-1', 'pipe-1');
     seedField('field-1', 'obj-1', { label: 'Deal Value', field_type: 'currency' });
 
-    const gate = await createStageGate('stage-1', {
+    const gate = await createStageGate(TENANT_ID, 'stage-1', {
       fieldId: 'field-1',
       gateType: 'min_value',
       gateValue: '0',
@@ -308,7 +310,7 @@ describe('createStageGate', () => {
       options: { choices: ['active', 'inactive'] },
     });
 
-    const gate = await createStageGate('stage-1', {
+    const gate = await createStageGate(TENANT_ID, 'stage-1', {
       fieldId: 'field-1',
       gateType: 'specific_value',
       gateValue: 'active',
@@ -323,7 +325,7 @@ describe('createStageGate', () => {
     seedStage('stage-1', 'pipe-1');
 
     await expect(
-      createStageGate('stage-1', { fieldId: '', gateType: 'required' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: '', gateType: 'required' }),
     ).rejects.toThrow('field_id is required');
   });
 
@@ -332,7 +334,7 @@ describe('createStageGate', () => {
     seedStage('stage-1', 'pipe-1');
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'field-1', gateType: '' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'field-1', gateType: '' }),
     ).rejects.toThrow('gate_type is required');
   });
 
@@ -341,13 +343,13 @@ describe('createStageGate', () => {
     seedStage('stage-1', 'pipe-1');
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'field-1', gateType: 'invalid' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'field-1', gateType: 'invalid' }),
     ).rejects.toThrow('gate_type must be one of');
   });
 
   it('throws NOT_FOUND when stage does not exist', async () => {
     await expect(
-      createStageGate('nonexistent', { fieldId: 'field-1', gateType: 'required' }),
+      createStageGate(TENANT_ID, 'nonexistent', { fieldId: 'field-1', gateType: 'required' }),
     ).rejects.toThrow('Stage not found');
   });
 
@@ -356,7 +358,7 @@ describe('createStageGate', () => {
     seedStage('stage-1', 'pipe-1');
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'nonexistent', gateType: 'required' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'nonexistent', gateType: 'required' }),
     ).rejects.toThrow('Field not found');
   });
 
@@ -366,7 +368,7 @@ describe('createStageGate', () => {
     seedField('field-1', 'obj-OTHER', { label: 'Other Field' });
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'field-1', gateType: 'required' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'field-1', gateType: 'required' }),
     ).rejects.toThrow('Field does not belong to the same object as the pipeline');
   });
 
@@ -377,7 +379,7 @@ describe('createStageGate', () => {
     seedGate('gate-1', 'stage-1', 'field-1');
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'field-1', gateType: 'required' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'field-1', gateType: 'required' }),
     ).rejects.toThrow('A gate already exists for this field on this stage');
   });
 
@@ -387,7 +389,7 @@ describe('createStageGate', () => {
     seedField('field-1', 'obj-1', { label: 'Name', field_type: 'text' });
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'field-1', gateType: 'min_value', gateValue: '100' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'field-1', gateType: 'min_value', gateValue: '100' }),
     ).rejects.toThrow('min_value gate type requires a number or currency field');
   });
 
@@ -397,7 +399,7 @@ describe('createStageGate', () => {
     seedField('field-1', 'obj-1', { label: 'Amount', field_type: 'number' });
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'field-1', gateType: 'min_value', gateValue: 'abc' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'field-1', gateType: 'min_value', gateValue: 'abc' }),
     ).rejects.toThrow('gate_value must be a number for min_value gate type');
   });
 
@@ -407,7 +409,7 @@ describe('createStageGate', () => {
     seedField('field-1', 'obj-1', { label: 'Amount', field_type: 'number' });
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'field-1', gateType: 'min_value' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'field-1', gateType: 'min_value' }),
     ).rejects.toThrow('gate_value is required for min_value gate type');
   });
 
@@ -417,7 +419,7 @@ describe('createStageGate', () => {
     seedField('field-1', 'obj-1', { label: 'Name', field_type: 'text' });
 
     await expect(
-      createStageGate('stage-1', { fieldId: 'field-1', gateType: 'specific_value', gateValue: 'test' }),
+      createStageGate(TENANT_ID, 'stage-1', { fieldId: 'field-1', gateType: 'specific_value', gateValue: 'test' }),
     ).rejects.toThrow('specific_value gate type requires a dropdown field');
   });
 
@@ -431,7 +433,7 @@ describe('createStageGate', () => {
     });
 
     await expect(
-      createStageGate('stage-1', {
+      createStageGate(TENANT_ID, 'stage-1', {
         fieldId: 'field-1',
         gateType: 'specific_value',
         gateValue: 'unknown',
@@ -449,7 +451,7 @@ describe('updateStageGate', () => {
     seedField('field-1', 'obj-1', { label: 'Value', field_type: 'currency' });
     seedGate('gate-1', 'stage-1', 'field-1');
 
-    const gate = await updateStageGate('stage-1', 'gate-1', {
+    const gate = await updateStageGate(TENANT_ID, 'stage-1', 'gate-1', {
       errorMessage: 'Updated message',
     });
 
@@ -463,7 +465,7 @@ describe('updateStageGate', () => {
     seedField('field-1', 'obj-1', { label: 'Amount', field_type: 'number' });
     seedGate('gate-1', 'stage-1', 'field-1');
 
-    const gate = await updateStageGate('stage-1', 'gate-1', {
+    const gate = await updateStageGate(TENANT_ID, 'stage-1', 'gate-1', {
       gateType: 'min_value',
       gateValue: '50',
     });
@@ -478,14 +480,14 @@ describe('updateStageGate', () => {
     seedField('field-1', 'obj-1', { label: 'Value', field_type: 'currency' });
     seedGate('gate-1', 'stage-1', 'field-1', { error_message: 'Original' });
 
-    const gate = await updateStageGate('stage-1', 'gate-1', {});
+    const gate = await updateStageGate(TENANT_ID, 'stage-1', 'gate-1', {});
 
     expect(gate.id).toBe('gate-1');
   });
 
   it('throws NOT_FOUND when stage does not exist', async () => {
     await expect(
-      updateStageGate('nonexistent', 'gate-1', { errorMessage: 'test' }),
+      updateStageGate(TENANT_ID, 'nonexistent', 'gate-1', { errorMessage: 'test' }),
     ).rejects.toThrow('Stage not found');
   });
 
@@ -494,7 +496,7 @@ describe('updateStageGate', () => {
     seedStage('stage-1', 'pipe-1');
 
     await expect(
-      updateStageGate('stage-1', 'nonexistent', { errorMessage: 'test' }),
+      updateStageGate(TENANT_ID, 'stage-1', 'nonexistent', { errorMessage: 'test' }),
     ).rejects.toThrow('Stage gate not found');
   });
 
@@ -505,7 +507,7 @@ describe('updateStageGate', () => {
     seedGate('gate-1', 'stage-1', 'field-1');
 
     await expect(
-      updateStageGate('stage-1', 'gate-1', { gateType: 'invalid' }),
+      updateStageGate(TENANT_ID, 'stage-1', 'gate-1', { gateType: 'invalid' }),
     ).rejects.toThrow('gate_type must be one of');
   });
 
@@ -516,7 +518,7 @@ describe('updateStageGate', () => {
     seedGate('gate-1', 'stage-1', 'field-1');
 
     await expect(
-      updateStageGate('stage-1', 'gate-1', { gateType: 'min_value', gateValue: '100' }),
+      updateStageGate(TENANT_ID, 'stage-1', 'gate-1', { gateType: 'min_value', gateValue: '100' }),
     ).rejects.toThrow('min_value gate type requires a number or currency field');
   });
 });
@@ -530,19 +532,19 @@ describe('deleteStageGate', () => {
     seedField('field-1', 'obj-1');
     seedGate('gate-1', 'stage-1', 'field-1');
 
-    await deleteStageGate('stage-1', 'gate-1');
+    await deleteStageGate(TENANT_ID, 'stage-1', 'gate-1');
 
     expect(fakeGates.has('gate-1')).toBe(false);
   });
 
   it('throws NOT_FOUND when stage does not exist', async () => {
-    await expect(deleteStageGate('nonexistent', 'gate-1')).rejects.toThrow('Stage not found');
+    await expect(deleteStageGate(TENANT_ID, 'nonexistent', 'gate-1')).rejects.toThrow('Stage not found');
   });
 
   it('throws NOT_FOUND when gate does not exist', async () => {
     seedPipeline('pipe-1', 'obj-1');
     seedStage('stage-1', 'pipe-1');
 
-    await expect(deleteStageGate('stage-1', 'nonexistent')).rejects.toThrow('Stage gate not found');
+    await expect(deleteStageGate(TENANT_ID, 'stage-1', 'nonexistent')).rejects.toThrow('Stage gate not found');
   });
 });
