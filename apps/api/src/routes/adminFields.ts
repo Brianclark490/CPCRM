@@ -63,7 +63,7 @@ export async function handleCreateField(
   const defaultValue = body.default_value ?? body.defaultValue;
 
   try {
-    const field = await createFieldDefinition(objectId, {
+    const field = await createFieldDefinition(req.user!.tenantId!, objectId, {
       apiName,
       label: body.label ?? '',
       fieldType,
@@ -115,7 +115,7 @@ export async function handleListFields(
   const { objectId } = req.params as { objectId: string };
 
   try {
-    const fields = await listFieldDefinitions(objectId);
+    const fields = await listFieldDefinitions(req.user!.tenantId!, objectId);
     res.status(200).json(fields);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -180,7 +180,7 @@ export async function handleUpdateField(
   if ('options' in body) params.options = body.options;
 
   try {
-    const updated = await updateFieldDefinition(objectId, id, params);
+    const updated = await updateFieldDefinition(req.user!.tenantId!, objectId, id, params);
     res.status(200).json(updated);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -221,7 +221,7 @@ export async function handleDeleteField(
   const { objectId, id } = req.params as { objectId: string; id: string };
 
   try {
-    await deleteFieldDefinition(objectId, id);
+    await deleteFieldDefinition(req.user!.tenantId!, objectId, id);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -271,7 +271,7 @@ export async function handleReorderFields(
   const fieldIds = body.field_ids ?? body.fieldIds ?? [];
 
   try {
-    const fields = await reorderFieldDefinitions(objectId, fieldIds);
+    const fields = await reorderFieldDefinitions(req.user!.tenantId!, objectId, fieldIds);
     res.status(200).json(fields);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;

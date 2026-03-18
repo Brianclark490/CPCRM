@@ -11,6 +11,7 @@ import {
   reorderObjectDefinitions,
 } from '../services/objectDefinitionService.js';
 import type { UpdateObjectDefinitionParams } from '../services/objectDefinitionService.js';
+import { requireTenant } from '../middleware/tenant.js';
 import { adminFieldsRouter } from './adminFields.js';
 import { adminObjectRelationshipsRouter } from './adminRelationships.js';
 import { adminLayoutsRouter } from './adminLayouts.js';
@@ -62,7 +63,7 @@ export async function handleCreateObject(
   const pluralLabel = body.pluralLabel ?? body.plural_label ?? '';
 
   try {
-    const objectDef = await createObjectDefinition({
+    const objectDef = await createObjectDefinition(req.user!.tenantId!, {
       apiName,
       label: body.label ?? '',
       pluralLabel,
@@ -108,7 +109,7 @@ export async function handleListObjects(
   res: Response,
 ): Promise<void> {
   try {
-    const objects = await listObjectDefinitions();
+    const objects = await listObjectDefinitions(req.user!.tenantId!);
     res.status(200).json(objects);
   } catch (err: unknown) {
     logger.error({ err }, 'Unexpected error listing object definitions');
@@ -137,7 +138,7 @@ export async function handleGetObject(
   const { id } = req.params as { id: string };
 
   try {
-    const objectDef = await getObjectDefinitionById(id);
+    const objectDef = await getObjectDefinitionById(req.user!.tenantId!, id);
 
     if (!objectDef) {
       res.status(404).json({ error: 'Object definition not found', code: 'NOT_FOUND' });
@@ -197,7 +198,7 @@ export async function handleUpdateObject(
   if ('icon' in body) params.icon = body.icon;
 
   try {
-    const updated = await updateObjectDefinition(id, params);
+    const updated = await updateObjectDefinition(req.user!.tenantId!, id, params);
     res.status(200).json(updated);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -239,7 +240,7 @@ export async function handleDeleteObject(
   const { id } = req.params as { id: string };
 
   try {
-    await deleteObjectDefinition(id);
+    await deleteObjectDefinition(req.user!.tenantId!, id);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -283,7 +284,7 @@ export async function handleReorderObjects(
   const body = req.body as { orderedIds?: string[] };
 
   try {
-    await reorderObjectDefinitions(body.orderedIds ?? []);
+    await reorderObjectDefinitions(req.user!.tenantId!, body.orderedIds ?? []);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -298,12 +299,12 @@ export async function handleReorderObjects(
   }
 }
 
-adminObjectsRouter.put('/reorder', requireAuth, handleReorderObjects);
-adminObjectsRouter.post('/', requireAuth, handleCreateObject);
-adminObjectsRouter.get('/', requireAuth, handleListObjects);
-adminObjectsRouter.get('/:id', requireAuth, handleGetObject);
-adminObjectsRouter.put('/:id', requireAuth, handleUpdateObject);
-adminObjectsRouter.delete('/:id', requireAuth, handleDeleteObject);
+adminObjectsRouter.put('/reorder', requireAuth, requireTenant, handleReorderObjects);
+adminObjectsRouter.post('/', requireAuth, requireTenant, handleCreateObject);
+adminObjectsRouter.get('/', requireAuth, requireTenant, handleListObjects);
+adminObjectsRouter.get('/:id', requireAuth, requireTenant, handleGetObject);
+adminObjectsRouter.put('/:id', requireAuth, requireTenant, handleUpdateObject);
+adminObjectsRouter.delete('/:id', requireAuth, requireTenant, handleDeleteObject);
 
 // Nested field definition routes: /admin/objects/:objectId/fields
 adminObjectsRouter.use('/:objectId/fields', adminFieldsRouter);
