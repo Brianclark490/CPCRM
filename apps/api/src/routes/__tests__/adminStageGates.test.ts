@@ -87,7 +87,7 @@ describe('GET /admin/stages/:stageId/gates', () => {
 
     await handleListGates(req, res);
 
-    expect(mockListStageGates).toHaveBeenCalledWith('stage-1');
+    expect(mockListStageGates).toHaveBeenCalledWith('tenant-abc', 'stage-1');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith([sampleGate]);
   });
@@ -137,7 +137,7 @@ describe('POST /admin/stages/:stageId/gates', () => {
 
     await handleCreateGate(req, res);
 
-    expect(mockCreateStageGate).toHaveBeenCalledWith('stage-1', {
+    expect(mockCreateStageGate).toHaveBeenCalledWith('tenant-abc', 'stage-1', {
       fieldId: 'field-1',
       gateType: 'required',
       gateValue: null,
@@ -159,7 +159,7 @@ describe('POST /admin/stages/:stageId/gates', () => {
 
     await handleCreateGate(req, res);
 
-    expect(mockCreateStageGate).toHaveBeenCalledWith('stage-1', {
+    expect(mockCreateStageGate).toHaveBeenCalledWith('tenant-abc', 'stage-1', {
       fieldId: 'field-1',
       gateType: 'required',
       gateValue: null,
@@ -239,6 +239,7 @@ describe('PUT /admin/stages/:stageId/gates/:id', () => {
     await handleUpdateGate(req, res);
 
     expect(mockUpdateStageGate).toHaveBeenCalledWith(
+      'tenant-abc',
       'stage-1',
       'gate-uuid',
       expect.objectContaining({ errorMessage: 'Updated message' }),
@@ -260,6 +261,7 @@ describe('PUT /admin/stages/:stageId/gates/:id', () => {
     await handleUpdateGate(req, res);
 
     expect(mockUpdateStageGate).toHaveBeenCalledWith(
+      'tenant-abc',
       'stage-1',
       'gate-uuid',
       expect.objectContaining({ gateType: 'min_value', gateValue: '100' }),
