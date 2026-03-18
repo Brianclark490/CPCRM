@@ -15,6 +15,7 @@ const mockListObjectDefinitions = vi.fn();
 const mockGetObjectDefinitionById = vi.fn();
 const mockUpdateObjectDefinition = vi.fn();
 const mockDeleteObjectDefinition = vi.fn();
+const mockReorderObjectDefinitions = vi.fn();
 
 vi.mock('../../services/objectDefinitionService.js', () => ({
   createObjectDefinition: mockCreateObjectDefinition,
@@ -22,6 +23,7 @@ vi.mock('../../services/objectDefinitionService.js', () => ({
   getObjectDefinitionById: mockGetObjectDefinitionById,
   updateObjectDefinition: mockUpdateObjectDefinition,
   deleteObjectDefinition: mockDeleteObjectDefinition,
+  reorderObjectDefinitions: mockReorderObjectDefinitions,
 }));
 
 // ─── Mock nested field routes to prevent transitive db/client import ─────────
@@ -36,6 +38,12 @@ vi.mock('../adminRelationships.js', () => ({
   adminObjectRelationshipsRouter: vi.fn((_req: unknown, _res: unknown, next: NextFunction) => next()),
 }));
 
+// ─── Mock nested layout routes to prevent transitive db/client import ────────
+
+vi.mock('../adminLayouts.js', () => ({
+  adminLayoutsRouter: vi.fn((_req: unknown, _res: unknown, next: NextFunction) => next()),
+}));
+
 // ─── Mock logger so tests stay silent ────────────────────────────────────────
 
 vi.mock('../../lib/logger.js', () => ({
@@ -48,6 +56,7 @@ const {
   handleGetObject,
   handleUpdateObject,
   handleDeleteObject,
+  handleReorderObjects,
 } = await import('../adminObjects.js');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -458,6 +467,73 @@ describe('DELETE /admin/objects/:id', () => {
     const res = mockRes();
 
     await handleDeleteObject(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'An unexpected error occurred' });
+  });
+});
+
+// ─── Tests: PUT /admin/objects/reorder ──────────────────────────────────────
+
+describe('PUT /admin/objects/reorder', () => {
+  beforeEach(() => {
+    mockReorderObjectDefinitions.mockReset();
+  });
+
+  it('returns 204 on successful reorder', async () => {
+    mockReorderObjectDefinitions.mockResolvedValue(undefined);
+
+    const req = mockReq({ orderedIds: ['id-1', 'id-2', 'id-3'] });
+    const res = mockRes();
+
+    await handleReorderObjects(req, res);
+
+    expect(mockReorderObjectDefinitions).toHaveBeenCalledWith(['id-1', 'id-2', 'id-3']);
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it('returns 400 when the service throws a VALIDATION_ERROR', async () => {
+    const validationErr = Object.assign(
+      new Error('orderedIds must be a non-empty array of object definition IDs'),
+      { code: 'VALIDATION_ERROR' },
+    );
+    mockReorderObjectDefinitions.mockRejectedValue(validationErr);
+
+    const req = mockReq({ orderedIds: [] });
+    const res = mockRes();
+
+    await handleReorderObjects(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+    );
+  });
+
+  it('passes empty array when orderedIds is missing from body', async () => {
+    const validationErr = Object.assign(
+      new Error('orderedIds must be a non-empty array of object definition IDs'),
+      { code: 'VALIDATION_ERROR' },
+    );
+    mockReorderObjectDefinitions.mockRejectedValue(validationErr);
+
+    const req = mockReq({});
+    const res = mockRes();
+
+    await handleReorderObjects(req, res);
+
+    expect(mockReorderObjectDefinitions).toHaveBeenCalledWith([]);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('returns 500 when the service throws an unexpected error', async () => {
+    mockReorderObjectDefinitions.mockRejectedValue(new Error('Database error'));
+
+    const req = mockReq({ orderedIds: ['id-1'] });
+    const res = mockRes();
+
+    await handleReorderObjects(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'An unexpected error occurred' });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AppShell } from '../components/AppShell.js';
@@ -33,10 +33,10 @@ vi.mock('../store/sessionHistory.js', () => ({
 const { useUser, useDescope, useSession } = await import('@descope/react-sdk');
 const { sessionHistory } = await import('../store/sessionHistory.js');
 
-function mockFetchObjects(objects: Array<{ apiName: string; pluralLabel: string; icon?: string }> = []) {
+function mockFetchObjects(objects: Array<{ id?: string; apiName: string; pluralLabel: string; icon?: string }> = []) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
-    json: async () => objects,
+    json: async () => objects.map((o, i) => ({ id: o.id ?? `obj-${i}`, ...o })),
   } as Response));
 }
 
@@ -184,5 +184,70 @@ describe('AppShell', () => {
     expect(mockLogout).toHaveBeenCalled();
     expect(sessionHistory.clearAuthenticated).toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('/login');
+  });
+
+  it('makes object tabs draggable', async () => {
+    mockFetchObjects([
+      { id: 'id-1', apiName: 'account', pluralLabel: 'Accounts', icon: '🏢' },
+      { id: 'id-2', apiName: 'opportunity', pluralLabel: 'Opportunities' },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /Accounts/ })).toBeInTheDocument();
+    });
+
+    const accountTab = screen.getByRole('link', { name: /Accounts/ });
+    expect(accountTab).toHaveAttribute('draggable', 'true');
+  });
+
+  it('calls reorder API after drag and drop', async () => {
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 'id-1', apiName: 'account', pluralLabel: 'Accounts', icon: '🏢' },
+          { id: 'id-2', apiName: 'opportunity', pluralLabel: 'Opportunities' },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    vi.stubGlobal('fetch', fetchSpy);
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /Accounts/ })).toBeInTheDocument();
+    });
+
+    const accountTab = screen.getByRole('link', { name: /Accounts/ });
+    const opportunityTab = screen.getByRole('link', { name: /Opportunities/ });
+
+    // Use fireEvent which works with React's synthetic event system
+    fireEvent.dragStart(accountTab);
+    fireEvent.dragEnter(opportunityTab);
+    fireEvent.dragOver(opportunityTab);
+    fireEvent.drop(opportunityTab);
+
+    // Wait for the reorder API call
+    await waitFor(() => {
+      const reorderCall = fetchSpy.mock.calls.find(
+        (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('/reorder'),
+      );
+      expect(reorderCall).toBeDefined();
+    });
   });
 });

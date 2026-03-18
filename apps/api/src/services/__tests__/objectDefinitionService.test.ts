@@ -26,6 +26,16 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, mo
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
     const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
 
+    // SELECT MAX(sort_order) for new object creation
+    if (s.includes('MAX(SORT_ORDER)')) {
+      let maxOrder = 0;
+      for (const obj of fakeObjects.values()) {
+        const order = (obj.sort_order as number) ?? 0;
+        if (order > maxOrder) maxOrder = order;
+      }
+      return { rows: [{ max_sort_order: String(maxOrder) }] };
+    }
+
     // SELECT id check for uniqueness
     if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE API_NAME')) {
       const apiName = params![0] as string;
@@ -36,9 +46,9 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, mo
 
     // INSERT INTO object_definitions
     if (s.startsWith('INSERT INTO OBJECT_DEFINITIONS')) {
-      const [id, api_name, label, plural_label, description, icon, is_system, owner_id, created_at, updated_at] = params as unknown[];
+      const [id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at] = params as unknown[];
       const row: Record<string, unknown> = {
-        id, api_name, label, plural_label, description, icon, is_system, owner_id, created_at, updated_at,
+        id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at,
       };
       fakeObjects.set(id as string, row);
       return { rows: [row] };
