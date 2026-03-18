@@ -406,7 +406,7 @@ describe('createObjectDefinition', () => {
     expect(mockConnect).toHaveBeenCalled();
 
     // Verify BEGIN and COMMIT were issued on the client
-    const calls = mockQuery.mock.calls.map(([sql]: [string]) =>
+    const calls = mockQuery.mock.calls.map(([sql]: [string, unknown[]?]) =>
       sql.replace(/\s+/g, ' ').trim().toUpperCase(),
     );
     expect(calls).toContain('BEGIN');
