@@ -610,6 +610,8 @@ export interface LayoutField {
   sortOrder: number;
   /** Width hint for form rendering */
   width: LayoutFieldWidth;
+  /** Role names that can see this field. NULL / undefined means visible to all. */
+  visibleToRoles?: string[] | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -811,4 +813,58 @@ export interface StageHistory {
   changedAt: Date;
   /** Number of days the record spent in the previous stage */
   daysInPreviousStage?: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RBAC — object permissions & teams
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * CRM-level roles configured in Descope.
+ * Used to scope object-level permissions in the `object_permissions` table.
+ */
+export type CRMRole = 'admin' | 'manager' | 'user' | 'read_only';
+
+/**
+ * An ObjectPermission controls which Descope role can perform which CRUD
+ * actions on a given CRM object type.
+ */
+export interface ObjectPermission {
+  /** UUID primary key */
+  id: string;
+  /** The object definition this permission applies to */
+  objectId: string;
+  /** Descope role name */
+  role: string;
+  canCreate: boolean;
+  canRead: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+}
+
+/**
+ * A Team groups users together for record-level visibility.
+ */
+export interface Team {
+  /** UUID primary key */
+  id: string;
+  /** Team display name */
+  name: string;
+  /** Descope user ID of the team creator */
+  ownerId: string;
+}
+
+/**
+ * A TeamMember associates a Descope user with a Team.
+ * The role determines whether the user is a regular member or a team manager.
+ */
+export interface TeamMember {
+  /** UUID primary key */
+  id: string;
+  /** The team this membership belongs to */
+  teamId: string;
+  /** Descope user ID */
+  userId: string;
+  /** member: regular visibility; manager: can manage team membership */
+  role: 'member' | 'manager';
 }
