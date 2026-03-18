@@ -205,10 +205,10 @@ export function validateFieldOptions(
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
-async function assertObjectExists(objectId: string): Promise<void> {
+async function assertObjectExists(tenantId: string, objectId: string): Promise<void> {
   const result = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1',
-    [objectId],
+    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
+    [objectId, tenantId],
   );
   if (result.rows.length === 0) {
     throwNotFoundError('Object definition not found');
@@ -226,10 +226,11 @@ async function assertObjectExists(objectId: string): Promise<void> {
  * @throws {Error} CONFLICT — api_name already exists on this object
  */
 export async function createFieldDefinition(
+  tenantId: string,
   objectId: string,
   params: CreateFieldDefinitionParams,
 ): Promise<FieldDefinition> {
-  await assertObjectExists(objectId);
+  await assertObjectExists(tenantId, objectId);
 
   // Validate
   const apiNameError = validateFieldApiName(params.apiName);
@@ -244,10 +245,10 @@ export async function createFieldDefinition(
   const optionsError = validateFieldOptions(params.fieldType, params.options);
   if (optionsError) throwValidationError(optionsError);
 
-  // Check uniqueness of api_name within this object
+  // Check uniqueness of api_name within this object and tenant
   const existing = await pool.query(
-    'SELECT id FROM field_definitions WHERE object_id = $1 AND api_name = $2',
-    [objectId, params.apiName.trim()],
+    'SELECT id FROM field_definitions WHERE object_id = $1 AND api_name = $2 AND tenant_id = $3',
+    [objectId, params.apiName.trim(), tenantId],
   );
   if (existing.rows.length > 0) {
     throwConflictError(`A field with api_name "${params.apiName.trim()}" already exists on this object`);
@@ -255,8 +256,8 @@ export async function createFieldDefinition(
 
   // Determine next sort_order
   const maxSortResult = await pool.query(
-    'SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM field_definitions WHERE object_id = $1',
-    [objectId],
+    'SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM field_definitions WHERE object_id = $1 AND tenant_id = $2',
+    [objectId, tenantId],
   );
   const nextSortOrder = (parseInt(maxSortResult.rows[0].max_sort as string, 10) || 0) + 1;
 
@@ -265,11 +266,12 @@ export async function createFieldDefinition(
 
   const result = await pool.query(
     `INSERT INTO field_definitions
-       (id, object_id, api_name, label, field_type, description, required, default_value, options, sort_order, is_system, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       (id, tenant_id, object_id, api_name, label, field_type, description, required, default_value, options, sort_order, is_system, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING *`,
     [
       fieldId,
+      tenantId,
       objectId,
       params.apiName.trim(),
       params.label.trim(),
@@ -288,9 +290,9 @@ export async function createFieldDefinition(
   // Auto-add to default form layout
   const defaultFormLayout = await pool.query(
     `SELECT id FROM layout_definitions
-     WHERE object_id = $1 AND layout_type = 'form' AND is_default = true
+     WHERE object_id = $1 AND layout_type = 'form' AND is_default = true AND tenant_id = $2
      LIMIT 1`,
-    [objectId],
+    [objectId, tenantId],
   );
 
   if (defaultFormLayout.rows.length > 0) {
@@ -321,13 +323,14 @@ export async function createFieldDefinition(
  * @throws {Error} NOT_FOUND — parent object does not exist
  */
 export async function listFieldDefinitions(
+  tenantId: string,
   objectId: string,
 ): Promise<FieldDefinition[]> {
-  await assertObjectExists(objectId);
+  await assertObjectExists(tenantId, objectId);
 
   const result = await pool.query(
-    'SELECT * FROM field_definitions WHERE object_id = $1 ORDER BY sort_order ASC',
-    [objectId],
+    'SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    [objectId, tenantId],
   );
 
   return result.rows.map((row: Record<string, unknown>) => rowToFieldDefinition(row));
@@ -343,15 +346,16 @@ export async function listFieldDefinitions(
  * @throws {Error} VALIDATION_ERROR — invalid input or system field restriction
  */
 export async function updateFieldDefinition(
+  tenantId: string,
   objectId: string,
   fieldId: string,
   params: UpdateFieldDefinitionParams,
 ): Promise<FieldDefinition & { warning?: string }> {
-  await assertObjectExists(objectId);
+  await assertObjectExists(tenantId, objectId);
 
   const existing = await pool.query(
-    'SELECT * FROM field_definitions WHERE id = $1 AND object_id = $2',
-    [fieldId, objectId],
+    'SELECT * FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+    [fieldId, objectId, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -439,8 +443,8 @@ export async function updateFieldDefinition(
   let warning: string | undefined;
   if (params.fieldType !== undefined && params.fieldType.trim() !== (row.field_type as string)) {
     const recordCount = await pool.query(
-      'SELECT COUNT(*) AS count FROM records WHERE object_id = $1',
-      [objectId],
+      'SELECT COUNT(*) AS count FROM records WHERE object_id = $1 AND tenant_id = $2',
+      [objectId, tenantId],
     );
     const count = parseInt(recordCount.rows[0].count as string, 10);
     if (count > 0) {
@@ -464,14 +468,15 @@ export async function updateFieldDefinition(
  * @throws {Error} DELETE_BLOCKED — system field
  */
 export async function deleteFieldDefinition(
+  tenantId: string,
   objectId: string,
   fieldId: string,
 ): Promise<void> {
-  await assertObjectExists(objectId);
+  await assertObjectExists(tenantId, objectId);
 
   const existing = await pool.query(
-    'SELECT * FROM field_definitions WHERE id = $1 AND object_id = $2',
-    [fieldId, objectId],
+    'SELECT * FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+    [fieldId, objectId, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -487,8 +492,8 @@ export async function deleteFieldDefinition(
   // layout_fields has ON DELETE CASCADE from field_definitions, so deleting
   // the field definition will automatically remove it from all layouts.
   await pool.query(
-    'DELETE FROM field_definitions WHERE id = $1 AND object_id = $2',
-    [fieldId, objectId],
+    'DELETE FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+    [fieldId, objectId, tenantId],
   );
 
   logger.info({ fieldId, objectId }, 'Field definition deleted');
@@ -502,10 +507,11 @@ export async function deleteFieldDefinition(
  * @throws {Error} VALIDATION_ERROR — invalid field_ids
  */
 export async function reorderFieldDefinitions(
+  tenantId: string,
   objectId: string,
   fieldIds: string[],
 ): Promise<FieldDefinition[]> {
-  await assertObjectExists(objectId);
+  await assertObjectExists(tenantId, objectId);
 
   if (!Array.isArray(fieldIds) || fieldIds.length === 0) {
     throwValidationError('field_ids must be a non-empty array');
@@ -518,8 +524,8 @@ export async function reorderFieldDefinitions(
 
   // Verify all field IDs belong to this object
   const existingFields = await pool.query(
-    'SELECT id FROM field_definitions WHERE object_id = $1',
-    [objectId],
+    'SELECT id FROM field_definitions WHERE object_id = $1 AND tenant_id = $2',
+    [objectId, tenantId],
   );
   const existingIds = new Set(existingFields.rows.map((r: Record<string, unknown>) => r.id as string));
 
@@ -542,8 +548,8 @@ export async function reorderFieldDefinitions(
 
   // Return the updated list
   const result = await pool.query(
-    'SELECT * FROM field_definitions WHERE object_id = $1 ORDER BY sort_order ASC',
-    [objectId],
+    'SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    [objectId, tenantId],
   );
 
   return result.rows.map((row: Record<string, unknown>) => rowToFieldDefinition(row));

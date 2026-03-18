@@ -254,6 +254,7 @@ const DEFAULT_PERMISSIONS: ReadonlyArray<{
  * @throws {Error} CONFLICT — api_name already exists
  */
 export async function createObjectDefinition(
+  tenantId: string,
   params: CreateObjectDefinitionParams,
 ): Promise<ObjectDefinition> {
   const { apiName, label, pluralLabel, description, icon, ownerId } = params;
@@ -268,10 +269,10 @@ export async function createObjectDefinition(
   const pluralLabelError = validatePluralLabel(pluralLabel);
   if (pluralLabelError) throwValidationError(pluralLabelError);
 
-  // Check uniqueness
+  // Check uniqueness within tenant
   const existing = await pool.query(
-    'SELECT id FROM object_definitions WHERE api_name = $1',
-    [apiName.trim()],
+    'SELECT id FROM object_definitions WHERE tenant_id = $1 AND api_name = $2',
+    [tenantId, apiName.trim()],
   );
   if (existing.rows.length > 0) {
     throwConflictError(`An object with api_name "${apiName.trim()}" already exists`);
@@ -280,13 +281,14 @@ export async function createObjectDefinition(
   const objectId = randomUUID();
   const now = new Date();
 
-  // Determine the next sort_order value
+  // Determine the next sort_order value within tenant
   const maxResult = await pool.query(
-    'SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM object_definitions',
+    'SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM object_definitions WHERE tenant_id = $1',
+    [tenantId],
   );
   const nextSortOrder = (parseInt(maxResult.rows[0].max_sort_order as string, 10) || 0) + 1;
 
-  logger.info({ objectId, apiName, ownerId }, 'Creating new object definition');
+  logger.info({ tenantId, objectId, apiName, ownerId }, 'Creating new object definition');
 
   const client = await pool.connect();
   try {
@@ -294,11 +296,12 @@ export async function createObjectDefinition(
 
     const result = await client.query(
       `INSERT INTO object_definitions
-         (id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (id, tenant_id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         objectId,
+        tenantId,
         apiName.trim(),
         label.trim(),
         pluralLabel.trim(),
@@ -367,13 +370,15 @@ export async function createObjectDefinition(
 /**
  * Returns all object definitions with field count and record count.
  */
-export async function listObjectDefinitions(): Promise<ObjectDefinitionListItem[]> {
+export async function listObjectDefinitions(tenantId: string): Promise<ObjectDefinitionListItem[]> {
   const result = await pool.query(
     `SELECT od.*,
-            (SELECT COUNT(*) FROM field_definitions fd WHERE fd.object_id = od.id) AS field_count,
-            (SELECT COUNT(*) FROM records r WHERE r.object_id = od.id) AS record_count
+            (SELECT COUNT(*) FROM field_definitions fd WHERE fd.object_id = od.id AND fd.tenant_id = $1) AS field_count,
+            (SELECT COUNT(*) FROM records r WHERE r.object_id = od.id AND r.tenant_id = $1) AS record_count
      FROM object_definitions od
+     WHERE od.tenant_id = $1
      ORDER BY od.sort_order ASC, od.created_at ASC`,
+    [tenantId],
   );
 
   return result.rows.map((row: Record<string, unknown>) => ({
@@ -388,11 +393,12 @@ export async function listObjectDefinitions(): Promise<ObjectDefinitionListItem[
  * Returns null if not found.
  */
 export async function getObjectDefinitionById(
+  tenantId: string,
   id: string,
 ): Promise<ObjectDefinitionDetail | null> {
   const objectResult = await pool.query(
-    'SELECT * FROM object_definitions WHERE id = $1',
-    [id],
+    'SELECT * FROM object_definitions WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (objectResult.rows.length === 0) return null;
@@ -402,16 +408,16 @@ export async function getObjectDefinitionById(
   // Fetch fields, relationships (source or target), and layouts in parallel
   const [fieldsResult, relationshipsResult, layoutsResult] = await Promise.all([
     pool.query(
-      'SELECT * FROM field_definitions WHERE object_id = $1 ORDER BY sort_order ASC',
-      [id],
+      'SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+      [id, tenantId],
     ),
     pool.query(
-      'SELECT * FROM relationship_definitions WHERE source_object_id = $1 OR target_object_id = $1',
-      [id],
+      'SELECT * FROM relationship_definitions WHERE (source_object_id = $1 OR target_object_id = $1) AND tenant_id = $2',
+      [id, tenantId],
     ),
     pool.query(
-      'SELECT * FROM layout_definitions WHERE object_id = $1 ORDER BY layout_type ASC, name ASC',
-      [id],
+      'SELECT * FROM layout_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY layout_type ASC, name ASC',
+      [id, tenantId],
     ),
   ]);
 
@@ -431,12 +437,13 @@ export async function getObjectDefinitionById(
  * @throws {Error} VALIDATION_ERROR — invalid input
  */
 export async function updateObjectDefinition(
+  tenantId: string,
   id: string,
   params: UpdateObjectDefinitionParams,
 ): Promise<ObjectDefinition> {
   const existing = await pool.query(
-    'SELECT * FROM object_definitions WHERE id = $1',
-    [id],
+    'SELECT * FROM object_definitions WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -486,9 +493,10 @@ export async function updateObjectDefinition(
   values.push(now);
 
   values.push(id);
+  values.push(tenantId);
 
   const result = await pool.query(
-    `UPDATE object_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    `UPDATE object_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex} RETURNING *`,
     values,
   );
 
@@ -506,10 +514,10 @@ export async function updateObjectDefinition(
  * @throws {Error} NOT_FOUND — object does not exist
  * @throws {Error} DELETE_BLOCKED — object is a system object or has records
  */
-export async function deleteObjectDefinition(id: string): Promise<void> {
+export async function deleteObjectDefinition(tenantId: string, id: string): Promise<void> {
   const existing = await pool.query(
-    'SELECT * FROM object_definitions WHERE id = $1',
-    [id],
+    'SELECT * FROM object_definitions WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -524,15 +532,15 @@ export async function deleteObjectDefinition(id: string): Promise<void> {
 
   // Check if records exist for this object
   const recordCount = await pool.query(
-    'SELECT COUNT(*) AS count FROM records WHERE object_id = $1',
-    [id],
+    'SELECT COUNT(*) AS count FROM records WHERE object_id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
   const count = parseInt(recordCount.rows[0].count as string, 10);
   if (count > 0) {
     throwDeleteBlockedError('Delete all records first');
   }
 
-  await pool.query('DELETE FROM object_definitions WHERE id = $1', [id]);
+  await pool.query('DELETE FROM object_definitions WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
 
   logger.info({ objectId: id }, 'Object definition deleted');
 }
@@ -543,7 +551,7 @@ export async function deleteObjectDefinition(id: string): Promise<void> {
  *
  * @throws {Error} VALIDATION_ERROR — empty or invalid list
  */
-export async function reorderObjectDefinitions(orderedIds: string[]): Promise<void> {
+export async function reorderObjectDefinitions(tenantId: string, orderedIds: string[]): Promise<void> {
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
     throwValidationError('orderedIds must be a non-empty array of object definition IDs');
   }
@@ -565,11 +573,14 @@ export async function reorderObjectDefinitions(orderedIds: string[]): Promise<vo
     values.push(orderedIds[i], i + 1);
   }
 
+  values.push(tenantId);
+  const tenantParamIdx = values.length;
+
   await pool.query(
     `UPDATE object_definitions AS od
      SET sort_order = v.new_order, updated_at = NOW()
      FROM (VALUES ${placeholders.join(', ')}) AS v(id, new_order)
-     WHERE od.id = v.id`,
+     WHERE od.id = v.id AND od.tenant_id = $${tenantParamIdx}`,
     values,
   );
 
