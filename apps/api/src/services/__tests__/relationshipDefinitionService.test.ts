@@ -60,8 +60,10 @@ const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
           const tgt = fakeObjects.get(r.target_object_id as string);
           return {
             ...r,
+            source_object_api_name: src?.api_name ?? '',
             source_object_label: src?.label ?? '',
             source_object_plural_label: src?.plural_label ?? '',
+            target_object_api_name: tgt?.api_name ?? '',
             target_object_label: tgt?.label ?? '',
             target_object_plural_label: tgt?.plural_label ?? '',
           };
@@ -352,6 +354,7 @@ describe('listRelationshipDefinitions', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].apiName).toBe('project_account');
+    expect(result[0].targetObjectApiName).toBe('account');
     expect(result[0].targetObjectLabel).toBe('Account');
     expect(result[0].targetObjectPluralLabel).toBe('Accounts');
   });
@@ -368,6 +371,7 @@ describe('listRelationshipDefinitions', () => {
     const result = await listRelationshipDefinitions('obj-account');
 
     expect(result).toHaveLength(1);
+    expect(result[0].sourceObjectApiName).toBe('custom_project');
     expect(result[0].sourceObjectLabel).toBe('Custom Project');
     expect(result[0].sourceObjectPluralLabel).toBe('Custom Projects');
   });
@@ -384,8 +388,10 @@ describe('listRelationshipDefinitions', () => {
 
     const result = await listRelationshipDefinitions('obj-custom');
 
+    expect(result[0]).toHaveProperty('sourceObjectApiName');
     expect(result[0]).toHaveProperty('sourceObjectLabel');
     expect(result[0]).toHaveProperty('sourceObjectPluralLabel');
+    expect(result[0]).toHaveProperty('targetObjectApiName');
     expect(result[0]).toHaveProperty('targetObjectLabel');
     expect(result[0]).toHaveProperty('targetObjectPluralLabel');
   });
