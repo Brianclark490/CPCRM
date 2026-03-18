@@ -105,7 +105,7 @@ export async function handleCreateObject(
  *   500  – unexpected server error
  */
 export async function handleListObjects(
-  _req: AuthenticatedRequest,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
   try {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import {
   createPipeline,
@@ -60,7 +61,7 @@ export async function handleCreatePipeline(
   const objectId = body.objectId ?? body.object_id ?? '';
 
   try {
-    const pipeline = await createPipeline({
+    const pipeline = await createPipeline(req.user!.tenantId!, {
       name: body.name ?? '',
       apiName,
       objectId,
@@ -103,11 +104,11 @@ export async function handleCreatePipeline(
  *   500  – unexpected server error
  */
 export async function handleListPipelines(
-  _req: AuthenticatedRequest,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
   try {
-    const pipelines = await listPipelines();
+    const pipelines = await listPipelines(req.user!.tenantId!);
     res.status(200).json(pipelines);
   } catch (err: unknown) {
     logger.error({ err }, 'Unexpected error listing pipelines');
@@ -133,7 +134,7 @@ export async function handleGetPipeline(
   const { id } = req.params as { id: string };
 
   try {
-    const pipeline = await getPipelineById(id);
+    const pipeline = await getPipelineById(req.user!.tenantId!, id);
 
     if (!pipeline) {
       res.status(404).json({ error: 'Pipeline not found', code: 'NOT_FOUND' });
@@ -186,7 +187,7 @@ export async function handleUpdatePipeline(
   if ('is_default' in body && !('isDefault' in body)) params.isDefault = body.is_default;
 
   try {
-    const updated = await updatePipeline(id, params);
+    const updated = await updatePipeline(req.user!.tenantId!, id, params);
     res.status(200).json(updated);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -225,7 +226,7 @@ export async function handleDeletePipeline(
   const { id } = req.params as { id: string };
 
   try {
-    await deletePipeline(id);
+    await deletePipeline(req.user!.tenantId!, id);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -297,7 +298,7 @@ export async function handleCreateStage(
   const expectedDays = body.expectedDays ?? body.expected_days;
 
   try {
-    const stage = await createStage(pipelineId, {
+    const stage = await createStage(req.user!.tenantId!, pipelineId, {
       name: body.name ?? '',
       apiName,
       stageType,
@@ -383,7 +384,7 @@ export async function handleUpdateStage(
   if ('description' in body) params.description = body.description;
 
   try {
-    const updated = await updateStage(pipelineId, id, params as {
+    const updated = await updateStage(req.user!.tenantId!, pipelineId, id, params as {
       name?: string;
       stageType?: string;
       colour?: string;
@@ -430,7 +431,7 @@ export async function handleDeleteStage(
   const { pipelineId, id } = req.params as { pipelineId: string; id: string };
 
   try {
-    await deleteStage(pipelineId, id);
+    await deleteStage(req.user!.tenantId!, pipelineId, id);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -479,7 +480,7 @@ export async function handleReorderStages(
   const stageIds = body.stage_ids ?? body.stageIds ?? [];
 
   try {
-    const stages = await reorderStages(pipelineId, stageIds);
+    const stages = await reorderStages(req.user!.tenantId!, pipelineId, stageIds);
     res.status(200).json(stages);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -501,14 +502,14 @@ export async function handleReorderStages(
 
 // ─── Route registration ──────────────────────────────────────────────────────
 
-adminPipelinesRouter.post('/', requireAuth, handleCreatePipeline);
-adminPipelinesRouter.get('/', requireAuth, handleListPipelines);
-adminPipelinesRouter.get('/:id', requireAuth, handleGetPipeline);
-adminPipelinesRouter.put('/:id', requireAuth, handleUpdatePipeline);
-adminPipelinesRouter.delete('/:id', requireAuth, handleDeletePipeline);
+adminPipelinesRouter.post('/', requireAuth, requireTenant, handleCreatePipeline);
+adminPipelinesRouter.get('/', requireAuth, requireTenant, handleListPipelines);
+adminPipelinesRouter.get('/:id', requireAuth, requireTenant, handleGetPipeline);
+adminPipelinesRouter.put('/:id', requireAuth, requireTenant, handleUpdatePipeline);
+adminPipelinesRouter.delete('/:id', requireAuth, requireTenant, handleDeletePipeline);
 
 // Stage routes nested under pipelines
-adminPipelinesRouter.post('/:pipelineId/stages', requireAuth, handleCreateStage);
-adminPipelinesRouter.put('/:pipelineId/stages/:id', requireAuth, handleUpdateStage);
-adminPipelinesRouter.delete('/:pipelineId/stages/:id', requireAuth, handleDeleteStage);
-adminPipelinesRouter.patch('/:pipelineId/stages/reorder', requireAuth, handleReorderStages);
+adminPipelinesRouter.post('/:pipelineId/stages', requireAuth, requireTenant, handleCreateStage);
+adminPipelinesRouter.put('/:pipelineId/stages/:id', requireAuth, requireTenant, handleUpdateStage);
+adminPipelinesRouter.delete('/:pipelineId/stages/:id', requireAuth, requireTenant, handleDeleteStage);
+adminPipelinesRouter.patch('/:pipelineId/stages/reorder', requireAuth, requireTenant, handleReorderStages);

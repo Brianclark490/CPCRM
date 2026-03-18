@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import {
   createFieldDefinition,
@@ -291,8 +292,8 @@ export async function handleReorderFields(
   }
 }
 
-adminFieldsRouter.post('/', requireAuth, handleCreateField);
-adminFieldsRouter.get('/', requireAuth, handleListFields);
-adminFieldsRouter.patch('/reorder', requireAuth, handleReorderFields);
-adminFieldsRouter.put('/:id', requireAuth, handleUpdateField);
-adminFieldsRouter.delete('/:id', requireAuth, handleDeleteField);
+adminFieldsRouter.post('/', requireAuth, requireTenant, handleCreateField);
+adminFieldsRouter.get('/', requireAuth, requireTenant, handleListFields);
+adminFieldsRouter.patch('/reorder', requireAuth, requireTenant, handleReorderFields);
+adminFieldsRouter.put('/:id', requireAuth, requireTenant, handleUpdateField);
+adminFieldsRouter.delete('/:id', requireAuth, requireTenant, handleDeleteField);

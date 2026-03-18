@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import {
   getPipelineSummary,
@@ -32,7 +33,7 @@ export async function handleGetSummary(
   const { userId } = req.user!;
 
   try {
-    const summary = await getPipelineSummary(pipelineId, userId);
+    const summary = await getPipelineSummary(req.user!.tenantId!, pipelineId, userId);
     res.status(200).json(summary);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -71,7 +72,7 @@ export async function handleGetVelocity(
   const period = (req.query as Record<string, string>).period ?? '30d';
 
   try {
-    const velocity = await getPipelineVelocity(pipelineId, userId, period);
+    const velocity = await getPipelineVelocity(req.user!.tenantId!, pipelineId, userId, period);
     res.status(200).json(velocity);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -111,7 +112,7 @@ export async function handleGetOverdue(
   const { userId } = req.user!;
 
   try {
-    const overdue = await getOverdueRecords(pipelineId, userId);
+    const overdue = await getOverdueRecords(req.user!.tenantId!, pipelineId, userId);
     res.status(200).json(overdue);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -128,6 +129,6 @@ export async function handleGetOverdue(
 
 // ─── Route registration ──────────────────────────────────────────────────────
 
-pipelineAnalyticsRouter.get('/:pipelineId/summary', requireAuth, handleGetSummary);
-pipelineAnalyticsRouter.get('/:pipelineId/velocity', requireAuth, handleGetVelocity);
-pipelineAnalyticsRouter.get('/:pipelineId/overdue', requireAuth, handleGetOverdue);
+pipelineAnalyticsRouter.get('/:pipelineId/summary', requireAuth, requireTenant, handleGetSummary);
+pipelineAnalyticsRouter.get('/:pipelineId/velocity', requireAuth, requireTenant, handleGetVelocity);
+pipelineAnalyticsRouter.get('/:pipelineId/overdue', requireAuth, requireTenant, handleGetOverdue);
