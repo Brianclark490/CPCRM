@@ -182,7 +182,20 @@ ALTER TABLE stage_gates DROP CONSTRAINT IF EXISTS stage_gates_stage_id_field_id_
 ALTER TABLE stage_gates ADD CONSTRAINT uq_stage_gates_tenant_stage_field UNIQUE (tenant_id, stage_id, field_id);
 
 -- record_relationships: (relationship_id, source_record_id, target_record_id) → include tenant_id
-ALTER TABLE record_relationships DROP CONSTRAINT IF EXISTS record_relationships_relationship_id_source_record_id_targ_key;
+-- Auto-generated constraint name is truncated by PostgreSQL; drop dynamically.
+DO $$
+DECLARE
+    v_name TEXT;
+BEGIN
+    SELECT conname INTO v_name
+    FROM pg_constraint
+    WHERE conrelid = 'record_relationships'::regclass
+      AND contype = 'u'
+      AND conname LIKE 'record_relationships_%_key';
+    IF v_name IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE record_relationships DROP CONSTRAINT %I', v_name);
+    END IF;
+END $$;
 ALTER TABLE record_relationships ADD CONSTRAINT uq_record_relationships_tenant_rel_source_target UNIQUE (tenant_id, relationship_id, source_record_id, target_record_id);
 
 -- object_permissions: (object_id, role) → (tenant_id, object_id, role)
@@ -194,7 +207,20 @@ ALTER TABLE team_members DROP CONSTRAINT IF EXISTS team_members_team_id_user_id_
 ALTER TABLE team_members ADD CONSTRAINT uq_team_members_tenant_team_user UNIQUE (tenant_id, team_id, user_id);
 
 -- lead_conversion_mappings: (lead_field_api_name, target_object, target_field_api_name) → include tenant_id
-ALTER TABLE lead_conversion_mappings DROP CONSTRAINT IF EXISTS lead_conversion_mappings_lead_field_api_name_target_object__key;
+-- Auto-generated constraint name is truncated by PostgreSQL; drop dynamically.
+DO $$
+DECLARE
+    v_name TEXT;
+BEGIN
+    SELECT conname INTO v_name
+    FROM pg_constraint
+    WHERE conrelid = 'lead_conversion_mappings'::regclass
+      AND contype = 'u'
+      AND conname LIKE 'lead_conversion_mappings_%_key';
+    IF v_name IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE lead_conversion_mappings DROP CONSTRAINT %I', v_name);
+    END IF;
+END $$;
 ALTER TABLE lead_conversion_mappings ADD CONSTRAINT uq_lead_conversion_mappings_tenant_field_target UNIQUE (tenant_id, lead_field_api_name, target_object, target_field_api_name);
 
 -- ══════════════════════════════════════════════════════════════════════════════
