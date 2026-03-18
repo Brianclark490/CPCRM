@@ -230,21 +230,45 @@ export async function moveRecordStage(
       ? new Date(recordRow.stage_entered_at as string)
       : null;
 
-    if (!pipelineId || !currentStageId) {
-      throwValidationError('Record is not assigned to a pipeline');
+    // 3. Auto-assign default pipeline if the record has no pipeline yet
+    let resolvedPipelineId = pipelineId;
+    let resolvedCurrentStageId = currentStageId;
+    let resolvedStageEnteredAt = stageEnteredAt;
+
+    if (!resolvedPipelineId || !resolvedCurrentStageId) {
+      const assigned = await assignDefaultPipeline(client, recordId, objectId, ownerId);
+      if (!assigned) {
+        throwValidationError('Record is not assigned to a pipeline');
+      }
+
+      // Re-read the record to pick up the newly assigned pipeline columns
+      const refreshResult = await client.query(
+        'SELECT pipeline_id, current_stage_id, stage_entered_at FROM records WHERE id = $1',
+        [recordId],
+      );
+      const refreshRow = refreshResult.rows[0] as Record<string, unknown>;
+      resolvedPipelineId = refreshRow.pipeline_id as string | null;
+      resolvedCurrentStageId = refreshRow.current_stage_id as string | null;
+      resolvedStageEnteredAt = refreshRow.stage_entered_at
+        ? new Date(refreshRow.stage_entered_at as string)
+        : null;
+
+      if (!resolvedPipelineId || !resolvedCurrentStageId) {
+        throwValidationError('Record is not assigned to a pipeline');
+      }
     }
 
-    // 3. Fetch the current stage
+    // 4. Fetch the current stage
     const currentStageResult = await client.query(
       'SELECT * FROM stage_definitions WHERE id = $1 AND pipeline_id = $2',
-      [currentStageId, pipelineId],
+      [resolvedCurrentStageId, resolvedPipelineId],
     );
     if (currentStageResult.rows.length === 0) {
       throwValidationError('Current stage not found in pipeline');
     }
     const currentStage = rowToStage(currentStageResult.rows[0] as Record<string, unknown>);
 
-    // 4. Fetch the target stage and validate it belongs to the same pipeline
+    // 5. Fetch the target stage and validate it belongs to the same pipeline
     const targetStageResult = await client.query(
       'SELECT * FROM stage_definitions WHERE id = $1',
       [targetStageId],
@@ -254,11 +278,11 @@ export async function moveRecordStage(
     }
     const targetStage = rowToStage(targetStageResult.rows[0] as Record<string, unknown>);
 
-    if (targetStage.pipelineId !== pipelineId) {
+    if (targetStage.pipelineId !== resolvedPipelineId) {
       throwValidationError('Target stage does not belong to the same pipeline');
     }
 
-    if (targetStageId === currentStageId) {
+    if (targetStageId === resolvedCurrentStageId) {
       throwValidationError('Record is already in this stage');
     }
 
@@ -300,9 +324,9 @@ export async function moveRecordStage(
 
     // 6. Calculate days_in_previous_stage
     let daysInPreviousStage: number | null = null;
-    if (stageEnteredAt) {
+    if (resolvedStageEnteredAt) {
       const now = new Date();
-      const diffMs = now.getTime() - stageEnteredAt.getTime();
+      const diffMs = now.getTime() - resolvedStageEnteredAt.getTime();
       daysInPreviousStage = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     }
 
@@ -311,7 +335,7 @@ export async function moveRecordStage(
     await client.query(
       `INSERT INTO stage_history (id, record_id, pipeline_id, from_stage_id, to_stage_id, changed_by, changed_at, days_in_previous_stage)
        VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)`,
-      [historyId, recordId, pipelineId, currentStageId, targetStageId, ownerId, daysInPreviousStage],
+      [historyId, recordId, resolvedPipelineId, resolvedCurrentStageId, targetStageId, ownerId, daysInPreviousStage],
     );
 
     // 8. Update record: current_stage_id, stage_entered_at, and optionally probability
@@ -341,7 +365,7 @@ export async function moveRecordStage(
     const updatedRow = updateResult.rows[0] as Record<string, unknown>;
 
     logger.info(
-      { recordId, pipelineId, fromStageId: currentStageId, toStageId: targetStageId, ownerId },
+      { recordId, pipelineId: resolvedPipelineId, fromStageId: resolvedCurrentStageId, toStageId: targetStageId, ownerId },
       'Record moved to new stage',
     );
 

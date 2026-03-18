@@ -244,4 +244,67 @@ describe('KanbanBoard', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
     });
   });
+
+  it('places records without currentStageId into the first open stage column', async () => {
+    const unassignedRecords = {
+      data: [
+        {
+          id: 'rec-u1',
+          name: 'Unassigned Deal',
+          fieldValues: { value: 50000, close_date: '2026-08-01' },
+          ownerId: 'user-1',
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+        {
+          id: 'rec-u2',
+          name: 'Another Unassigned',
+          fieldValues: { value: 75000 },
+          ownerId: 'user-2',
+          createdAt: '2026-02-20T00:00:00Z',
+        },
+      ],
+      total: 2,
+      page: 1,
+      limit: 100,
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockPipeline,
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/objects/opportunity/records')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => unassignedRecords,
+          } as Response);
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }),
+    );
+
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Unassigned Deal')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Another Unassigned')).toBeInTheDocument();
+
+    // Both should be in the Prospecting column (first open stage)
+    const prospectingColumn = screen.getByTestId('kanban-column-prospecting');
+    expect(prospectingColumn).toHaveTextContent('Unassigned Deal');
+    expect(prospectingColumn).toHaveTextContent('Another Unassigned');
+    // Column count should show 2
+    expect(prospectingColumn).toHaveTextContent('2');
+  });
 });
