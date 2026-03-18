@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -272,7 +274,7 @@ describe('moveRecordStage', () => {
     seedPipelineAndStages();
     seedRecord();
 
-    const result = await moveRecordStage('opportunity', 'rec-1', 'stage-qualification', 'user-123');
+    const result = await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
 
     expect(result.currentStageId).toBe('stage-qualification');
     expect(result.fieldValues.probability).toBe(25);
@@ -285,7 +287,7 @@ describe('moveRecordStage', () => {
     // Put record at qualification first
     fakeRecords.get('rec-1')!.current_stage_id = 'stage-qualification';
 
-    const result = await moveRecordStage('opportunity', 'rec-1', 'stage-prospect', 'user-123');
+    const result = await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-prospect', 'user-123');
 
     expect(result.currentStageId).toBe('stage-prospect');
   });
@@ -344,7 +346,7 @@ describe('moveRecordStage', () => {
     fakeRecords.get('rec-1')!.field_values = { name: 'Test Opportunity' };
 
     // Moving backward should skip gates
-    const result = await moveRecordStage('opportunity', 'rec-1', 'stage-qualification', 'user-123');
+    const result = await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
     expect(result.currentStageId).toBe('stage-qualification');
   });
 
@@ -365,7 +367,7 @@ describe('moveRecordStage', () => {
     });
 
     // Record has value so gate should pass
-    const result = await moveRecordStage('opportunity', 'rec-1', 'stage-won', 'user-123');
+    const result = await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-won', 'user-123');
     expect(result.currentStageId).toBe('stage-won');
     expect(result.fieldValues.probability).toBe(100);
   });
@@ -374,13 +376,13 @@ describe('moveRecordStage', () => {
     seedPipelineAndStages();
 
     await expect(
-      moveRecordStage('opportunity', 'nonexistent', 'stage-qualification', 'user-123'),
+      moveRecordStage(TENANT_ID, 'opportunity', 'nonexistent', 'stage-qualification', 'user-123'),
     ).rejects.toThrow('Record not found');
   });
 
   it('throws NOT_FOUND when object type does not exist', async () => {
     await expect(
-      moveRecordStage('nonexistent', 'rec-1', 'stage-qualification', 'user-123'),
+      moveRecordStage(TENANT_ID, 'nonexistent', 'rec-1', 'stage-qualification', 'user-123'),
     ).rejects.toThrow("Object type 'nonexistent' not found");
   });
 
@@ -399,7 +401,7 @@ describe('moveRecordStage', () => {
     });
 
     await expect(
-      moveRecordStage('opportunity', 'rec-1', 'stage-other', 'user-123'),
+      moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-other', 'user-123'),
     ).rejects.toThrow('Target stage does not belong to the same pipeline');
   });
 
@@ -408,7 +410,7 @@ describe('moveRecordStage', () => {
     seedRecord();
 
     await expect(
-      moveRecordStage('opportunity', 'rec-1', 'stage-prospect', 'user-123'),
+      moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-prospect', 'user-123'),
     ).rejects.toThrow('Record is already in this stage');
   });
 
@@ -428,7 +430,7 @@ describe('moveRecordStage', () => {
       updated_at: new Date().toISOString(),
     });
 
-    const result = await moveRecordStage('opportunity', 'rec-no-pipeline', 'stage-qualification', 'user-123');
+    const result = await moveRecordStage(TENANT_ID, 'opportunity', 'rec-no-pipeline', 'stage-qualification', 'user-123');
 
     expect(result.currentStageId).toBe('stage-qualification');
     expect(result.pipelineId).toBe('pipeline-1');
@@ -450,7 +452,7 @@ describe('moveRecordStage', () => {
     });
 
     await expect(
-      moveRecordStage('opportunity', 'rec-no-pipeline', 'stage-qualification', 'user-123'),
+      moveRecordStage(TENANT_ID, 'opportunity', 'rec-no-pipeline', 'stage-qualification', 'user-123'),
     ).rejects.toThrow('Record is not assigned to a pipeline');
   });
 
@@ -458,7 +460,7 @@ describe('moveRecordStage', () => {
     seedPipelineAndStages();
     seedRecord();
 
-    const result = await moveRecordStage('opportunity', 'rec-1', 'stage-qualification', 'user-123');
+    const result = await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
 
     expect(result.fieldValues.probability).toBe(25);
   });
@@ -482,7 +484,7 @@ describe('moveRecordStage', () => {
     });
 
     try {
-      await moveRecordStage('opportunity', 'rec-1', 'stage-qualification', 'user-123');
+      await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
       expect.fail('Should have thrown');
     } catch (err: unknown) {
       const error = err as Error & { code: string; failures: Array<{ gate: string }> };
