@@ -47,7 +47,7 @@ export async function handleCreateRecord(
   const fieldValues = body.fieldValues ?? {};
 
   try {
-    const record = await createRecord(apiName, fieldValues, ownerId);
+    const record = await createRecord(req.user!.tenantId!, apiName, fieldValues, ownerId);
     res.status(201).json(record);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -107,6 +107,7 @@ export async function handleListRecords(
 
   try {
     const result = await listRecords({
+      tenantId: req.user!.tenantId!,
       apiName,
       ownerId,
       search: query.search,
@@ -155,7 +156,7 @@ export async function handleGetRecord(
   }
 
   try {
-    const record = await getRecord(apiName, id, ownerId);
+    const record = await getRecord(req.user!.tenantId!, apiName, id, ownerId);
     res.status(200).json(record);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -202,7 +203,7 @@ export async function handleUpdateRecord(
   const fieldValues = body.fieldValues ?? {};
 
   try {
-    const record = await updateRecord(apiName, id, fieldValues, ownerId);
+    const record = await updateRecord(req.user!.tenantId!, apiName, id, fieldValues, ownerId);
     res.status(200).json(record);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -247,7 +248,7 @@ export async function handleDeleteRecord(
   }
 
   try {
-    await deleteRecord(apiName, id, ownerId);
+    await deleteRecord(req.user!.tenantId!, apiName, id, ownerId);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -312,7 +313,7 @@ export async function handleConvertLead(
   }
 
   try {
-    const result = await convertLead(id, ownerId, {
+    const result = await convertLead(req.user!.tenantId!, id, ownerId, {
       createAccount: body.create_account,
       accountId: body.account_id,
       createOpportunity: body.create_opportunity,
@@ -378,7 +379,7 @@ export async function handleMoveStage(
   }
 
   try {
-    const result = await moveRecordStage(apiName, id, body.target_stage_id, ownerId);
+    const result = await moveRecordStage(req.user!.tenantId!, apiName, id, body.target_stage_id, ownerId);
     res.status(200).json(result);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
