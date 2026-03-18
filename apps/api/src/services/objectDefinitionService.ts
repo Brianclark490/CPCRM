@@ -228,7 +228,27 @@ function throwDeleteBlockedError(message: string): never {
 // ─── Service functions ────────────────────────────────────────────────────────
 
 /**
- * Creates a new object definition with default layouts.
+ * Default permission matrix applied to every new object definition.
+ * One row per role, inserted atomically with the object itself.
+ */
+const DEFAULT_PERMISSIONS: ReadonlyArray<{
+  role: string;
+  canCreate: boolean;
+  canRead: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+}> = [
+  { role: 'admin',     canCreate: true,  canRead: true,  canUpdate: true,  canDelete: true },
+  { role: 'manager',   canCreate: true,  canRead: true,  canUpdate: true,  canDelete: false },
+  { role: 'user',      canCreate: true,  canRead: true,  canUpdate: true,  canDelete: false },
+  { role: 'read_only', canCreate: false, canRead: true,  canUpdate: false, canDelete: false },
+];
+
+/**
+ * Creates a new object definition with default layouts and default permissions.
+ *
+ * The entire operation (object, layouts, permissions) is wrapped in a
+ * database transaction so it either fully succeeds or fully rolls back.
  *
  * @throws {Error} VALIDATION_ERROR — invalid input
  * @throws {Error} CONFLICT — api_name already exists
@@ -268,42 +288,80 @@ export async function createObjectDefinition(
 
   logger.info({ objectId, apiName, ownerId }, 'Creating new object definition');
 
-  const result = await pool.query(
-    `INSERT INTO object_definitions
-       (id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-     RETURNING *`,
-    [
-      objectId,
-      apiName.trim(),
-      label.trim(),
-      pluralLabel.trim(),
-      description?.trim() ?? null,
-      icon?.trim() ?? null,
-      false,
-      nextSortOrder,
-      ownerId,
-      now,
-      now,
-    ],
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  // Auto-create default layouts (form + list)
-  const formLayoutId = randomUUID();
-  const listLayoutId = randomUUID();
+    const result = await client.query(
+      `INSERT INTO object_definitions
+         (id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING *`,
+      [
+        objectId,
+        apiName.trim(),
+        label.trim(),
+        pluralLabel.trim(),
+        description?.trim() ?? null,
+        icon?.trim() ?? null,
+        false,
+        nextSortOrder,
+        ownerId,
+        now,
+        now,
+      ],
+    );
 
-  await pool.query(
-    `INSERT INTO layout_definitions (id, object_id, name, layout_type, is_default, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7), ($8, $9, $10, $11, $12, $13, $14)`,
-    [
-      formLayoutId, objectId, 'Default Form', 'form', true, now, now,
-      listLayoutId, objectId, 'List View', 'list', true, now, now,
-    ],
-  );
+    // Auto-create default layouts (form + list)
+    const formLayoutId = randomUUID();
+    const listLayoutId = randomUUID();
 
-  logger.info({ objectId, apiName }, 'Object definition created with default layouts');
+    await client.query(
+      `INSERT INTO layout_definitions (id, object_id, name, layout_type, is_default, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7), ($8, $9, $10, $11, $12, $13, $14)`,
+      [
+        formLayoutId, objectId, 'Default Form', 'form', true, now, now,
+        listLayoutId, objectId, 'List View', 'list', true, now, now,
+      ],
+    );
 
-  return rowToObjectDefinition(result.rows[0]);
+    // Auto-create default permissions for all four roles
+    const permValues: unknown[] = [];
+    const permPlaceholders: string[] = [];
+    for (let i = 0; i < DEFAULT_PERMISSIONS.length; i++) {
+      const p = DEFAULT_PERMISSIONS[i];
+      const offset = i * 7;
+      permPlaceholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`,
+      );
+      permValues.push(randomUUID(), objectId, p.role, p.canCreate, p.canRead, p.canUpdate, p.canDelete);
+    }
+
+    await client.query(
+      `INSERT INTO object_permissions (id, object_id, role, can_create, can_read, can_update, can_delete)
+       VALUES ${permPlaceholders.join(', ')}`,
+      permValues,
+    );
+
+    await client.query('COMMIT');
+
+    logger.info({ objectId, apiName }, 'Object definition created with default layouts and permissions');
+
+    return rowToObjectDefinition(result.rows[0]);
+  } catch (err) {
+    const originalError = err;
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      logger.error(
+        { originalError, rollbackError },
+        'Failed to rollback transaction when creating object definition',
+      );
+    }
+    throw originalError;
+  } finally {
+    client.release();
+  }
 }
 
 /**
