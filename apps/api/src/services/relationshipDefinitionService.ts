@@ -17,8 +17,10 @@ export interface RelationshipDefinition {
 }
 
 export interface RelationshipDefinitionWithObjects extends RelationshipDefinition {
+  sourceObjectApiName: string;
   sourceObjectLabel: string;
   sourceObjectPluralLabel: string;
+  targetObjectApiName: string;
   targetObjectLabel: string;
   targetObjectPluralLabel: string;
 }
@@ -84,8 +86,10 @@ function rowToRelationshipDefinition(row: Record<string, unknown>): Relationship
 function rowToRelationshipDefinitionWithObjects(row: Record<string, unknown>): RelationshipDefinitionWithObjects {
   return {
     ...rowToRelationshipDefinition(row),
+    sourceObjectApiName: row.source_object_api_name as string,
     sourceObjectLabel: row.source_object_label as string,
     sourceObjectPluralLabel: row.source_object_plural_label as string,
+    targetObjectApiName: row.target_object_api_name as string,
     targetObjectLabel: row.target_object_label as string,
     targetObjectPluralLabel: row.target_object_plural_label as string,
   };
@@ -242,8 +246,10 @@ export async function listRelationshipDefinitions(
 
   const result = await pool.query(
     `SELECT rd.*,
+            src.api_name AS source_object_api_name,
             src.label AS source_object_label,
             src.plural_label AS source_object_plural_label,
+            tgt.api_name AS target_object_api_name,
             tgt.label AS target_object_label,
             tgt.plural_label AS target_object_plural_label
      FROM relationship_definitions rd
