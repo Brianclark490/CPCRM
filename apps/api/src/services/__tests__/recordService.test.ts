@@ -10,6 +10,8 @@ import {
 } from '../recordService.js';
 import type { FieldDefinitionRow } from '../recordService.js';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -474,7 +476,7 @@ describe('createRecord', () => {
   });
 
   it('creates a record and returns it with field labels', async () => {
-    const result = await createRecord('account', { name: 'Acme Corp' }, 'user-123');
+    const result = await createRecord(TENANT_ID, 'account', { name: 'Acme Corp' }, 'user-123');
 
     expect(result.name).toBe('Acme Corp');
     expect(result.ownerId).toBe('user-123');
@@ -484,18 +486,19 @@ describe('createRecord', () => {
 
   it('throws VALIDATION_ERROR when required field is missing', async () => {
     await expect(
-      createRecord('account', { email: 'test@example.com' }, 'user-123'),
+      createRecord(TENANT_ID, 'account', { email: 'test@example.com' }, 'user-123'),
     ).rejects.toThrow("Field 'Name' is required");
   });
 
   it('throws NOT_FOUND when object type does not exist', async () => {
     await expect(
-      createRecord('nonexistent', { name: 'Test' }, 'user-123'),
+      createRecord(TENANT_ID, 'nonexistent', { name: 'Test' }, 'user-123'),
     ).rejects.toThrow("Object type 'nonexistent' not found");
   });
 
   it('silently ignores unknown fields', async () => {
     const result = await createRecord(
+      TENANT_ID,
       'account',
       { name: 'Acme Corp', unknown_field: 'value' },
       'user-123',
@@ -515,6 +518,7 @@ describe('listRecords', () => {
 
   it('returns paginated records with object definition', async () => {
     const result = await listRecords({
+      tenantId: TENANT_ID,
       apiName: 'account',
       ownerId: 'user-123',
       page: 1,
@@ -529,7 +533,7 @@ describe('listRecords', () => {
 
   it('throws NOT_FOUND for unknown object type', async () => {
     await expect(
-      listRecords({ apiName: 'nonexistent', ownerId: 'user-123', page: 1, limit: 20 }),
+      listRecords({ tenantId: TENANT_ID, apiName: 'nonexistent', ownerId: 'user-123', page: 1, limit: 20 }),
     ).rejects.toThrow("Object type 'nonexistent' not found");
   });
 });
@@ -544,7 +548,7 @@ describe('getRecord', () => {
 
   it('throws NOT_FOUND when record does not exist', async () => {
     await expect(
-      getRecord('account', 'missing-id', 'user-123'),
+      getRecord(TENANT_ID, 'account', 'missing-id', 'user-123'),
     ).rejects.toThrow('Record not found');
   });
 
@@ -559,7 +563,7 @@ describe('getRecord', () => {
       updated_at: new Date().toISOString(),
     });
 
-    const result = await getRecord('account', 'rec-1', 'user-123');
+    const result = await getRecord(TENANT_ID, 'account', 'rec-1', 'user-123');
 
     expect(result.name).toBe('Acme Corp');
     expect(result.relationships).toBeDefined();
@@ -577,7 +581,7 @@ describe('updateRecord', () => {
 
   it('throws NOT_FOUND when record does not exist', async () => {
     await expect(
-      updateRecord('account', 'missing-id', { name: 'Updated' }, 'user-123'),
+      updateRecord(TENANT_ID, 'account', 'missing-id', { name: 'Updated' }, 'user-123'),
     ).rejects.toThrow('Record not found');
   });
 
@@ -593,6 +597,7 @@ describe('updateRecord', () => {
     });
 
     const result = await updateRecord(
+      TENANT_ID,
       'account',
       'rec-1',
       { name: 'New Name' },
@@ -616,7 +621,7 @@ describe('deleteRecord', () => {
 
   it('throws NOT_FOUND when record does not exist', async () => {
     await expect(
-      deleteRecord('account', 'missing-id', 'user-123'),
+      deleteRecord(TENANT_ID, 'account', 'missing-id', 'user-123'),
     ).rejects.toThrow('Record not found');
   });
 
@@ -632,7 +637,7 @@ describe('deleteRecord', () => {
     });
 
     await expect(
-      deleteRecord('account', 'rec-1', 'user-123'),
+      deleteRecord(TENANT_ID, 'account', 'rec-1', 'user-123'),
     ).resolves.toBeUndefined();
 
     expect(fakeRecords.has('rec-1')).toBe(false);
