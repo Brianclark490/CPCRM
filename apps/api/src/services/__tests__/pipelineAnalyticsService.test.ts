@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -346,14 +348,14 @@ describe('getPipelineSummary', () => {
   });
 
   it('throws NOT_FOUND if pipeline does not exist', async () => {
-    await expect(getPipelineSummary('nonexistent', OWNER_ID)).rejects.toThrow('Pipeline not found');
+    await expect(getPipelineSummary(TENANT_ID, 'nonexistent', OWNER_ID)).rejects.toThrow('Pipeline not found');
   });
 
   it('returns empty summary when no records exist', async () => {
     seedPipeline();
     seedStages();
 
-    const result = await getPipelineSummary(PIPELINE_ID, OWNER_ID);
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
 
     expect(result.pipeline.id).toBe(PIPELINE_ID);
     expect(result.pipeline.name).toBe('Sales Pipeline');
@@ -373,7 +375,7 @@ describe('getPipelineSummary', () => {
     // One record in Qualification
     seedRecord('rec-3', 'stage-qualification', 50000, 3);
 
-    const result = await getPipelineSummary(PIPELINE_ID, OWNER_ID);
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
 
     const prospecting = result.stages.find((s) => s.name === 'Prospecting')!;
     expect(prospecting.recordCount).toBe(2);
@@ -395,7 +397,7 @@ describe('getPipelineSummary', () => {
     seedRecord('rec-1', 'stage-prospecting', 10000, 5);
     seedRecord('rec-2', 'stage-qualification', 40000, 3);
 
-    const result = await getPipelineSummary(PIPELINE_ID, OWNER_ID);
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
 
     expect(result.totals.openDeals).toBe(2);
     expect(result.totals.totalOpenValue).toBe(50000);
@@ -411,7 +413,7 @@ describe('getPipelineSummary', () => {
     // This record is only 5 days in → not overdue
     seedRecord('rec-ok', 'stage-prospecting', 8000, 5);
 
-    const result = await getPipelineSummary(PIPELINE_ID, OWNER_ID);
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
 
     const prospecting = result.stages.find((s) => s.name === 'Prospecting')!;
     expect(prospecting.overdueCount).toBe(1);
@@ -424,7 +426,7 @@ describe('getPipelineSummary', () => {
     seedRecord('rec-mine', 'stage-prospecting', 10000, 5, OWNER_ID);
     seedRecord('rec-other', 'stage-prospecting', 20000, 5, 'other-user');
 
-    const result = await getPipelineSummary(PIPELINE_ID, OWNER_ID);
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
 
     const prospecting = result.stages.find((s) => s.name === 'Prospecting')!;
     expect(prospecting.recordCount).toBe(1);
@@ -441,14 +443,14 @@ describe('getPipelineVelocity', () => {
   });
 
   it('throws NOT_FOUND if pipeline does not exist', async () => {
-    await expect(getPipelineVelocity('nonexistent', OWNER_ID, '30d')).rejects.toThrow(
+    await expect(getPipelineVelocity(TENANT_ID, 'nonexistent', OWNER_ID, '30d')).rejects.toThrow(
       'Pipeline not found',
     );
   });
 
   it('throws VALIDATION_ERROR for invalid period', async () => {
     seedPipeline();
-    await expect(getPipelineVelocity(PIPELINE_ID, OWNER_ID, 'invalid')).rejects.toThrow(
+    await expect(getPipelineVelocity(TENANT_ID, PIPELINE_ID, OWNER_ID, 'invalid')).rejects.toThrow(
       'period must be one of',
     );
   });
@@ -464,7 +466,7 @@ describe('getPipelineVelocity', () => {
     // rec-1 exited Prospecting → Qualification 10 days ago (10 days in Prospecting)
     seedHistory('h2', 'rec-1', 'stage-prospecting', 'stage-qualification', 10, 10);
 
-    const result = await getPipelineVelocity(PIPELINE_ID, OWNER_ID, '30d');
+    const result = await getPipelineVelocity(TENANT_ID, PIPELINE_ID, OWNER_ID, '30d');
 
     expect(result.period).toBe('30d');
     expect(result.stages).toHaveLength(4);
@@ -486,7 +488,7 @@ describe('getPipelineVelocity', () => {
     seedStages();
 
     for (const period of ['7d', '30d', '90d', 'all']) {
-      const result = await getPipelineVelocity(PIPELINE_ID, OWNER_ID, period);
+      const result = await getPipelineVelocity(TENANT_ID, PIPELINE_ID, OWNER_ID, period);
       expect(result.period).toBe(period);
     }
   });
@@ -501,7 +503,7 @@ describe('getOverdueRecords', () => {
   });
 
   it('throws NOT_FOUND if pipeline does not exist', async () => {
-    await expect(getOverdueRecords('nonexistent', OWNER_ID)).rejects.toThrow(
+    await expect(getOverdueRecords(TENANT_ID, 'nonexistent', OWNER_ID)).rejects.toThrow(
       'Pipeline not found',
     );
   });
@@ -517,7 +519,7 @@ describe('getOverdueRecords', () => {
     // 5 days in Prospecting (expected: 14) → NOT overdue
     seedRecord('rec-ok', 'stage-prospecting', 8000, 5);
 
-    const result = await getOverdueRecords(PIPELINE_ID, OWNER_ID);
+    const result = await getOverdueRecords(TENANT_ID, PIPELINE_ID, OWNER_ID);
 
     expect(result).toHaveLength(2);
     // Most overdue first
@@ -536,7 +538,7 @@ describe('getOverdueRecords', () => {
 
     seedRecord('rec-ok', 'stage-prospecting', 8000, 5);
 
-    const result = await getOverdueRecords(PIPELINE_ID, OWNER_ID);
+    const result = await getOverdueRecords(TENANT_ID, PIPELINE_ID, OWNER_ID);
     expect(result).toHaveLength(0);
   });
 
@@ -547,7 +549,7 @@ describe('getOverdueRecords', () => {
     // Won stage has expected_days=null, so even old records shouldn't show
     seedRecord('rec-won', 'stage-won', 50000, 100);
 
-    const result = await getOverdueRecords(PIPELINE_ID, OWNER_ID);
+    const result = await getOverdueRecords(TENANT_ID, PIPELINE_ID, OWNER_ID);
     expect(result).toHaveLength(0);
   });
 });
