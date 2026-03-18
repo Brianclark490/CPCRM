@@ -112,6 +112,14 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
+    // Select pipeline columns for re-read after auto-assignment
+    if (s.startsWith('SELECT PIPELINE_ID, CURRENT_STAGE_ID, STAGE_ENTERED_AT FROM RECORDS WHERE ID')) {
+      const id = params![0] as string;
+      const record = fakeRecords.get(id);
+      if (record) return { rows: [record] };
+      return { rows: [] };
+    }
+
     // Select field_values for pipeline assignment
     if (s.startsWith('SELECT FIELD_VALUES FROM RECORDS WHERE ID')) {
       const id = params![0] as string;
@@ -404,9 +412,30 @@ describe('moveRecordStage', () => {
     ).rejects.toThrow('Record is already in this stage');
   });
 
-  it('throws VALIDATION_ERROR when record is not assigned to a pipeline', async () => {
+  it('auto-assigns default pipeline and moves record when record has no pipeline', async () => {
     seedPipelineAndStages();
 
+    fakeRecords.set('rec-no-pipeline', {
+      id: 'rec-no-pipeline',
+      object_id: 'obj-opportunity-id',
+      name: 'No Pipeline',
+      field_values: { value: 50000 },
+      owner_id: 'user-123',
+      pipeline_id: null,
+      current_stage_id: null,
+      stage_entered_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    const result = await moveRecordStage('opportunity', 'rec-no-pipeline', 'stage-qualification', 'user-123');
+
+    expect(result.currentStageId).toBe('stage-qualification');
+    expect(result.pipelineId).toBe('pipeline-1');
+  });
+
+  it('throws VALIDATION_ERROR when record has no pipeline and no default pipeline exists', async () => {
+    // Only seed stages, not the pipeline — so assignDefaultPipeline returns false
     fakeRecords.set('rec-no-pipeline', {
       id: 'rec-no-pipeline',
       object_id: 'obj-opportunity-id',

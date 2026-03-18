@@ -48,6 +48,7 @@ interface RecordsResponse {
 
 interface MoveStageResponse {
   id: string;
+  pipelineId: string;
   currentStageId: string;
   stageEnteredAt: string;
   fieldValues: Record<string, unknown>;
@@ -326,6 +327,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
             r.id === recordId
               ? {
                   ...r,
+                  pipelineId: updated.pipelineId,
                   currentStageId: updated.currentStageId,
                   stageEnteredAt: updated.stageEnteredAt,
                   fieldValues: updated.fieldValues,
@@ -362,7 +364,17 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     if (!recordId || !pipeline) return;
 
     const record = allRecords.find((r) => r.id === recordId);
-    if (!record || record.currentStageId === targetStageId) return;
+    if (!record) return;
+
+    // Compute effective current stage: for unassigned records, use the first
+    // open stage (where they are visually displayed on the board)
+    const firstOpenStageId = pipeline.stages
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .find((s) => s.stageType === 'open')?.id;
+    const effectiveCurrentStageId = record.currentStageId ?? firstOpenStageId;
+
+    if (effectiveCurrentStageId === targetStageId) return;
 
     const targetStage = pipeline.stages.find((s) => s.id === targetStageId);
     if (!targetStage) return;
