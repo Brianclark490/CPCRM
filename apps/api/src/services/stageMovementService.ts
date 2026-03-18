@@ -195,6 +195,7 @@ function rowToGate(row: Record<string, unknown>): GateRow {
  * @param ownerId - Descope user ID from auth
  */
 export async function moveRecordStage(
+  tenantId: string,
   apiName: string,
   recordId: string,
   targetStageId: string,
@@ -207,8 +208,8 @@ export async function moveRecordStage(
 
     // 1. Resolve object definition
     const objectResult = await client.query(
-      'SELECT id FROM object_definitions WHERE api_name = $1',
-      [apiName],
+      'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
+      [apiName, tenantId],
     );
     if (objectResult.rows.length === 0) {
       throwNotFoundError(`Object type '${apiName}' not found`);

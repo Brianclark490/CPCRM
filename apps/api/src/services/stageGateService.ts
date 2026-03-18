@@ -81,13 +81,13 @@ interface StageWithObject {
   objectId: string;
 }
 
-async function resolveStageAndObject(stageId: string): Promise<StageWithObject> {
+async function resolveStageAndObject(tenantId: string, stageId: string): Promise<StageWithObject> {
   const result = await pool.query(
     `SELECT sd.id AS stage_id, sd.pipeline_id, pd.object_id
      FROM stage_definitions sd
      JOIN pipeline_definitions pd ON pd.id = sd.pipeline_id
-     WHERE sd.id = $1`,
-    [stageId],
+     WHERE sd.id = $1 AND sd.tenant_id = $2`,
+    [stageId, tenantId],
   );
 
   if (result.rows.length === 0) {
@@ -188,8 +188,8 @@ const GATE_SELECT_SQL = `
  *
  * @throws {Error} NOT_FOUND — stage does not exist
  */
-export async function listStageGates(stageId: string): Promise<StageGateResponse[]> {
-  await resolveStageAndObject(stageId);
+export async function listStageGates(tenantId: string, stageId: string): Promise<StageGateResponse[]> {
+  await resolveStageAndObject(tenantId, stageId);
 
   const result = await pool.query(
     `${GATE_SELECT_SQL} WHERE sg.stage_id = $1 ORDER BY sg.id`,
@@ -207,10 +207,11 @@ export async function listStageGates(stageId: string): Promise<StageGateResponse
  * @throws {Error} CONFLICT — duplicate gate for same field on same stage
  */
 export async function createStageGate(
+  tenantId: string,
   stageId: string,
   params: CreateStageGateParams,
 ): Promise<StageGateResponse> {
-  const stageInfo = await resolveStageAndObject(stageId);
+  const stageInfo = await resolveStageAndObject(tenantId, stageId);
 
   // Validate required params
   if (!params.fieldId) {
@@ -284,11 +285,12 @@ export async function createStageGate(
  * @throws {Error} VALIDATION_ERROR — invalid input or gate_type/field_type mismatch
  */
 export async function updateStageGate(
+  tenantId: string,
   stageId: string,
   gateId: string,
   params: UpdateStageGateParams,
 ): Promise<StageGateResponse> {
-  await resolveStageAndObject(stageId);
+  await resolveStageAndObject(tenantId, stageId);
 
   // Fetch existing gate
   const existing = await pool.query(
@@ -372,10 +374,11 @@ export async function updateStageGate(
  * @throws {Error} NOT_FOUND — stage or gate does not exist
  */
 export async function deleteStageGate(
+  tenantId: string,
   stageId: string,
   gateId: string,
 ): Promise<void> {
-  await resolveStageAndObject(stageId);
+  await resolveStageAndObject(tenantId, stageId);
 
   const existing = await pool.query(
     'SELECT id FROM stage_gates WHERE id = $1 AND stage_id = $2',

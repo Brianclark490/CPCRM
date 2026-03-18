@@ -141,6 +141,7 @@ export function validateRelationshipType(relationshipType: unknown): string | nu
  * @throws {Error} CONFLICT — duplicate api_name on the same source object
  */
 export async function createRelationshipDefinition(
+  tenantId: string,
   params: CreateRelationshipDefinitionParams,
 ): Promise<RelationshipDefinition> {
   // Validate inputs
@@ -169,27 +170,27 @@ export async function createRelationshipDefinition(
     }
   }
 
-  // Validate both objects exist
+  // Validate both objects exist within tenant
   const sourceResult = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1',
-    [params.sourceObjectId],
+    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
+    [params.sourceObjectId, tenantId],
   );
   if (sourceResult.rows.length === 0) {
     throwNotFoundError('Source object definition not found');
   }
 
   const targetResult = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1',
-    [params.targetObjectId],
+    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
+    [params.targetObjectId, tenantId],
   );
   if (targetResult.rows.length === 0) {
     throwNotFoundError('Target object definition not found');
   }
 
-  // Check uniqueness of api_name on the source object
+  // Check uniqueness of api_name on the source object within tenant
   const existing = await pool.query(
-    'SELECT id FROM relationship_definitions WHERE source_object_id = $1 AND api_name = $2',
-    [params.sourceObjectId, params.apiName.trim()],
+    'SELECT id FROM relationship_definitions WHERE source_object_id = $1 AND api_name = $2 AND tenant_id = $3',
+    [params.sourceObjectId, params.apiName.trim(), tenantId],
   );
   if (existing.rows.length > 0) {
     throwConflictError(
@@ -202,11 +203,12 @@ export async function createRelationshipDefinition(
 
   const result = await pool.query(
     `INSERT INTO relationship_definitions
-       (id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (id, tenant_id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [
       relationshipId,
+      tenantId,
       params.sourceObjectId,
       params.targetObjectId,
       params.relationshipType.trim(),
@@ -233,12 +235,13 @@ export async function createRelationshipDefinition(
  * @throws {Error} NOT_FOUND — object does not exist
  */
 export async function listRelationshipDefinitions(
+  tenantId: string,
   objectId: string,
 ): Promise<RelationshipDefinitionWithObjects[]> {
-  // Validate object exists
+  // Validate object exists within tenant
   const objectResult = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1',
-    [objectId],
+    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
+    [objectId, tenantId],
   );
   if (objectResult.rows.length === 0) {
     throwNotFoundError('Object definition not found');
@@ -255,9 +258,9 @@ export async function listRelationshipDefinitions(
      FROM relationship_definitions rd
      JOIN object_definitions src ON src.id = rd.source_object_id
      JOIN object_definitions tgt ON tgt.id = rd.target_object_id
-     WHERE rd.source_object_id = $1 OR rd.target_object_id = $1
+     WHERE (rd.source_object_id = $1 OR rd.target_object_id = $1) AND rd.tenant_id = $2
      ORDER BY rd.created_at ASC`,
-    [objectId],
+    [objectId, tenantId],
   );
 
   return result.rows.map((row: Record<string, unknown>) =>
@@ -273,7 +276,7 @@ export async function listRelationshipDefinitions(
  * @throws {Error} NOT_FOUND — relationship does not exist
  * @throws {Error} DELETE_BLOCKED — system relationship
  */
-export async function deleteRelationshipDefinition(id: string): Promise<void> {
+export async function deleteRelationshipDefinition(tenantId: string, id: string): Promise<void> {
   const existing = await pool.query(
     `SELECT rd.*,
             src.is_system AS source_is_system,
@@ -281,8 +284,8 @@ export async function deleteRelationshipDefinition(id: string): Promise<void> {
      FROM relationship_definitions rd
      JOIN object_definitions src ON src.id = rd.source_object_id
      JOIN object_definitions tgt ON tgt.id = rd.target_object_id
-     WHERE rd.id = $1`,
-    [id],
+     WHERE rd.id = $1 AND rd.tenant_id = $2`,
+    [id, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -296,7 +299,7 @@ export async function deleteRelationshipDefinition(id: string): Promise<void> {
     throwDeleteBlockedError('Cannot delete system relationships');
   }
 
-  await pool.query('DELETE FROM relationship_definitions WHERE id = $1', [id]);
+  await pool.query('DELETE FROM relationship_definitions WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
 
   logger.info({ relationshipId: id }, 'Relationship definition deleted');
 }

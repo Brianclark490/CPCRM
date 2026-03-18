@@ -72,6 +72,7 @@ function applyMappings(
  * @param options - Conversion options (create_account, account_id, create_opportunity)
  */
 export async function convertLead(
+  tenantId: string,
   leadRecordId: string,
   ownerId: string,
   options: ConvertLeadOptions,
@@ -83,8 +84,8 @@ export async function convertLead(
 
     // 1. Resolve lead object definition
     const leadObjResult = await client.query(
-      'SELECT id FROM object_definitions WHERE api_name = $1',
-      ['lead'],
+      'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
+      ['lead', tenantId],
     );
     if (leadObjResult.rows.length === 0) {
       throwNotFoundError("Object type 'lead' not found");
@@ -93,8 +94,8 @@ export async function convertLead(
 
     // 2. Fetch the lead record
     const leadResult = await client.query(
-      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3',
-      [leadRecordId, leadObjectId, ownerId],
+      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
+      [leadRecordId, leadObjectId, ownerId, tenantId],
     );
     if (leadResult.rows.length === 0) {
       throwNotFoundError('Lead not found');
@@ -121,14 +122,14 @@ export async function convertLead(
 
     // 5. Resolve target object definitions
     const accountObjResult = await client.query(
-      'SELECT id FROM object_definitions WHERE api_name = $1',
-      ['account'],
+      'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
+      ['account', tenantId],
     );
     const accountObjectId = (accountObjResult.rows[0] as Record<string, unknown>).id as string;
 
     const contactObjResult = await client.query(
-      'SELECT id FROM object_definitions WHERE api_name = $1',
-      ['contact'],
+      'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
+      ['contact', tenantId],
     );
     const contactObjectId = (contactObjResult.rows[0] as Record<string, unknown>).id as string;
 
@@ -139,8 +140,8 @@ export async function convertLead(
     if (options.accountId) {
       // Use existing account
       const existingAccount = await client.query(
-        'SELECT id, name FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3',
-        [options.accountId, accountObjectId, ownerId],
+        'SELECT id, name FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
+        [options.accountId, accountObjectId, ownerId, tenantId],
       );
       if (existingAccount.rows.length === 0) {
         throwNotFoundError('Account not found');
@@ -157,9 +158,9 @@ export async function convertLead(
       const now = new Date();
 
       await client.query(
-        `INSERT INTO records (id, object_id, name, field_values, owner_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [accountId, accountObjectId, accountName, JSON.stringify(accountFieldValues), ownerId, now, now],
+        `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [accountId, tenantId, accountObjectId, accountName, JSON.stringify(accountFieldValues), ownerId, now, now],
       );
     }
 
@@ -173,9 +174,9 @@ export async function convertLead(
     const contactNow = new Date();
 
     await client.query(
-      `INSERT INTO records (id, object_id, name, field_values, owner_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [contactId, contactObjectId, contactName, JSON.stringify(contactFieldValues), ownerId, contactNow, contactNow],
+      `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [contactId, tenantId, contactObjectId, contactName, JSON.stringify(contactFieldValues), ownerId, contactNow, contactNow],
     );
 
     // Link contact to account via contact_account relationship
@@ -188,8 +189,8 @@ export async function convertLead(
 
     if (createOpportunity) {
       const opportunityObjResult = await client.query(
-        'SELECT id FROM object_definitions WHERE api_name = $1',
-        ['opportunity'],
+        'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
+        ['opportunity', tenantId],
       );
       const opportunityObjectId = (opportunityObjResult.rows[0] as Record<string, unknown>).id as string;
 
@@ -204,9 +205,9 @@ export async function convertLead(
       const oppNow = new Date();
 
       await client.query(
-        `INSERT INTO records (id, object_id, name, field_values, owner_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [opportunityId, opportunityObjectId, opportunityName, JSON.stringify(opportunityFieldValues), ownerId, oppNow, oppNow],
+        `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [opportunityId, tenantId, opportunityObjectId, opportunityName, JSON.stringify(opportunityFieldValues), ownerId, oppNow, oppNow],
       );
 
       // Link opportunity to account
@@ -230,8 +231,8 @@ export async function convertLead(
     await client.query(
       `UPDATE records
        SET field_values = $1, updated_at = $2
-       WHERE id = $3 AND object_id = $4 AND owner_id = $5`,
-      [JSON.stringify(updatedFieldValues), new Date(), leadRecordId, leadObjectId, ownerId],
+       WHERE id = $3 AND object_id = $4 AND owner_id = $5 AND tenant_id = $6`,
+      [JSON.stringify(updatedFieldValues), new Date(), leadRecordId, leadObjectId, ownerId, tenantId],
     );
 
     await client.query('COMMIT');
