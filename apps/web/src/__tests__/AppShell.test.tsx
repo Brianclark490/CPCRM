@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AppShell } from '../components/AppShell.js';
@@ -236,30 +236,11 @@ describe('AppShell', () => {
     const accountTab = screen.getByRole('link', { name: /Accounts/ });
     const opportunityTab = screen.getByRole('link', { name: /Opportunities/ });
 
-    // Simulate drag start on account tab
-    const dataTransfer = {
-      effectAllowed: '',
-      dropEffect: '',
-      setData: vi.fn(),
-      getData: vi.fn(),
-    };
-
-    accountTab.dispatchEvent(new DragEvent('dragstart', {
-      bubbles: true,
-      dataTransfer: dataTransfer as unknown as DataTransfer,
-    }));
-
-    opportunityTab.dispatchEvent(new DragEvent('dragenter', {
-      bubbles: true,
-    }));
-
-    opportunityTab.dispatchEvent(new DragEvent('dragover', {
-      bubbles: true,
-    }));
-
-    opportunityTab.dispatchEvent(new DragEvent('drop', {
-      bubbles: true,
-    }));
+    // Use fireEvent which works with React's synthetic event system
+    fireEvent.dragStart(accountTab);
+    fireEvent.dragEnter(opportunityTab);
+    fireEvent.dragOver(opportunityTab);
+    fireEvent.drop(opportunityTab);
 
     // Wait for the reorder API call
     await waitFor(() => {

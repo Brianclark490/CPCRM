@@ -131,8 +131,10 @@ export function AppShell({ children }: AppShellProps) {
   const handleDragStart = useCallback((index: number, e: React.DragEvent) => {
     setDragIndex(index);
     dragCounterRef.current = 0;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(index));
+    }
   }, []);
 
   const handleDragEnter = useCallback(
@@ -147,7 +149,9 @@ export function AppShell({ children }: AppShellProps) {
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
   }, []);
 
   const handleDragLeave = useCallback(
