@@ -112,6 +112,8 @@ describe('requireAuth middleware', () => {
       email: 'user@example.com',
       name: 'Test User',
       tenantId: undefined,
+      roles: [],
+      permissions: [],
     });
   });
 
@@ -138,6 +140,8 @@ describe('requireAuth middleware', () => {
       email: 'user@example.com',
       name: 'Test User',
       tenantId: 'tenant-abc',
+      roles: [],
+      permissions: [],
     });
   });
 
@@ -182,5 +186,84 @@ describe('requireAuth middleware', () => {
       expect.objectContaining({ userId: 'user123', tenantCount: 2 }),
       expect.stringContaining('Ambiguous tenant context'),
     );
+  });
+
+  it('resolves roles and permissions from the JWT tenant claim', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: {
+        sub: 'user123',
+        email: 'admin@example.com',
+        tenants: {
+          'tenant-abc': {
+            roles: ['admin'],
+            permissions: ['objects:manage', 'records:create', 'records:read', 'admin:access'],
+          },
+        },
+      },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user).toEqual({
+      userId: 'user123',
+      email: 'admin@example.com',
+      name: undefined,
+      tenantId: 'tenant-abc',
+      roles: ['admin'],
+      permissions: ['objects:manage', 'records:create', 'records:read', 'admin:access'],
+    });
+  });
+
+  it('falls back to top-level roles/permissions when no tenant claim is present', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: {
+        sub: 'user123',
+        roles: ['read_only'],
+        permissions: ['records:read'],
+      },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user).toEqual({
+      userId: 'user123',
+      email: undefined,
+      name: undefined,
+      tenantId: undefined,
+      roles: ['read_only'],
+      permissions: ['records:read'],
+    });
+  });
+
+  it('returns empty roles and permissions when tenant claim has no RBAC data', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: {
+        sub: 'user123',
+        tenants: { 'tenant-abc': {} },
+      },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user?.roles).toEqual([]);
+    expect(req.user?.permissions).toEqual([]);
   });
 });

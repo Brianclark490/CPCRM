@@ -72,6 +72,38 @@ export interface TenantMembership {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Descope RBAC — permissions & roles
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Permissions configured in the Descope console (Authorization → RBAC).
+ * These appear in the JWT `permissions` claim (or inside the tenant claim)
+ * after the user authenticates.
+ */
+export type DescopePermission =
+  | 'objects:manage'
+  | 'records:create'
+  | 'records:read'
+  | 'records:update'
+  | 'records:delete'
+  | 'records:read_all'
+  | 'records:read_team'
+  | 'admin:access';
+
+/**
+ * Roles configured in the Descope console (Authorization → RBAC).
+ * Each role bundles a set of {@link DescopePermission} values.
+ *
+ * | Role      | Permissions                                                                                  |
+ * |-----------|----------------------------------------------------------------------------------------------|
+ * | admin     | objects:manage, records:create, records:read, records:update, records:delete, records:read_all, admin:access |
+ * | manager   | records:create, records:read, records:update, records:delete, records:read_team               |
+ * | user      | records:create, records:read, records:update                                                 |
+ * | read_only | records:read                                                                                 |
+ */
+export type DescopeRole = 'admin' | 'manager' | 'user' | 'read_only';
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Organisation provisioning API types
 // ─────────────────────────────────────────────────────────────────────────────
 
