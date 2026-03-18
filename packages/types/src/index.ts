@@ -5,7 +5,7 @@
 /**
  * Lifecycle status of a tenant subscription.
  */
-export type TenantStatus = 'active' | 'suspended' | 'inactive';
+export type TenantStatus = 'active' | 'suspended' | 'inactive' | 'cancelled';
 
 /**
  * A Tenant is the root isolation boundary in CPCRM.
@@ -13,13 +13,17 @@ export type TenantStatus = 'active' | 'suspended' | 'inactive';
  * All application data belongs to exactly one tenant.
  */
 export interface Tenant {
-  /** UUID primary key */
+  /** VARCHAR(255) primary key — matches the Descope tenant ID */
   id: string;
   /** Human-readable display name (e.g. "Acme Corp") */
   name: string;
   /** URL-safe unique slug used for subdomain routing (e.g. "acme-corp") */
   slug: string;
   status: TenantStatus;
+  /** Subscription plan (e.g. "free", "pro", "enterprise") */
+  plan: string;
+  /** Tenant-level settings stored as JSON */
+  settings: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -408,6 +412,8 @@ export type FieldType =
 export interface ObjectDefinition {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this object definition */
+  tenantId: string;
   /** Machine name, snake_case (e.g. "account", "custom_project") */
   apiName: string;
   /** Display name (e.g. "Account") */
@@ -447,6 +453,8 @@ export interface FieldOptions {
 export interface FieldDefinition {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this field definition */
+  tenantId: string;
   /** The object this field belongs to */
   objectId: string;
   /** Machine name, snake_case (e.g. "company_name") */
@@ -486,6 +494,8 @@ export type RelationshipType = 'lookup' | 'parent_child';
 export interface RelationshipDefinition {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this relationship definition */
+  tenantId: string;
   /** The object that holds the reference (e.g. opportunity) */
   sourceObjectId: string;
   /** The object being referenced (e.g. account) */
@@ -517,6 +527,8 @@ export interface RelationshipDefinition {
 export interface CrmRecord {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this record */
+  tenantId: string;
   /** The object definition this record belongs to */
   objectId: string;
   /** Primary display name of the record */
@@ -543,6 +555,8 @@ export interface CrmRecord {
 export interface RecordRelationship {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this record relationship */
+  tenantId: string;
   /** The relationship definition that governs this link */
   relationshipId: string;
   /** The record that holds the reference (source side) */
@@ -579,6 +593,8 @@ export type LayoutFieldWidth = 'full' | 'half';
 export interface LayoutDefinition {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this layout */
+  tenantId: string;
   /** The object this layout belongs to */
   objectId: string;
   /** Human-readable name (e.g. "Default Form", "List View") */
@@ -598,6 +614,8 @@ export interface LayoutDefinition {
 export interface LayoutField {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this layout field placement */
+  tenantId: string;
   /** The layout this field placement belongs to */
   layoutId: string;
   /** The field definition being placed */
@@ -635,6 +653,8 @@ export type LeadConversionTarget = 'account' | 'contact' | 'opportunity';
 export interface LeadConversionMapping {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this conversion mapping */
+  tenantId: string;
   /** The api_name of the field on the lead object */
   leadFieldApiName: string;
   /** The target object that receives the value */
@@ -730,6 +750,8 @@ export type GateType = 'required' | 'min_value' | 'specific_value';
 export interface PipelineDefinition {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this pipeline */
+  tenantId: string;
   /** The object this pipeline belongs to (e.g. opportunity) */
   objectId: string;
   /** Human-readable name (e.g. "Sales Pipeline") */
@@ -754,6 +776,8 @@ export interface PipelineDefinition {
 export interface StageDefinition {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this stage */
+  tenantId: string;
   /** The pipeline this stage belongs to */
   pipelineId: string;
   /** Human-readable name (e.g. "Qualification") */
@@ -781,6 +805,8 @@ export interface StageDefinition {
 export interface StageGate {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this stage gate */
+  tenantId: string;
   /** The stage this gate applies to */
   stageId: string;
   /** The field that must be validated */
@@ -800,6 +826,8 @@ export interface StageGate {
 export interface StageHistory {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this stage history entry */
+  tenantId: string;
   /** The record that moved stages */
   recordId: string;
   /** The pipeline the transition occurred in */
@@ -832,6 +860,8 @@ export type CRMRole = 'admin' | 'manager' | 'user' | 'read_only';
 export interface ObjectPermission {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this permission */
+  tenantId: string;
   /** The object definition this permission applies to */
   objectId: string;
   /** Descope role name */
@@ -848,6 +878,8 @@ export interface ObjectPermission {
 export interface Team {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this team */
+  tenantId: string;
   /** Team display name */
   name: string;
   /** Descope user ID of the team creator */
@@ -861,6 +893,8 @@ export interface Team {
 export interface TeamMember {
   /** UUID primary key */
   id: string;
+  /** Tenant that owns this team membership */
+  tenantId: string;
   /** The team this membership belongs to */
   teamId: string;
   /** Descope user ID */
