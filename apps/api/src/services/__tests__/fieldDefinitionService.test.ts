@@ -11,6 +11,8 @@ import {
   validateFieldOptions,
 } from '../fieldDefinitionService.js';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -393,7 +395,7 @@ describe('createFieldDefinition', () => {
   });
 
   it('creates a field and returns it', async () => {
-    const result = await createFieldDefinition(objectId, {
+    const result = await createFieldDefinition(TENANT_ID, objectId, {
       apiName: 'company_name',
       label: 'Company Name',
       fieldType: 'text',
@@ -408,7 +410,7 @@ describe('createFieldDefinition', () => {
   });
 
   it('auto-adds field to default form layout', async () => {
-    await createFieldDefinition(objectId, {
+    await createFieldDefinition(TENANT_ID, objectId, {
       apiName: 'company_name',
       label: 'Company Name',
       fieldType: 'text',
@@ -420,13 +422,13 @@ describe('createFieldDefinition', () => {
   });
 
   it('increments sort_order for subsequent fields', async () => {
-    await createFieldDefinition(objectId, {
+    await createFieldDefinition(TENANT_ID, objectId, {
       apiName: 'field_one',
       label: 'Field One',
       fieldType: 'text',
     });
 
-    const second = await createFieldDefinition(objectId, {
+    const second = await createFieldDefinition(TENANT_ID, objectId, {
       apiName: 'field_two',
       label: 'Field Two',
       fieldType: 'text',
@@ -437,7 +439,7 @@ describe('createFieldDefinition', () => {
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      createFieldDefinition('missing-obj', {
+      createFieldDefinition(TENANT_ID, 'missing-obj', {
         apiName: 'test_field',
         label: 'Test',
         fieldType: 'text',
@@ -450,7 +452,7 @@ describe('createFieldDefinition', () => {
 
   it('throws VALIDATION_ERROR for invalid api_name', async () => {
     await expect(
-      createFieldDefinition(objectId, {
+      createFieldDefinition(TENANT_ID, objectId, {
         apiName: '',
         label: 'Test',
         fieldType: 'text',
@@ -460,7 +462,7 @@ describe('createFieldDefinition', () => {
 
   it('throws VALIDATION_ERROR for invalid field_type', async () => {
     await expect(
-      createFieldDefinition(objectId, {
+      createFieldDefinition(TENANT_ID, objectId, {
         apiName: 'test_field',
         label: 'Test',
         fieldType: 'invalid',
@@ -470,7 +472,7 @@ describe('createFieldDefinition', () => {
 
   it('throws VALIDATION_ERROR for dropdown without choices', async () => {
     await expect(
-      createFieldDefinition(objectId, {
+      createFieldDefinition(TENANT_ID, objectId, {
         apiName: 'status',
         label: 'Status',
         fieldType: 'dropdown',
@@ -479,14 +481,14 @@ describe('createFieldDefinition', () => {
   });
 
   it('throws CONFLICT for duplicate api_name', async () => {
-    await createFieldDefinition(objectId, {
+    await createFieldDefinition(TENANT_ID, objectId, {
       apiName: 'duplicate_field',
       label: 'Dup',
       fieldType: 'text',
     });
 
     await expect(
-      createFieldDefinition(objectId, {
+      createFieldDefinition(TENANT_ID, objectId, {
         apiName: 'duplicate_field',
         label: 'Dup Again',
         fieldType: 'text',
@@ -495,7 +497,7 @@ describe('createFieldDefinition', () => {
   });
 
   it('sets required and defaultValue when provided', async () => {
-    const result = await createFieldDefinition(objectId, {
+    const result = await createFieldDefinition(TENANT_ID, objectId, {
       apiName: 'priority',
       label: 'Priority',
       fieldType: 'text',
@@ -524,7 +526,7 @@ describe('listFieldDefinitions', () => {
   });
 
   it('returns empty array when no fields exist', async () => {
-    const result = await listFieldDefinitions(objectId);
+    const result = await listFieldDefinitions(TENANT_ID, objectId);
     expect(result).toEqual([]);
   });
 
@@ -532,14 +534,14 @@ describe('listFieldDefinitions', () => {
     seedField('f1', objectId, { api_name: 'field_a', sort_order: 2 });
     seedField('f2', objectId, { api_name: 'field_b', sort_order: 1 });
 
-    const result = await listFieldDefinitions(objectId);
+    const result = await listFieldDefinitions(TENANT_ID, objectId);
     expect(result).toHaveLength(2);
     expect(result[0].apiName).toBe('field_b');
     expect(result[1].apiName).toBe('field_a');
   });
 
   it('throws NOT_FOUND when object does not exist', async () => {
-    await expect(listFieldDefinitions('missing-obj')).rejects.toMatchObject({
+    await expect(listFieldDefinitions(TENANT_ID, 'missing-obj')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
   });
@@ -563,25 +565,25 @@ describe('updateFieldDefinition', () => {
   it('returns the updated field', async () => {
     seedField('f1', objectId, { api_name: 'old_label' });
 
-    const result = await updateFieldDefinition(objectId, 'f1', { label: 'New Label' });
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', { label: 'New Label' });
     expect(result.label).toBe('New Label');
   });
 
   it('returns unchanged field when no params provided', async () => {
     seedField('f1', objectId);
-    const result = await updateFieldDefinition(objectId, 'f1', {});
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', {});
     expect(result.apiName).toBe('test_field');
   });
 
   it('throws NOT_FOUND when field does not exist', async () => {
     await expect(
-      updateFieldDefinition(objectId, 'missing-field', { label: 'Updated' }),
+      updateFieldDefinition(TENANT_ID, objectId, 'missing-field', { label: 'Updated' }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      updateFieldDefinition('missing-obj', 'f1', { label: 'Updated' }),
+      updateFieldDefinition(TENANT_ID, 'missing-obj', 'f1', { label: 'Updated' }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
@@ -589,7 +591,7 @@ describe('updateFieldDefinition', () => {
     seedField('f1', objectId, { is_system: true });
 
     await expect(
-      updateFieldDefinition(objectId, 'f1', { fieldType: 'number' }),
+      updateFieldDefinition(TENANT_ID, objectId, 'f1', { fieldType: 'number' }),
     ).rejects.toMatchObject({
       message: 'Cannot change field_type on system fields',
       code: 'VALIDATION_ERROR',
@@ -600,7 +602,7 @@ describe('updateFieldDefinition', () => {
     seedField('f1', objectId);
 
     await expect(
-      updateFieldDefinition(objectId, 'f1', { fieldType: 'invalid_type' }),
+      updateFieldDefinition(TENANT_ID, objectId, 'f1', { fieldType: 'invalid_type' }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
@@ -608,7 +610,7 @@ describe('updateFieldDefinition', () => {
     seedField('f1', objectId);
 
     await expect(
-      updateFieldDefinition(objectId, 'f1', { label: '' }),
+      updateFieldDefinition(TENANT_ID, objectId, 'f1', { label: '' }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
@@ -616,14 +618,14 @@ describe('updateFieldDefinition', () => {
     seedField('f1', objectId, { field_type: 'text' });
     fakeRecords.set('r1', { id: 'r1', object_id: objectId });
 
-    const result = await updateFieldDefinition(objectId, 'f1', { fieldType: 'number' });
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', { fieldType: 'number' });
     expect(result.warning).toMatch(/field_type changed/);
   });
 
   it('allows updating options on system fields', async () => {
     seedField('f1', objectId, { is_system: true, field_type: 'text' });
 
-    const result = await updateFieldDefinition(objectId, 'f1', {
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', {
       options: { max_length: 500 },
     });
     expect(result).toBeDefined();
@@ -632,28 +634,28 @@ describe('updateFieldDefinition', () => {
   it('allows updating required on system fields', async () => {
     seedField('f1', objectId, { is_system: true, required: false });
 
-    const result = await updateFieldDefinition(objectId, 'f1', { required: true });
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', { required: true });
     expect(result.required).toBe(true);
   });
 
   it('allows updating default_value on system fields', async () => {
     seedField('f1', objectId, { is_system: true, default_value: null });
 
-    const result = await updateFieldDefinition(objectId, 'f1', { defaultValue: 'new_default' });
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', { defaultValue: 'new_default' });
     expect(result.defaultValue).toBe('new_default');
   });
 
   it('allows updating description on system fields', async () => {
     seedField('f1', objectId, { is_system: true, description: null });
 
-    const result = await updateFieldDefinition(objectId, 'f1', { description: 'Updated description' });
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', { description: 'Updated description' });
     expect(result.description).toBe('Updated description');
   });
 
   it('allows updating label on system fields', async () => {
     seedField('f1', objectId, { is_system: true, label: 'Old Label' });
 
-    const result = await updateFieldDefinition(objectId, 'f1', { label: 'New Label' });
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', { label: 'New Label' });
     expect(result.label).toBe('New Label');
   });
 
@@ -664,7 +666,7 @@ describe('updateFieldDefinition', () => {
       options: { choices: ['Option A', 'Option B'] },
     });
 
-    const result = await updateFieldDefinition(objectId, 'f1', {
+    const result = await updateFieldDefinition(TENANT_ID, objectId, 'f1', {
       options: { choices: ['Option A', 'Option B', 'Option C'] },
     });
     expect(result.options).toEqual({ choices: ['Option A', 'Option B', 'Option C'] });
@@ -688,19 +690,19 @@ describe('deleteFieldDefinition', () => {
 
   it('deletes the field successfully', async () => {
     seedField('f1', objectId);
-    await expect(deleteFieldDefinition(objectId, 'f1')).resolves.toBeUndefined();
+    await expect(deleteFieldDefinition(TENANT_ID, objectId, 'f1')).resolves.toBeUndefined();
     expect(fakeFields.has('f1')).toBe(false);
   });
 
   it('throws NOT_FOUND when field does not exist', async () => {
     await expect(
-      deleteFieldDefinition(objectId, 'missing-field'),
+      deleteFieldDefinition(TENANT_ID, objectId, 'missing-field'),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      deleteFieldDefinition('missing-obj', 'f1'),
+      deleteFieldDefinition(TENANT_ID, 'missing-obj', 'f1'),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
@@ -708,7 +710,7 @@ describe('deleteFieldDefinition', () => {
     seedField('f1', objectId, { is_system: true });
 
     await expect(
-      deleteFieldDefinition(objectId, 'f1'),
+      deleteFieldDefinition(TENANT_ID, objectId, 'f1'),
     ).rejects.toMatchObject({
       message: 'Cannot delete system fields',
       code: 'DELETE_BLOCKED',
@@ -726,7 +728,7 @@ describe('deleteFieldDefinition', () => {
       width: 'full',
     });
 
-    await deleteFieldDefinition(objectId, 'f1');
+    await deleteFieldDefinition(TENANT_ID, objectId, 'f1');
     expect(fakeLayoutFields.has('lf1')).toBe(false);
   });
 });
@@ -750,7 +752,7 @@ describe('reorderFieldDefinitions', () => {
     seedField('f1', objectId, { api_name: 'field_a', sort_order: 1 });
     seedField('f2', objectId, { api_name: 'field_b', sort_order: 2 });
 
-    const result = await reorderFieldDefinitions(objectId, ['f2', 'f1']);
+    const result = await reorderFieldDefinitions(TENANT_ID, objectId, ['f2', 'f1']);
 
     // f2 → sort_order 1, f1 → sort_order 2; returned ORDER BY sort_order ASC
     expect(result).toHaveLength(2);
@@ -762,13 +764,13 @@ describe('reorderFieldDefinitions', () => {
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      reorderFieldDefinitions('missing-obj', ['f1']),
+      reorderFieldDefinitions(TENANT_ID, 'missing-obj', ['f1']),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('throws VALIDATION_ERROR for empty field_ids', async () => {
     await expect(
-      reorderFieldDefinitions(objectId, []),
+      reorderFieldDefinitions(TENANT_ID, objectId, []),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
@@ -776,7 +778,7 @@ describe('reorderFieldDefinitions', () => {
     seedField('f1', objectId, { api_name: 'field_a' });
 
     await expect(
-      reorderFieldDefinitions(objectId, ['f1', 'unknown-field']),
+      reorderFieldDefinitions(TENANT_ID, objectId, ['f1', 'unknown-field']),
     ).rejects.toMatchObject({
       message: 'Field ID "unknown-field" does not belong to this object',
       code: 'VALIDATION_ERROR',
