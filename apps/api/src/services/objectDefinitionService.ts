@@ -349,8 +349,16 @@ export async function createObjectDefinition(
 
     return rowToObjectDefinition(result.rows[0]);
   } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
+    const originalError = err;
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      logger.error(
+        { originalError, rollbackError },
+        'Failed to rollback transaction when creating object definition',
+      );
+    }
+    throw originalError;
   } finally {
     client.release();
   }
