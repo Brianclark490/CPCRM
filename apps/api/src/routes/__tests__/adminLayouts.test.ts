@@ -99,6 +99,7 @@ describe('POST /admin/objects/:objectId/layouts', () => {
     await handleCreateLayout(req, res);
 
     expect(mockCreateLayoutDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-1',
       expect.objectContaining({
         name: 'Custom Form',
@@ -125,6 +126,7 @@ describe('POST /admin/objects/:objectId/layouts', () => {
     await handleCreateLayout(req, res);
 
     expect(mockCreateLayoutDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-1',
       expect.objectContaining({
         layoutType: 'list',
@@ -201,7 +203,7 @@ describe('GET /admin/objects/:objectId/layouts', () => {
 
     await handleListLayouts(req, res);
 
-    expect(mockListLayoutDefinitions).toHaveBeenCalledWith('obj-1');
+    expect(mockListLayoutDefinitions).toHaveBeenCalledWith('tenant-abc', 'obj-1');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(layouts);
   });
@@ -272,7 +274,7 @@ describe('GET /admin/objects/:objectId/layouts/:id', () => {
 
     await handleGetLayout(req, res);
 
-    expect(mockGetLayoutDefinitionById).toHaveBeenCalledWith('obj-1', 'l1');
+    expect(mockGetLayoutDefinitionById).toHaveBeenCalledWith('tenant-abc', 'obj-1', 'l1');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(layout);
   });
@@ -335,6 +337,7 @@ describe('PUT /admin/objects/:objectId/layouts/:id', () => {
     await handleUpdateLayout(req, res);
 
     expect(mockUpdateLayoutDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-1',
       'l1',
       expect.objectContaining({ name: 'Updated Name' }),
@@ -356,6 +359,7 @@ describe('PUT /admin/objects/:objectId/layouts/:id', () => {
     await handleUpdateLayout(req, res);
 
     expect(mockUpdateLayoutDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-1',
       'l1',
       expect.objectContaining({ layoutType: 'list' }),
@@ -475,7 +479,7 @@ describe('PUT /admin/objects/:objectId/layouts/:id/fields', () => {
 
     await handleSetLayoutFields(req, res);
 
-    expect(mockSetLayoutFields).toHaveBeenCalledWith('obj-1', 'l1', [
+    expect(mockSetLayoutFields).toHaveBeenCalledWith('tenant-abc', 'obj-1', 'l1', [
       {
         label: 'Basic Info',
         fields: [{ field_id: 'f1', width: 'full' }],
@@ -497,7 +501,7 @@ describe('PUT /admin/objects/:objectId/layouts/:id/fields', () => {
 
     await handleSetLayoutFields(req, res);
 
-    expect(mockSetLayoutFields).toHaveBeenCalledWith('obj-1', 'l1', []);
+    expect(mockSetLayoutFields).toHaveBeenCalledWith('tenant-abc', 'obj-1', 'l1', []);
   });
 
   it('returns 400 on VALIDATION_ERROR', async () => {
@@ -567,7 +571,7 @@ describe('DELETE /admin/objects/:objectId/layouts/:id', () => {
 
     await handleDeleteLayout(req, res);
 
-    expect(mockDeleteLayoutDefinition).toHaveBeenCalledWith('obj-1', 'l1');
+    expect(mockDeleteLayoutDefinition).toHaveBeenCalledWith('tenant-abc', 'obj-1', 'l1');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
