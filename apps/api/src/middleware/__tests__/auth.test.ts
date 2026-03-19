@@ -145,6 +145,92 @@ describe('requireAuth middleware', () => {
     });
   });
 
+  it('resolves tenantId from the dct claim when present', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: {
+        sub: 'user123',
+        email: 'user@example.com',
+        name: 'Test User',
+        dct: 'tenant-from-dct',
+        tenants: {
+          'tenant-from-dct': {
+            roles: ['admin'],
+            permissions: ['objects:manage', 'admin:access'],
+          },
+        },
+      },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user).toEqual({
+      userId: 'user123',
+      email: 'user@example.com',
+      name: 'Test User',
+      tenantId: 'tenant-from-dct',
+      roles: ['admin'],
+      permissions: ['objects:manage', 'admin:access'],
+    });
+  });
+
+  it('prefers dct claim over tenants map when both are present with multiple tenants', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: {
+        sub: 'user123',
+        dct: 'tenant-xyz',
+        tenants: {
+          'tenant-abc': { roles: ['user'], permissions: ['records:read'] },
+          'tenant-xyz': { roles: ['admin'], permissions: ['admin:access'] },
+        },
+      },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+      path: '/accounts',
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user?.tenantId).toBe('tenant-xyz');
+    expect(req.user?.roles).toEqual(['admin']);
+    expect(req.user?.permissions).toEqual(['admin:access']);
+    // Should NOT warn about ambiguous tenants when dct is explicit
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
+  });
+
+  it('uses dct claim even when tenant is not in tenants map', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: {
+        sub: 'user123',
+        dct: 'tenant-not-in-map',
+        tenants: {
+          'tenant-abc': { roles: ['user'] },
+        },
+      },
+    });
+
+    const req = {
+      headers: { authorization: 'Bearer valid_token' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user?.tenantId).toBe('tenant-not-in-map');
+    expect(req.user?.roles).toEqual([]);
+    expect(req.user?.permissions).toEqual([]);
+  });
+
   it('sets tenantId to undefined when the JWT tenants claim is an empty object', async () => {
     mockValidateSession.mockResolvedValue({
       token: { sub: 'user123', tenants: {} },
@@ -161,7 +247,7 @@ describe('requireAuth middleware', () => {
     expect(req.user?.tenantId).toBeUndefined();
   });
 
-  it('resolves to the first tenantId and warns when JWT carries multiple tenant claims', async () => {
+  it('resolves to the first tenantId and warns when JWT carries multiple tenant claims without dct', async () => {
     mockValidateSession.mockResolvedValue({
       token: {
         sub: 'user123',

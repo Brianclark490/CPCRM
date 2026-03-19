@@ -35,44 +35,62 @@ interface TenantClaims {
  * Extracts the active tenant ID, roles, and permissions from the Descope JWT
  * token payload.
  *
- * Descope includes a `tenants` claim (map of tenantId → tenant metadata)
- * when the user is authenticated within a tenant context. Each tenant entry
- * may contain `roles` and `permissions` arrays when RBAC is enabled.
+ * Descope includes a `dct` (default current tenant) claim when the user is
+ * authenticated within a specific tenant context.  The `tenants` claim is a
+ * map of tenantId → tenant metadata containing `roles` and `permissions`
+ * arrays when RBAC is enabled.
  *
  * Resolution rules:
- * - If the token carries exactly one tenant claim, that tenant's ID, roles,
- *   and permissions are returned.
- * - If the token carries multiple tenant claims (ambiguous), the first is
- *   used and a warning is logged.
- * - If the token carries no tenant claim (or the claim is empty), roles and
- *   permissions fall back to the top-level `roles` / `permissions` claims
- *   (global Descope RBAC) when present.
+ * 1. If the token carries a `dct` claim, it is used as the current tenant ID.
+ *    Roles and permissions are read from `tenants[dct]`.
+ * 2. If `dct` is absent but the `tenants` map contains exactly one entry,
+ *    that entry's tenant ID is used.
+ * 3. If `dct` is absent and the `tenants` map contains multiple entries,
+ *    the first is used and a warning is logged.
+ * 4. If no tenant information is available, roles and permissions fall back
+ *    to the top-level `roles` / `permissions` claims (global Descope RBAC).
  */
 function resolveTenantClaims(
   token: Record<string, unknown>,
   context?: { path?: string; userId?: string },
 ): TenantClaims {
   const tenants = token['tenants'];
-  if (tenants !== null && typeof tenants === 'object' && !Array.isArray(tenants)) {
-    const tenantMap = tenants as Record<string, Record<string, unknown>>;
-    const tenantIds = Object.keys(tenantMap);
-    if (tenantIds.length > 0) {
-      if (tenantIds.length > 1) {
-        logger.warn(
-          { path: context?.path, userId: context?.userId, tenantCount: tenantIds.length },
-          'Ambiguous tenant context: JWT carries multiple tenant claims; using the first',
-        );
-      }
-      const tenantId = tenantIds[0];
-      const tenantData = tenantMap[tenantId] ?? {};
-      return {
-        tenantId,
-        roles: Array.isArray(tenantData['roles']) ? (tenantData['roles'] as string[]) : [],
-        permissions: Array.isArray(tenantData['permissions'])
-          ? (tenantData['permissions'] as string[])
-          : [],
-      };
+  const tenantMap: Record<string, Record<string, unknown>> =
+    tenants !== null && typeof tenants === 'object' && !Array.isArray(tenants)
+      ? (tenants as Record<string, Record<string, unknown>>)
+      : {};
+
+  // Prefer the explicit `dct` (default current tenant) claim from Descope
+  const dct = token['dct'];
+  if (typeof dct === 'string' && dct.length > 0) {
+    const tenantData = tenantMap[dct] ?? {};
+    return {
+      tenantId: dct,
+      roles: Array.isArray(tenantData['roles']) ? (tenantData['roles'] as string[]) : [],
+      permissions: Array.isArray(tenantData['permissions'])
+        ? (tenantData['permissions'] as string[])
+        : [],
+    };
+  }
+
+  // Fall back to the tenants map when dct is not present
+  const tenantIds = Object.keys(tenantMap);
+  if (tenantIds.length > 0) {
+    if (tenantIds.length > 1) {
+      logger.warn(
+        { path: context?.path, userId: context?.userId, tenantCount: tenantIds.length },
+        'Ambiguous tenant context: JWT carries multiple tenant claims; using the first',
+      );
     }
+    const tenantId = tenantIds[0];
+    const tenantData = tenantMap[tenantId] ?? {};
+    return {
+      tenantId,
+      roles: Array.isArray(tenantData['roles']) ? (tenantData['roles'] as string[]) : [],
+      permissions: Array.isArray(tenantData['permissions'])
+        ? (tenantData['permissions'] as string[])
+        : [],
+    };
   }
 
   // No tenant claim — fall back to top-level roles/permissions (global RBAC)
