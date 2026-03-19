@@ -223,20 +223,35 @@ export async function provisionTenant(
 
 /**
  * Lists all tenants with optional pagination.
+ * Includes an approximate user count for each tenant.
  */
 export async function listTenants(
   limit: number,
   offset: number,
-): Promise<{ tenants: TenantRow[]; total: number }> {
+): Promise<{ tenants: (TenantRow & { userCount: number })[]; total: number }> {
   const countResult = await pool.query('SELECT COUNT(*) AS total FROM tenants');
   const total = parseInt((countResult.rows[0] as { total: string }).total, 10);
 
   const result = await pool.query(
-    'SELECT * FROM tenants ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+    `SELECT t.*, COALESCE(m.user_count, 0) AS user_count
+     FROM tenants t
+     LEFT JOIN (
+       SELECT tenant_id, COUNT(*) AS user_count
+       FROM tenant_memberships
+       GROUP BY tenant_id
+     ) m ON m.tenant_id = t.id
+     ORDER BY t.created_at DESC
+     LIMIT $1 OFFSET $2`,
     [limit, offset],
   );
 
-  return { tenants: result.rows as TenantRow[], total };
+  return {
+    tenants: (result.rows as Array<TenantRow & { user_count: string }>).map((row) => ({
+      ...row,
+      userCount: parseInt(row.user_count, 10),
+    })),
+    total,
+  };
 }
 
 /**

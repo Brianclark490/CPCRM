@@ -20,6 +20,8 @@ import { ProfilePage } from './pages/ProfilePage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { TenantPickerPage } from './pages/TenantPickerPage.js';
+import { PlatformTenantsPage } from './pages/PlatformTenantsPage.js';
+import { PlatformTenantDetailPage } from './pages/PlatformTenantDetailPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
 import { AppShell } from './components/AppShell.js';
 
@@ -212,6 +214,26 @@ export function App() {
           element={
             <ProtectedRoute>
               <OrganisationProvisioningPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/platform/tenants"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <PlatformTenantsPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/platform/tenants/:id"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <PlatformTenantDetailPage />
+              </AppShell>
             </ProtectedRoute>
           }
         />

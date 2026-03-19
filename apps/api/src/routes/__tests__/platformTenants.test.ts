@@ -30,6 +30,16 @@ vi.mock('../../services/tenantProvisioning.js', () => ({
   deleteTenant: mockDeleteTenant,
 }));
 
+// ─── Mock the admin user service ─────────────────────────────────────────────
+
+const mockListTenantUsers = vi.fn();
+const mockInviteUser = vi.fn();
+
+vi.mock('../../services/adminUserService.js', () => ({
+  listTenantUsers: mockListTenantUsers,
+  inviteUser: mockInviteUser,
+}));
+
 // ─── Mock logger ──────────────────────────────────────────────────────────────
 
 vi.mock('../../lib/logger.js', () => ({
@@ -42,6 +52,8 @@ const {
   handleGetTenant,
   handleUpdateTenant,
   handleDeleteTenant,
+  handleListTenantUsers,
+  handleInviteTenantUser,
 } = await import('../platformTenants.js');
 
 // ─── Global reset — clears mock call history and any tracked rejections ───────
@@ -387,6 +399,127 @@ describe('DELETE /api/platform/tenants/:id', () => {
     const res = mockRes();
 
     await handleDeleteTenant(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+});
+
+// ─── GET /api/platform/tenants/:id/users ──────────────────────────────────────
+
+describe('GET /api/platform/tenants/:id/users', () => {
+  beforeEach(() => {
+    mockListTenantUsers.mockReset();
+  });
+
+  it('returns 200 with user list', async () => {
+    const users = [
+      { userId: 'U1', loginId: 'admin@acme.com', email: 'admin@acme.com', name: 'John', roles: ['admin'], status: 'enabled', lastLogin: null },
+    ];
+    mockListTenantUsers.mockResolvedValue(users);
+
+    const req = mockReq({}, { id: 'acme-corp' });
+    const res = mockRes();
+
+    await handleListTenantUsers(req, res);
+
+    expect(mockListTenantUsers).toHaveBeenCalledWith('acme-corp');
+    expect(res.json).toHaveBeenCalledWith(users);
+  });
+
+  it('returns 500 on unexpected error', async () => {
+    mockListTenantUsers.mockRejectedValue(new Error('Descope error'));
+
+    const req = mockReq({}, { id: 'acme-corp' });
+    const res = mockRes();
+
+    await handleListTenantUsers(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+});
+
+// ─── POST /api/platform/tenants/:id/users/invite ─────────────────────────────
+
+describe('POST /api/platform/tenants/:id/users/invite', () => {
+  beforeEach(() => {
+    mockInviteUser.mockReset();
+  });
+
+  it('returns 201 on successful invite', async () => {
+    const inviteResult = {
+      email: 'user@acme.com',
+      name: 'Jane',
+      role: 'user',
+      inviteSent: true,
+      existingUser: false,
+    };
+    mockInviteUser.mockResolvedValue(inviteResult);
+
+    const req = mockReq(
+      { email: 'user@acme.com', name: 'Jane', role: 'user' },
+      { id: 'acme-corp' },
+    );
+    const res = mockRes();
+
+    await handleInviteTenantUser(req, res);
+
+    expect(mockInviteUser).toHaveBeenCalledWith({
+      email: 'user@acme.com',
+      name: 'Jane',
+      role: 'user',
+      tenantId: 'acme-corp',
+    });
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(inviteResult);
+  });
+
+  it('returns 400 when service throws VALIDATION_ERROR', async () => {
+    mockInviteUser.mockRejectedValue(
+      Object.assign(new Error('A valid email address is required'), { code: 'VALIDATION_ERROR' }),
+    );
+
+    const req = mockReq({ email: '', name: 'Jane', role: 'user' }, { id: 'acme-corp' });
+    const res = mockRes();
+
+    await handleInviteTenantUser(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'A valid email address is required',
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('returns 500 when service throws INVITE_FAILED', async () => {
+    mockInviteUser.mockRejectedValue(
+      Object.assign(new Error('Failed to send user invitation'), { code: 'INVITE_FAILED' }),
+    );
+
+    const req = mockReq(
+      { email: 'user@acme.com', name: 'Jane', role: 'user' },
+      { id: 'acme-corp' },
+    );
+    const res = mockRes();
+
+    await handleInviteTenantUser(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Failed to send user invitation',
+      code: 'INVITE_FAILED',
+    });
+  });
+
+  it('returns 500 on unexpected error', async () => {
+    mockInviteUser.mockRejectedValue(new Error('Unexpected'));
+
+    const req = mockReq(
+      { email: 'user@acme.com', name: 'Jane', role: 'user' },
+      { id: 'acme-corp' },
+    );
+    const res = mockRes();
+
+    await handleInviteTenantUser(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
   });
