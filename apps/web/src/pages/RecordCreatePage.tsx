@@ -73,7 +73,7 @@ interface RelationshipSelection {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
 function groupFieldsBySection(
   layoutFields: LayoutFieldWithMetadata[],

@@ -186,7 +186,7 @@ export async function getFieldDefinitions(
 
 // ─── Field Value Validation ──────────────────────────────────────────────────
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function validateFieldValue(

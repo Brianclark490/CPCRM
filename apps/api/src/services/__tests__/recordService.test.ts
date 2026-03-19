@@ -335,6 +335,14 @@ describe('validateFieldValue', () => {
       const fd = makeFieldDef({ fieldType: 'email', label: 'Email' });
       expect(validateFieldValue(fd, 'not-an-email')).toBe("Field 'Email' must be a valid email");
     });
+
+    it('completes quickly for a crafted ReDoS input', () => {
+      const fd = makeFieldDef({ fieldType: 'email', label: 'Email' });
+      const redosInput = 'a@' + 'a.'.repeat(50) + '!';
+      const start = Date.now();
+      validateFieldValue(fd, redosInput);
+      expect(Date.now() - start).toBeLessThan(500);
+    });
   });
 
   describe('phone', () => {

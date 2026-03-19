@@ -39,7 +39,7 @@ interface ApiError {
   error: string;
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 const PHONE_REGEX = /^[+]?[\d\s()-]{7,}$/;
 
 export function CreateAccountPage() {
