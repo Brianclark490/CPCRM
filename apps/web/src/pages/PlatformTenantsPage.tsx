@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
-import { slugify } from '../utils.js';
 import styles from './PlatformTenantsPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

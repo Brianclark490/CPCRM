@@ -35,9 +35,14 @@ vi.mock('../store/tenant.js', () => ({
   clearStoredTenant: vi.fn(),
 }));
 
+vi.mock('../store/superAdmin.js', () => ({
+  useSuperAdmin: vi.fn(),
+}));
+
 const { useUser, useDescope, useSession } = await import('@descope/react-sdk');
 const { sessionHistory } = await import('../store/sessionHistory.js');
 const { useTenant, clearStoredTenant } = await import('../store/tenant.js');
+const { useSuperAdmin } = await import('../store/superAdmin.js');
 
 function mockFetchObjects(objects: Array<{ id?: string; apiName: string; pluralLabel: string; icon?: string }> = []) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -61,6 +66,7 @@ describe('AppShell', () => {
       claims: {},
     });
     vi.mocked(useTenant).mockReturnValue({ tenantId: null, tenantName: null });
+    vi.mocked(useSuperAdmin).mockReturnValue({ isSuperAdmin: false, loading: false });
     mockLogout.mockResolvedValue(undefined);
     mockNavigate.mockReset();
     mockFetchObjects();
@@ -301,5 +307,34 @@ describe('AppShell', () => {
 
     const badge = screen.getByTitle('Switch organisation');
     expect(badge).toHaveAttribute('href', '/select-tenant');
+  });
+
+  it('shows Platform link when user is a super-admin', () => {
+    vi.mocked(useSuperAdmin).mockReturnValue({ isSuperAdmin: true, loading: false });
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Platform' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Platform' })).toHaveAttribute('href', '/platform/tenants');
+  });
+
+  it('does not show Platform link for non-super-admins', () => {
+    vi.mocked(useSuperAdmin).mockReturnValue({ isSuperAdmin: false, loading: false });
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('link', { name: 'Platform' })).not.toBeInTheDocument();
   });
 });
