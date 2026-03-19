@@ -304,6 +304,7 @@ export function PlatformTenantsPage() {
                 <th className={styles.th}>Slug</th>
                 <th className={styles.th}>Status</th>
                 <th className={styles.th}>Plan</th>
+                <th className={styles.th}>Users</th>
                 <th className={styles.th}>Created</th>
               </tr>
             </thead>
@@ -334,6 +335,7 @@ export function PlatformTenantsPage() {
                   <td className={styles.td}>
                     <span className={styles.planBadge}>{tenant.plan}</span>
                   </td>
+                  <td className={styles.td}>{tenant.userCount ?? '—'}</td>
                   <td className={styles.td}>{formatDate(tenant.created_at)}</td>
                 </tr>
               ))}

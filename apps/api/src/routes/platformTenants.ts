@@ -268,8 +268,8 @@ export async function handleInviteTenantUser(
 
 platformTenantsRouter.post('/', ...auth, handleCreateTenant);
 platformTenantsRouter.get('/', ...auth, handleListTenants);
+platformTenantsRouter.get('/:id/users', ...auth, handleListTenantUsers);
+platformTenantsRouter.post('/:id/users/invite', ...auth, handleInviteTenantUser);
 platformTenantsRouter.get('/:id', ...auth, handleGetTenant);
 platformTenantsRouter.put('/:id', ...auth, handleUpdateTenant);
 platformTenantsRouter.delete('/:id', ...auth, handleDeleteTenant);
-platformTenantsRouter.get('/:id/users', ...auth, handleListTenantUsers);
-platformTenantsRouter.post('/:id/users/invite', ...auth, handleInviteTenantUser);
