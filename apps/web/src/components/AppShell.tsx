@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useUser, useDescope, useSession } from '@descope/react-sdk';
 import { sessionHistory } from '../store/sessionHistory.js';
+import { useTenant, clearStoredTenant } from '../store/tenant.js';
 import styles from './AppShell.module.css';
 
 interface AppShellProps {
@@ -60,6 +61,7 @@ export function AppShell({ children }: AppShellProps) {
   const { logout } = useDescope();
   const { sessionToken } = useSession();
   const navigate = useNavigate();
+  const { tenantName } = useTenant();
 
   const [objectNavItems, setObjectNavItems] = useState<ObjectDefinitionNavItem[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -197,6 +199,7 @@ export function AppShell({ children }: AppShellProps) {
   const handleLogout = async () => {
     await logout();
     sessionHistory.clearAuthenticated();
+    clearStoredTenant();
     void navigate('/login');
   };
 
@@ -208,6 +211,11 @@ export function AppShell({ children }: AppShellProps) {
       <header className={styles.header}>
         <div className={styles.headerLeft}>
           <span className={styles.logoText}>CPCRM</span>
+          {tenantName && (
+            <NavLink to="/select-tenant" className={styles.tenantBadge} title="Switch organisation">
+              {tenantName}
+            </NavLink>
+          )}
           <NavLink
             to="/dashboard"
             className={({ isActive }) =>

@@ -21,7 +21,7 @@ export function LoginPage() {
 
   const handleSuccess = () => {
     sessionHistory.markAuthenticated();
-    void navigate('/dashboard');
+    void navigate('/select-tenant');
   };
 
   const handleError = (e: CustomEvent) => {

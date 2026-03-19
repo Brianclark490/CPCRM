@@ -30,8 +30,14 @@ vi.mock('../store/sessionHistory.js', () => ({
   },
 }));
 
+vi.mock('../store/tenant.js', () => ({
+  useTenant: vi.fn(),
+  clearStoredTenant: vi.fn(),
+}));
+
 const { useUser, useDescope, useSession } = await import('@descope/react-sdk');
 const { sessionHistory } = await import('../store/sessionHistory.js');
+const { useTenant, clearStoredTenant } = await import('../store/tenant.js');
 
 function mockFetchObjects(objects: Array<{ id?: string; apiName: string; pluralLabel: string; icon?: string }> = []) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -54,6 +60,7 @@ describe('AppShell', () => {
       sessionToken: 'test-token',
       claims: {},
     });
+    vi.mocked(useTenant).mockReturnValue({ tenantId: null, tenantName: null });
     mockLogout.mockResolvedValue(undefined);
     mockNavigate.mockReset();
     mockFetchObjects();
@@ -170,7 +177,7 @@ describe('AppShell', () => {
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
   });
 
-  it('calls logout, clears session history, and navigates to /login when sign out is clicked', async () => {
+  it('calls logout, clears session history and stored tenant, and navigates to /login when sign out is clicked', async () => {
     render(
       <MemoryRouter>
         <AppShell>
@@ -183,6 +190,7 @@ describe('AppShell', () => {
 
     expect(mockLogout).toHaveBeenCalled();
     expect(sessionHistory.clearAuthenticated).toHaveBeenCalled();
+    expect(clearStoredTenant).toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
 
@@ -249,5 +257,49 @@ describe('AppShell', () => {
       );
       expect(reorderCall).toBeDefined();
     });
+  });
+
+  it('displays the tenant name in the header when a tenant is selected', () => {
+    vi.mocked(useTenant).mockReturnValue({ tenantId: 'T1', tenantName: 'Acme Corp' });
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Acme Corp')).toBeInTheDocument();
+    expect(screen.getByTitle('Switch organisation')).toBeInTheDocument();
+  });
+
+  it('does not display a tenant badge when no tenant is selected', () => {
+    vi.mocked(useTenant).mockReturnValue({ tenantId: null, tenantName: null });
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTitle('Switch organisation')).not.toBeInTheDocument();
+  });
+
+  it('links the tenant badge to /select-tenant for switching', () => {
+    vi.mocked(useTenant).mockReturnValue({ tenantId: 'T1', tenantName: 'Acme Corp' });
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const badge = screen.getByTitle('Switch organisation');
+    expect(badge).toHaveAttribute('href', '/select-tenant');
   });
 });

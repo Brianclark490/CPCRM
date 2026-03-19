@@ -67,7 +67,7 @@ describe('LoginPage', () => {
     expect(screen.getByTestId('descope-flow-id')).toHaveTextContent('sign-up-or-in');
   });
 
-  it('marks session as authenticated and navigates to /dashboard on successful login', () => {
+  it('marks session as authenticated and navigates to /select-tenant on successful login', () => {
     render(
       <MemoryRouter>
         <LoginPage />
@@ -77,7 +77,7 @@ describe('LoginPage', () => {
     screen.getByText('Simulate success').click();
 
     expect(sessionHistory.markAuthenticated).toHaveBeenCalled();
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    expect(mockNavigate).toHaveBeenCalledWith('/select-tenant');
   });
 
   it('logs an error when login fails', () => {
