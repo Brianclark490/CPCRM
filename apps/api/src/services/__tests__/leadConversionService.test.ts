@@ -335,7 +335,7 @@ describe('convertLead', () => {
 
     // Account: lead.company → account.name, lead.industry → account.industry, etc.
     const accountParams = insertCalls[0][1] as unknown[];
-    const accountFieldValues = JSON.parse(accountParams[3] as string);
+    const accountFieldValues = JSON.parse(accountParams[4] as string);
     expect(accountFieldValues.name).toBe('Acme Corp');
     expect(accountFieldValues.industry).toBe('Technology');
     expect(accountFieldValues.website).toBe('https://acme.com');
@@ -345,7 +345,7 @@ describe('convertLead', () => {
 
     // Contact: lead.first_name → contact.first_name, etc.
     const contactParams = insertCalls[1][1] as unknown[];
-    const contactFieldValues = JSON.parse(contactParams[3] as string);
+    const contactFieldValues = JSON.parse(contactParams[4] as string);
     expect(contactFieldValues.first_name).toBe('John');
     expect(contactFieldValues.last_name).toBe('Smith');
     expect(contactFieldValues.email).toBe('john@acme.com');
@@ -354,7 +354,7 @@ describe('convertLead', () => {
 
     // Opportunity: lead.estimated_value → opportunity.value, etc.
     const oppParams = insertCalls[2][1] as unknown[];
-    const oppFieldValues = JSON.parse(oppParams[3] as string);
+    const oppFieldValues = JSON.parse(oppParams[4] as string);
     expect(oppFieldValues.value).toBe(50000);
     expect(oppFieldValues.source).toBe('Website');
     expect(oppFieldValues.description).toBe('A great lead');
