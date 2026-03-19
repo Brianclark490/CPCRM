@@ -111,7 +111,10 @@ export async function inviteUser(input: InviteUserInput): Promise<InviteUserResu
   }
 
   const descopeClient = getDescopeManagementClient();
-  const searchAll = descopeClient.management.user.searchAll as (
+  // The Descope SDK types searchAll as (...loginIds: string[]) but the
+  // runtime API accepts a structured query object.  Cast through unknown
+  // to bridge the type mismatch.
+  const searchAll = descopeClient.management.user.searchAll as unknown as (
     params: UserSearchParams,
   ) => Promise<{ data?: DescopeUserRecord[] }>;
 
@@ -185,7 +188,7 @@ export async function inviteUser(input: InviteUserInput): Promise<InviteUserResu
  */
 export async function listTenantUsers(tenantId: string): Promise<TenantUser[]> {
   const descopeClient = getDescopeManagementClient();
-  const searchAll = descopeClient.management.user.searchAll as (
+  const searchAll = descopeClient.management.user.searchAll as unknown as (
     params: UserSearchParams,
   ) => Promise<{ data?: DescopeUserRecord[] }>;
 
