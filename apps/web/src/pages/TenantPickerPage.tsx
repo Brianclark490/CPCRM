@@ -41,7 +41,7 @@ export function TenantPickerPage() {
 
     const loadTenants = async () => {
       try {
-        const response = (await sdk.myTenants(false)) as {
+        const response = (await sdk.myTenants(true)) as {
           ok: boolean;
           data?: TenantOption[];
         };
