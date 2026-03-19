@@ -186,7 +186,7 @@ export async function listTenantUsers(tenantId: string): Promise<TenantUser[]> {
       userId: u.userId ?? '',
       loginId: u.loginIds?.[0] ?? u.email ?? '',
       email: u.email ?? '',
-      name: u.name ?? u.displayName ?? '',
+      name: u.name || u.displayName || '',
       roles,
       status: u.status ?? 'invited',
       lastLogin: u.lastLogin ? String(u.lastLogin) : null,
