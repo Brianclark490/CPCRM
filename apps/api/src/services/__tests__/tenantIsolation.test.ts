@@ -121,8 +121,8 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
       return { rowCount: 0, rows: [] };
     }
 
-    // SELECT COUNT for records (delete-blocked check)
-    if (s.includes('COUNT(*)') && s.includes('FROM RECORDS') && s.includes('OBJECT_ID')) {
+    // SELECT COUNT for records (delete-blocked check — uses AS COUNT, no table alias)
+    if (s.includes('COUNT(*)') && s.includes('AS COUNT') && s.includes('FROM RECORDS WHERE OBJECT_ID')) {
       return { rows: [{ count: '0' }] };
     }
 
