@@ -21,6 +21,7 @@ import { recordsRouter } from './routes/records.js';
 import { recordRelationshipsRouter } from './routes/recordRelationships.js';
 import { adminStageGatesRouter } from './routes/adminStageGates.js';
 import { pipelineAnalyticsRouter } from './routes/pipelineAnalytics.js';
+import { adminUsersRouter } from './routes/adminUsers.js';
 import { platformTenantsRouter } from './routes/platformTenants.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -60,6 +61,7 @@ app.use('/api/objects/:apiName/records', recordsRouter);
 app.use('/api/records', recordRelationshipsRouter);
 app.use('/api/admin/stages/:stageId/gates', adminStageGatesRouter);
 app.use('/api/pipelines', pipelineAnalyticsRouter);
+app.use('/api/admin/users', adminUsersRouter);
 app.use('/api/platform/tenants', platformTenantsRouter);
 
 if (config.env === 'production') {
