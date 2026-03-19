@@ -109,11 +109,12 @@ interface FieldInfo {
   options: Record<string, unknown>;
 }
 
-async function getFieldInfo(fieldId: string): Promise<FieldInfo | null> {
-  const result = await pool.query(
-    'SELECT id, field_type, label, options FROM field_definitions WHERE id = $1',
-    [fieldId],
-  );
+async function getFieldInfo(fieldId: string, tenantId?: string): Promise<FieldInfo | null> {
+  const query = tenantId
+    ? 'SELECT id, field_type, label, options FROM field_definitions WHERE id = $1 AND tenant_id = $2'
+    : 'SELECT id, field_type, label, options FROM field_definitions WHERE id = $1';
+  const params: unknown[] = tenantId ? [fieldId, tenantId] : [fieldId];
+  const result = await pool.query(query, params);
 
   if (result.rows.length === 0) return null;
 
@@ -192,8 +193,8 @@ export async function listStageGates(tenantId: string, stageId: string): Promise
   await resolveStageAndObject(tenantId, stageId);
 
   const result = await pool.query(
-    `${GATE_SELECT_SQL} WHERE sg.stage_id = $1 ORDER BY sg.id`,
-    [stageId],
+    `${GATE_SELECT_SQL} WHERE sg.stage_id = $1 AND sg.tenant_id = $2 ORDER BY sg.id`,
+    [stageId, tenantId],
   );
 
   return result.rows.map((row: Record<string, unknown>) => rowToStageGateResponse(row));
@@ -227,14 +228,14 @@ export async function createStageGate(
   }
 
   // Validate field exists and belongs to the pipeline's object
-  const field = await getFieldInfo(params.fieldId);
+  const field = await getFieldInfo(params.fieldId, tenantId);
   if (!field) {
     throwNotFoundError('Field not found');
   }
 
   const fieldBelongsToObject = await pool.query(
-    'SELECT id FROM field_definitions WHERE id = $1 AND object_id = $2',
-    [params.fieldId, stageInfo.objectId],
+    'SELECT id FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+    [params.fieldId, stageInfo.objectId, tenantId],
   );
   if (fieldBelongsToObject.rows.length === 0) {
     throwValidationError('Field does not belong to the same object as the pipeline');
@@ -245,8 +246,8 @@ export async function createStageGate(
 
   // Check for duplicate gate on same field/stage
   const duplicate = await pool.query(
-    'SELECT id FROM stage_gates WHERE stage_id = $1 AND field_id = $2',
-    [stageId, params.fieldId],
+    'SELECT id FROM stage_gates WHERE stage_id = $1 AND field_id = $2 AND tenant_id = $3',
+    [stageId, params.fieldId, tenantId],
   );
   if (duplicate.rows.length > 0) {
     throwConflictError('A gate already exists for this field on this stage');
@@ -255,10 +256,11 @@ export async function createStageGate(
   const gateId = randomUUID();
 
   await pool.query(
-    `INSERT INTO stage_gates (id, stage_id, field_id, gate_type, gate_value, error_message)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO stage_gates (id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       gateId,
+      tenantId,
       stageId,
       params.fieldId,
       params.gateType,
@@ -269,8 +271,8 @@ export async function createStageGate(
 
   // Fetch the created gate with field metadata
   const result = await pool.query(
-    `${GATE_SELECT_SQL} WHERE sg.id = $1`,
-    [gateId],
+    `${GATE_SELECT_SQL} WHERE sg.id = $1 AND sg.tenant_id = $2`,
+    [gateId, tenantId],
   );
 
   logger.info({ gateId, stageId, fieldId: params.fieldId }, 'Stage gate created');
@@ -294,8 +296,8 @@ export async function updateStageGate(
 
   // Fetch existing gate
   const existing = await pool.query(
-    'SELECT * FROM stage_gates WHERE id = $1 AND stage_id = $2',
-    [gateId, stageId],
+    'SELECT * FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3',
+    [gateId, stageId, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -315,7 +317,7 @@ export async function updateStageGate(
   }
 
   // Validate gate_type against field_type
-  const field = await getFieldInfo(existingRow.field_id as string);
+  const field = await getFieldInfo(existingRow.field_id as string, tenantId);
   if (!field) {
     throwNotFoundError('Field not found');
   }
@@ -343,24 +345,25 @@ export async function updateStageGate(
   if (updates.length === 0) {
     // Nothing to update — return existing gate with field metadata
     const result = await pool.query(
-      `${GATE_SELECT_SQL} WHERE sg.id = $1`,
-      [gateId],
+      `${GATE_SELECT_SQL} WHERE sg.id = $1 AND sg.tenant_id = $2`,
+      [gateId, tenantId],
     );
     return rowToStageGateResponse(result.rows[0] as Record<string, unknown>);
   }
 
   values.push(gateId);
   values.push(stageId);
+  values.push(tenantId);
 
   await pool.query(
-    `UPDATE stage_gates SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND stage_id = $${paramIndex}`,
+    `UPDATE stage_gates SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND stage_id = $${paramIndex++} AND tenant_id = $${paramIndex}`,
     values,
   );
 
   // Fetch the updated gate with field metadata
   const result = await pool.query(
-    `${GATE_SELECT_SQL} WHERE sg.id = $1`,
-    [gateId],
+    `${GATE_SELECT_SQL} WHERE sg.id = $1 AND sg.tenant_id = $2`,
+    [gateId, tenantId],
   );
 
   logger.info({ gateId, stageId }, 'Stage gate updated');
@@ -381,8 +384,8 @@ export async function deleteStageGate(
   await resolveStageAndObject(tenantId, stageId);
 
   const existing = await pool.query(
-    'SELECT id FROM stage_gates WHERE id = $1 AND stage_id = $2',
-    [gateId, stageId],
+    'SELECT id FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3',
+    [gateId, stageId, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -390,8 +393,8 @@ export async function deleteStageGate(
   }
 
   await pool.query(
-    'DELETE FROM stage_gates WHERE id = $1 AND stage_id = $2',
-    [gateId, stageId],
+    'DELETE FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3',
+    [gateId, stageId, tenantId],
   );
 
   logger.info({ gateId, stageId }, 'Stage gate deleted');

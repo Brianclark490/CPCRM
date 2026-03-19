@@ -293,19 +293,19 @@ export async function createPipeline(
 
   await pool.query(
     `INSERT INTO stage_definitions
-       (id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9), ($10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+       (id, tenant_id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10), ($11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
     [
-      wonStageId, pipelineId, 'Closed Won', 'closed_won', 0, 'won', 'green', 100, now,
-      lostStageId, pipelineId, 'Closed Lost', 'closed_lost', 1, 'lost', 'red', 0, now,
+      wonStageId, tenantId, pipelineId, 'Closed Won', 'closed_won', 0, 'won', 'green', 100, now,
+      lostStageId, tenantId, pipelineId, 'Closed Lost', 'closed_lost', 1, 'lost', 'red', 0, now,
     ],
   );
 
   logger.info({ pipelineId, apiName, objectId }, 'Pipeline created with terminal stages');
 
   const stagesResult = await pool.query(
-    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 ORDER BY sort_order ASC',
-    [pipelineId],
+    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    [pipelineId, tenantId],
   );
 
   return {
@@ -346,8 +346,8 @@ export async function getPipelineById(
   const pipeline = rowToPipeline(pipelineResult.rows[0]);
 
   const stagesResult = await pool.query(
-    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 ORDER BY sort_order ASC',
-    [id],
+    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    [id, tenantId],
   );
 
   const stages = stagesResult.rows.map((r: Record<string, unknown>) => rowToStage(r));
@@ -359,8 +359,8 @@ export async function getPipelineById(
 
   if (stageIds.length > 0) {
     const gatesResult = await pool.query(
-      `SELECT * FROM stage_gates WHERE stage_id = ANY($1) ORDER BY stage_id`,
-      [stageIds],
+      `SELECT * FROM stage_gates WHERE stage_id = ANY($1) AND tenant_id = $2 ORDER BY stage_id`,
+      [stageIds, tenantId],
     );
 
     for (const row of gatesResult.rows as Record<string, unknown>[]) {
@@ -433,9 +433,10 @@ export async function updatePipeline(
   values.push(now);
 
   values.push(id);
+  values.push(tenantId);
 
   const result = await pool.query(
-    `UPDATE pipeline_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    `UPDATE pipeline_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex} RETURNING *`,
     values,
   );
 
@@ -469,15 +470,15 @@ export async function deletePipeline(tenantId: string, id: string): Promise<void
 
   // Check if records are using this pipeline
   const recordCount = await pool.query(
-    'SELECT COUNT(*) AS count FROM records WHERE pipeline_id = $1',
-    [id],
+    'SELECT COUNT(*) AS count FROM records WHERE pipeline_id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
   const count = parseInt(recordCount.rows[0].count as string, 10);
   if (count > 0) {
     throwDeleteBlockedError('Cannot delete pipeline with existing records');
   }
 
-  await pool.query('DELETE FROM pipeline_definitions WHERE id = $1', [id]);
+  await pool.query('DELETE FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
 
   logger.info({ pipelineId: id }, 'Pipeline deleted');
 }
@@ -522,8 +523,8 @@ export async function createStage(
 
   // Check uniqueness of api_name within this pipeline
   const existing = await pool.query(
-    'SELECT id FROM stage_definitions WHERE pipeline_id = $1 AND api_name = $2',
-    [pipelineId, params.apiName.trim()],
+    'SELECT id FROM stage_definitions WHERE pipeline_id = $1 AND api_name = $2 AND tenant_id = $3',
+    [pipelineId, params.apiName.trim(), tenantId],
   );
   if (existing.rows.length > 0) {
     throwConflictError(`A stage with api_name "${params.apiName.trim()}" already exists on this pipeline`);
@@ -531,8 +532,8 @@ export async function createStage(
 
   // Determine sort_order: insert before terminal stages for open stages
   const allStages = await pool.query(
-    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 ORDER BY sort_order ASC',
-    [pipelineId],
+    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    [pipelineId, tenantId],
   );
 
   const stageType = params.stageType.trim();
@@ -550,8 +551,8 @@ export async function createStage(
       await pool.query(
         `UPDATE stage_definitions
          SET sort_order = sort_order + 1
-         WHERE pipeline_id = $1 AND sort_order >= $2`,
-        [pipelineId, newSortOrder],
+         WHERE pipeline_id = $1 AND sort_order >= $2 AND tenant_id = $3`,
+        [pipelineId, newSortOrder, tenantId],
       );
     } else {
       // No terminal stages — append at the end
@@ -573,11 +574,12 @@ export async function createStage(
 
   const result = await pool.query(
     `INSERT INTO stage_definitions
-       (id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, expected_days, description, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (id, tenant_id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, expected_days, description, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       stageId,
+      tenantId,
       pipelineId,
       params.name.trim(),
       params.apiName.trim(),
@@ -618,8 +620,8 @@ export async function updateStage(
   }
 
   const existing = await pool.query(
-    'SELECT * FROM stage_definitions WHERE id = $1 AND pipeline_id = $2',
-    [stageId, pipelineId],
+    'SELECT * FROM stage_definitions WHERE id = $1 AND pipeline_id = $2 AND tenant_id = $3',
+    [stageId, pipelineId, tenantId],
   );
   if (existing.rows.length === 0) {
     throwNotFoundError('Stage not found');
@@ -672,9 +674,10 @@ export async function updateStage(
 
   values.push(stageId);
   values.push(pipelineId);
+  values.push(tenantId);
 
   const result = await pool.query(
-    `UPDATE stage_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND pipeline_id = $${paramIndex} RETURNING *`,
+    `UPDATE stage_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND pipeline_id = $${paramIndex++} AND tenant_id = $${paramIndex} RETURNING *`,
     values,
   );
 
@@ -711,8 +714,8 @@ export async function deleteStage(
   }
 
   const existing = await pool.query(
-    'SELECT * FROM stage_definitions WHERE id = $1 AND pipeline_id = $2',
-    [stageId, pipelineId],
+    'SELECT * FROM stage_definitions WHERE id = $1 AND pipeline_id = $2 AND tenant_id = $3',
+    [stageId, pipelineId, tenantId],
   );
   if (existing.rows.length === 0) {
     throwNotFoundError('Stage not found');
@@ -723,8 +726,8 @@ export async function deleteStage(
 
   // Cannot delete if records are currently in this stage
   const recordCount = await pool.query(
-    'SELECT COUNT(*) AS count FROM records WHERE current_stage_id = $1',
-    [stageId],
+    'SELECT COUNT(*) AS count FROM records WHERE current_stage_id = $1 AND tenant_id = $2',
+    [stageId, tenantId],
   );
   const count = parseInt(recordCount.rows[0].count as string, 10);
   if (count > 0) {
@@ -734,8 +737,8 @@ export async function deleteStage(
   // Cannot delete the last won or lost stage
   if (stageType === 'won' || stageType === 'lost') {
     const sameTypeCount = await pool.query(
-      'SELECT COUNT(*) AS count FROM stage_definitions WHERE pipeline_id = $1 AND stage_type = $2',
-      [pipelineId, stageType],
+      'SELECT COUNT(*) AS count FROM stage_definitions WHERE pipeline_id = $1 AND stage_type = $2 AND tenant_id = $3',
+      [pipelineId, stageType, tenantId],
     );
     const typeCount = parseInt(sameTypeCount.rows[0].count as string, 10);
     if (typeCount <= 1) {
@@ -744,8 +747,8 @@ export async function deleteStage(
   }
 
   await pool.query(
-    'DELETE FROM stage_definitions WHERE id = $1 AND pipeline_id = $2',
-    [stageId, pipelineId],
+    'DELETE FROM stage_definitions WHERE id = $1 AND pipeline_id = $2 AND tenant_id = $3',
+    [stageId, pipelineId, tenantId],
   );
 
   logger.info({ stageId, pipelineId }, 'Stage deleted');
@@ -778,8 +781,8 @@ export async function reorderStages(
 
   // Verify all stage IDs belong to this pipeline
   const existingStages = await pool.query(
-    'SELECT id, stage_type FROM stage_definitions WHERE pipeline_id = $1',
-    [pipelineId],
+    'SELECT id, stage_type FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2',
+    [pipelineId, tenantId],
   );
   const existingIds = new Set(existingStages.rows.map((r: Record<string, unknown>) => r.id as string));
   const stageTypeMap = new Map(
@@ -810,8 +813,8 @@ export async function reorderStages(
   // Update sort_order for each stage
   for (let i = 0; i < stageIds.length; i++) {
     await pool.query(
-      'UPDATE stage_definitions SET sort_order = $1 WHERE id = $2 AND pipeline_id = $3',
-      [i, stageIds[i], pipelineId],
+      'UPDATE stage_definitions SET sort_order = $1 WHERE id = $2 AND pipeline_id = $3 AND tenant_id = $4',
+      [i, stageIds[i], pipelineId, tenantId],
     );
   }
 
@@ -819,8 +822,8 @@ export async function reorderStages(
 
   // Return the updated list
   const result = await pool.query(
-    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 ORDER BY sort_order ASC',
-    [pipelineId],
+    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    [pipelineId, tenantId],
   );
 
   return result.rows.map((row: Record<string, unknown>) => rowToStage(row));

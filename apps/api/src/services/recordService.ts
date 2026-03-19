@@ -438,7 +438,7 @@ export async function createRecord(
     );
 
     // Auto-assign default pipeline if one exists for this object
-    await assignDefaultPipeline(client, recordId, objectDef.id, ownerId);
+    await assignDefaultPipeline(client, recordId, objectDef.id, ownerId, tenantId);
 
     // Re-fetch the record to pick up pipeline columns
     const finalResult = await client.query(

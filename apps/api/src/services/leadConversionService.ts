@@ -110,7 +110,8 @@ export async function convertLead(
 
     // 4. Read conversion mappings
     const mappingsResult = await client.query(
-      'SELECT lead_field_api_name, target_object, target_field_api_name FROM lead_conversion_mappings ORDER BY target_object',
+      'SELECT lead_field_api_name, target_object, target_field_api_name FROM lead_conversion_mappings WHERE tenant_id = $1 ORDER BY target_object',
+      [tenantId],
     );
     const mappings: ConversionMapping[] = mappingsResult.rows.map(
       (row: Record<string, unknown>) => ({
@@ -180,7 +181,7 @@ export async function convertLead(
     );
 
     // Link contact to account via contact_account relationship
-    await linkRecordInTransaction(client, 'contact_account', contactId, accountId);
+    await linkRecordInTransaction(client, 'contact_account', contactId, accountId, tenantId);
 
     // 8. Create Opportunity (optional, default true)
     const createOpportunity = options.createOpportunity !== false;
@@ -211,10 +212,10 @@ export async function convertLead(
       );
 
       // Link opportunity to account
-      await linkRecordInTransaction(client, 'opportunity_account', opportunityId, accountId);
+      await linkRecordInTransaction(client, 'opportunity_account', opportunityId, accountId, tenantId);
 
       // Link opportunity to contact
-      await linkRecordInTransaction(client, 'opportunity_contact', opportunityId, contactId);
+      await linkRecordInTransaction(client, 'opportunity_contact', opportunityId, contactId, tenantId);
     }
 
     // 9. Update lead status to "Converted" with metadata
@@ -266,10 +267,11 @@ async function linkRecordInTransaction(
   relationshipApiName: string,
   sourceRecordId: string,
   targetRecordId: string,
+  tenantId: string,
 ): Promise<void> {
   const relDefResult = await client.query(
-    'SELECT id FROM relationship_definitions WHERE api_name = $1',
-    [relationshipApiName],
+    'SELECT id FROM relationship_definitions WHERE api_name = $1 AND tenant_id = $2',
+    [relationshipApiName, tenantId],
   );
 
   if (relDefResult.rows.length === 0) {
@@ -286,8 +288,8 @@ async function linkRecordInTransaction(
   const now = new Date();
 
   await client.query(
-    `INSERT INTO record_relationships (id, relationship_id, source_record_id, target_record_id, created_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [linkId, relationshipId, sourceRecordId, targetRecordId, now],
+    `INSERT INTO record_relationships (id, tenant_id, relationship_id, source_record_id, target_record_id, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [linkId, tenantId, relationshipId, sourceRecordId, targetRecordId, now],
   );
 }

@@ -214,14 +214,14 @@ export async function unlinkRecords(
   // Verify the record_relationship exists and involves this record
   const relResult = await pool.query(
     `SELECT id FROM record_relationships
-     WHERE id = $1 AND (source_record_id = $2 OR target_record_id = $2)`,
-    [recordRelationshipId, sourceRecordId],
+     WHERE id = $1 AND (source_record_id = $2 OR target_record_id = $2) AND tenant_id = $3`,
+    [recordRelationshipId, sourceRecordId, tenantId],
   );
   if (relResult.rows.length === 0) {
     throwNotFoundError('Relationship link not found');
   }
 
-  await pool.query('DELETE FROM record_relationships WHERE id = $1', [recordRelationshipId]);
+  await pool.query('DELETE FROM record_relationships WHERE id = $1 AND tenant_id = $2', [recordRelationshipId, tenantId]);
 
   logger.info(
     { recordRelationshipId, sourceRecordId, ownerId },
