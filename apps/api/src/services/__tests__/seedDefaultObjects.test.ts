@@ -38,41 +38,44 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
 
     // INSERT INTO object_definitions ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO OBJECT_DEFINITIONS')) {
-      const [id, apiName, label, pluralLabel, description, icon, ownerId] = params as string[];
-      // Check for conflict on api_name
-      const existing = [...db.objects.values()].find((o) => o.api_name === apiName);
+      const [id, apiName, label, pluralLabel, description, icon, ownerId, tenantId] = params as string[];
+      // Check for conflict on (tenant_id, api_name)
+      const existing = [...db.objects.values()].find((o) => o.tenant_id === tenantId && o.api_name === apiName);
       if (existing) return { rows: [] };
-      const row: FakeRow = { id, api_name: apiName, label, plural_label: pluralLabel, description, icon, is_system: true, owner_id: ownerId };
+      const row: FakeRow = { id, api_name: apiName, label, plural_label: pluralLabel, description, icon, is_system: true, owner_id: ownerId, tenant_id: tenantId };
       db.objects.set(id, row);
       return { rows: [{ id }] };
     }
 
-    // SELECT id, api_name FROM object_definitions WHERE api_name = ANY($1)
+    // SELECT id, api_name FROM object_definitions WHERE api_name = ANY($1) AND tenant_id = $2
     if (s.includes('FROM OBJECT_DEFINITIONS') && s.includes('ANY')) {
       const apiNames = params![0] as string[];
+      const tenantId = params![1] as string;
       const rows = [...db.objects.values()]
-        .filter((o) => apiNames.includes(o.api_name as string))
+        .filter((o) => apiNames.includes(o.api_name as string) && o.tenant_id === tenantId)
         .map((o) => ({ id: o.id, api_name: o.api_name }));
       return { rows };
     }
 
     // INSERT INTO field_definitions ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO FIELD_DEFINITIONS')) {
-      const [id, objectId, apiName, label, fieldType, required, options, sortOrder] = params as unknown[];
+      const [id, objectId, apiName, label, fieldType, required, options, sortOrder, tenantId] = params as unknown[];
       const existing = [...db.fields.values()].find(
-        (f) => f.object_id === objectId && f.api_name === apiName,
+        (f) => f.tenant_id === tenantId && f.object_id === objectId && f.api_name === apiName,
       );
       if (existing) return { rows: [] };
-      const row: FakeRow = { id: id as string, object_id: objectId, api_name: apiName, label, field_type: fieldType, required, options, sort_order: sortOrder };
+      const row: FakeRow = { id: id as string, object_id: objectId, api_name: apiName, label, field_type: fieldType, required, options, sort_order: sortOrder, tenant_id: tenantId };
       db.fields.set(id as string, row);
       return { rows: [{ id }] };
     }
 
-    // SELECT fd.id, od.api_name ... FROM field_definitions fd JOIN object_definitions od
+    // SELECT fd.id, od.api_name ... FROM field_definitions fd JOIN object_definitions od ... AND fd.tenant_id = $2
     if (s.includes('FROM FIELD_DEFINITIONS FD') && s.includes('JOIN OBJECT_DEFINITIONS OD')) {
       const apiNames = params![0] as string[];
+      const tenantId = params![1] as string;
       const rows: { id: string; object_api_name: string; api_name: string }[] = [];
       for (const field of db.fields.values()) {
+        if (field.tenant_id !== tenantId) continue;
         const obj = db.objects.get(field.object_id as string) ??
           [...db.objects.values()].find((o) => o.id === field.object_id);
         if (obj && apiNames.includes(obj.api_name as string)) {
@@ -88,33 +91,35 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
 
     // INSERT INTO relationship_definitions ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO RELATIONSHIP_DEFINITIONS')) {
-      const [id, sourceObjectId, targetObjectId, relationshipType, apiName] = params as string[];
+      const [id, sourceObjectId, targetObjectId, relationshipType, apiName, , , , tenantId] = params as string[];
       const existing = [...db.relationships.values()].find(
-        (r) => r.source_object_id === sourceObjectId && r.api_name === apiName,
+        (r) => r.tenant_id === tenantId && r.source_object_id === sourceObjectId && r.api_name === apiName,
       );
       if (existing) return { rows: [] };
-      const row: FakeRow = { id, source_object_id: sourceObjectId, target_object_id: targetObjectId, relationship_type: relationshipType, api_name: apiName };
+      const row: FakeRow = { id, source_object_id: sourceObjectId, target_object_id: targetObjectId, relationship_type: relationshipType, api_name: apiName, tenant_id: tenantId };
       db.relationships.set(id, row);
       return { rows: [{ id }] };
     }
 
     // INSERT INTO layout_definitions ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO LAYOUT_DEFINITIONS')) {
-      const [id, objectId, name] = params as string[];
+      const [id, objectId, name, , tenantId] = params as string[];
       const existing = [...db.layouts.values()].find(
-        (l) => l.object_id === objectId && l.name === name,
+        (l) => l.tenant_id === tenantId && l.object_id === objectId && l.name === name,
       );
       if (existing) return { rows: [] };
-      const row: FakeRow = { id, object_id: objectId, name };
+      const row: FakeRow = { id, object_id: objectId, name, tenant_id: tenantId };
       db.layouts.set(id, row);
       return { rows: [{ id }] };
     }
 
-    // SELECT ld.id, od.api_name ... FROM layout_definitions ld JOIN object_definitions od
+    // SELECT ld.id, od.api_name ... FROM layout_definitions ld JOIN object_definitions od ... AND ld.tenant_id = $2
     if (s.includes('FROM LAYOUT_DEFINITIONS LD') && s.includes('JOIN OBJECT_DEFINITIONS OD')) {
       const apiNames = params![0] as string[];
+      const tenantId = params![1] as string;
       const rows: { id: string; object_api_name: string; name: string }[] = [];
       for (const layout of db.layouts.values()) {
+        if (layout.tenant_id !== tenantId) continue;
         const obj = db.objects.get(layout.object_id as string) ??
           [...db.objects.values()].find((o) => o.id === layout.object_id);
         if (obj && apiNames.includes(obj.api_name as string)) {
@@ -130,21 +135,22 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
 
     // INSERT INTO layout_fields ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO LAYOUT_FIELDS')) {
-      const [id, layoutId, fieldId, section, sectionLabel, sortOrder, width] = params as unknown[];
+      const [id, layoutId, fieldId, section, sectionLabel, sortOrder, width, tenantId] = params as unknown[];
       const existing = [...db.layoutFields.values()].find(
-        (lf) => lf.layout_id === layoutId && lf.field_id === fieldId,
+        (lf) => lf.tenant_id === tenantId && lf.layout_id === layoutId && lf.field_id === fieldId,
       );
       if (existing) return { rows: [] };
-      const row: FakeRow = { id: id as string, layout_id: layoutId, field_id: fieldId, section, section_label: sectionLabel, sort_order: sortOrder, width };
+      const row: FakeRow = { id: id as string, layout_id: layoutId, field_id: fieldId, section, section_label: sectionLabel, sort_order: sortOrder, width, tenant_id: tenantId };
       db.layoutFields.set(id as string, row);
       return { rows: [{ id }] };
     }
 
     // INSERT INTO lead_conversion_mappings ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO LEAD_CONVERSION_MAPPINGS')) {
-      const [id, leadFieldApiName, targetObject, targetFieldApiName] = params as string[];
+      const [id, leadFieldApiName, targetObject, targetFieldApiName, tenantId] = params as string[];
       const existing = [...db.leadConversionMappings.values()].find(
         (m) =>
+          m.tenant_id === tenantId &&
           m.lead_field_api_name === leadFieldApiName &&
           m.target_object === targetObject &&
           m.target_field_api_name === targetFieldApiName,
@@ -155,6 +161,7 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
         lead_field_api_name: leadFieldApiName,
         target_object: targetObject,
         target_field_api_name: targetFieldApiName,
+        tenant_id: tenantId,
       };
       db.leadConversionMappings.set(id, row);
       return { rows: [{ id }] };
@@ -179,7 +186,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates all 9 object definitions on a fresh database', async () => {
-    const result = await seedWithClient(client, 'tenant-1');
+    const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(result.objectsCreated).toBe(SEED_COUNTS.objects);
     expect(result.objectsSkipped).toBe(0);
@@ -187,7 +194,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates all field definitions', async () => {
-    const result = await seedWithClient(client, 'tenant-1');
+    const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(result.fieldsCreated).toBe(SEED_COUNTS.fields);
     expect(result.fieldsSkipped).toBe(0);
@@ -195,7 +202,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates all relationship definitions', async () => {
-    const result = await seedWithClient(client, 'tenant-1');
+    const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(result.relationshipsCreated).toBe(SEED_COUNTS.relationships);
     expect(result.relationshipsSkipped).toBe(0);
@@ -203,7 +210,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates all layout definitions', async () => {
-    const result = await seedWithClient(client, 'tenant-1');
+    const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(result.layoutsCreated).toBe(SEED_COUNTS.layouts);
     expect(result.layoutsSkipped).toBe(0);
@@ -211,7 +218,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates all layout fields', async () => {
-    const result = await seedWithClient(client, 'tenant-1');
+    const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(result.layoutFieldsCreated).toBe(SEED_COUNTS.layoutFields);
     expect(result.layoutFieldsSkipped).toBe(0);
@@ -219,7 +226,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates all lead conversion mappings', async () => {
-    const result = await seedWithClient(client, 'tenant-1');
+    const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(result.leadConversionMappingsCreated).toBe(SEED_COUNTS.leadConversionMappings);
     expect(result.leadConversionMappingsSkipped).toBe(0);
@@ -228,11 +235,11 @@ describe('seedDefaultObjects', () => {
 
   it('is idempotent — re-running skips all existing data', async () => {
     // First run — everything created
-    const first = await seedWithClient(client, 'tenant-1');
+    const first = await seedWithClient(client, 'tenant-1', 'owner-1');
     expect(first.objectsCreated).toBe(9);
 
     // Second run — everything skipped
-    const second = await seedWithClient(client, 'tenant-1');
+    const second = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(second.objectsCreated).toBe(0);
     expect(second.objectsSkipped).toBe(9);
@@ -248,16 +255,17 @@ describe('seedDefaultObjects', () => {
     expect(second.leadConversionMappingsSkipped).toBe(SEED_COUNTS.leadConversionMappings);
   });
 
-  it('passes the ownerId to object definitions', async () => {
-    await seedWithClient(client, 'my-tenant');
+  it('passes the tenantId and ownerId to object definitions', async () => {
+    await seedWithClient(client, 'my-tenant', 'my-owner');
 
     const accountObj = [...db.objects.values()].find((o) => o.api_name === 'account');
     expect(accountObj).toBeDefined();
-    expect(accountObj!.owner_id).toBe('my-tenant');
+    expect(accountObj!.owner_id).toBe('my-owner');
+    expect(accountObj!.tenant_id).toBe('my-tenant');
   });
 
   it('uses parameterised queries for all inserts', async () => {
-    await seedWithClient(client, 'tenant-1');
+    await seedWithClient(client, 'tenant-1', 'owner-1');
 
     // Every call should include params
     for (const call of client.query.mock.calls) {
@@ -268,7 +276,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('returns correct total counts matching seed data constants', async () => {
-    const result = await seedWithClient(client, 'tenant-1');
+    const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     const totalCreated = (key: keyof SeedResult) => result[key];
     expect(totalCreated('objectsCreated')).toBe(9);
@@ -279,7 +287,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates all 9 objects with the expected api_names', async () => {
-    await seedWithClient(client, 'tenant-1');
+    await seedWithClient(client, 'tenant-1', 'owner-1');
 
     const expectedApiNames = [
       'account', 'contact', 'lead', 'opportunity', 'activity',
@@ -292,7 +300,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates fields with correct types and options', async () => {
-    await seedWithClient(client, 'tenant-1');
+    await seedWithClient(client, 'tenant-1', 'owner-1');
 
     const findField = (objectApiName: string, fieldApiName: string) => {
       return [...db.fields.values()].find((f) => {
@@ -334,7 +342,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates relationships between correct objects', async () => {
-    await seedWithClient(client, 'tenant-1');
+    await seedWithClient(client, 'tenant-1', 'owner-1');
 
     const getApiName = (objectId: string) => {
       const obj = [...db.objects.values()].find((o) => o.id === objectId);
@@ -373,7 +381,7 @@ describe('seedDefaultObjects', () => {
   });
 
   it('creates layouts with correct sections and field arrangement', async () => {
-    await seedWithClient(client, 'tenant-1');
+    await seedWithClient(client, 'tenant-1', 'owner-1');
 
     // Find account "Default form" layout
     const accountFormLayout = [...db.layouts.values()].find((l) => {
@@ -418,5 +426,46 @@ describe('seedDefaultObjects', () => {
     expect(leadSectionLabels).toContain('Contact Info');
     expect(leadSectionLabels).toContain('Company');
     expect(leadSectionLabels).toContain('Lead Details');
+  });
+
+  it('creates independent copies for different tenants', async () => {
+    // Seed for tenant-a
+    const resultA = await seedWithClient(client, 'tenant-a', 'owner-a');
+    expect(resultA.objectsCreated).toBe(SEED_COUNTS.objects);
+
+    // Seed for tenant-b — should create a full independent copy
+    const resultB = await seedWithClient(client, 'tenant-b', 'owner-b');
+    expect(resultB.objectsCreated).toBe(SEED_COUNTS.objects);
+    expect(resultB.fieldsCreated).toBe(SEED_COUNTS.fields);
+    expect(resultB.relationshipsCreated).toBe(SEED_COUNTS.relationships);
+    expect(resultB.layoutsCreated).toBe(SEED_COUNTS.layouts);
+    expect(resultB.layoutFieldsCreated).toBe(SEED_COUNTS.layoutFields);
+    expect(resultB.leadConversionMappingsCreated).toBe(SEED_COUNTS.leadConversionMappings);
+
+    // Both tenants' objects exist in the DB
+    expect(db.objects.size).toBe(SEED_COUNTS.objects * 2);
+
+    // Verify tenant isolation — each tenant has its own 'account' object
+    const tenantAAccounts = [...db.objects.values()].filter(
+      (o) => o.api_name === 'account' && o.tenant_id === 'tenant-a',
+    );
+    const tenantBAccounts = [...db.objects.values()].filter(
+      (o) => o.api_name === 'account' && o.tenant_id === 'tenant-b',
+    );
+    expect(tenantAAccounts.length).toBe(1);
+    expect(tenantBAccounts.length).toBe(1);
+    expect(tenantAAccounts[0].id).not.toBe(tenantBAccounts[0].id);
+  });
+
+  it('includes tenant_id in all INSERT statements', async () => {
+    await seedWithClient(client, 'tenant-1', 'owner-1');
+
+    for (const call of client.query.mock.calls) {
+      const [sql] = call as [string, unknown[]?];
+      const upper = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+      if (upper.startsWith('INSERT INTO') && !upper.includes('UPDATE')) {
+        expect(upper).toContain('TENANT_ID');
+      }
+    }
   });
 });

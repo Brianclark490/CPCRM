@@ -155,7 +155,7 @@ export async function provisionTenant(
     const tenantRow = tenantResult.rows[0] as TenantRow;
 
     logger.info({ tenantId }, 'Tenant record inserted, seeding default CRM data');
-    seedResult = await seedWithClient(client, tenantId);
+    seedResult = await seedWithClient(client, tenantId, tenantId);
 
     await client.query('COMMIT');
     logger.info({ tenantId }, 'Tenant record and seed data committed');
