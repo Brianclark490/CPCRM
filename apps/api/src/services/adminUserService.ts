@@ -33,6 +33,27 @@ export interface ChangeRoleInput {
   newRole: string;
 }
 
+// The Descope management SDK's TypeScript definitions for searchAll accept
+// positional string[] parameters, but the runtime API supports a richer query
+// object.  We define a minimal shape here so we can pass structured queries
+// without type errors while keeping the rest of the SDK fully typed.
+interface UserSearchParams {
+  limit?: number;
+  emails?: string[];
+  tenantIds?: string[];
+}
+
+interface DescopeUserRecord {
+  userId?: string;
+  loginIds?: string[];
+  email?: string;
+  name?: string;
+  displayName?: string;
+  status?: string;
+  lastLogin?: number;
+  userTenants?: Array<{ tenantId: string; roleNames?: string[] }>;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const VALID_ROLES = ['admin', 'manager', 'user', 'read_only'];
@@ -90,14 +111,14 @@ export async function inviteUser(input: InviteUserInput): Promise<InviteUserResu
   }
 
   const descopeClient = getDescopeManagementClient();
+  const searchAll = descopeClient.management.user.searchAll as (
+    params: UserSearchParams,
+  ) => Promise<{ data?: DescopeUserRecord[] }>;
 
   // ── Check if user exists ────────────────────────────────────────────────
   let existingUser = false;
   try {
-    const searchResult = await descopeClient.management.user.searchAll({
-      limit: 1,
-      emails: [email],
-    });
+    const searchResult = await searchAll({ limit: 1, emails: [email] });
     const users = searchResult.data ?? [];
 
     if (users.length > 0) {
@@ -164,11 +185,11 @@ export async function inviteUser(input: InviteUserInput): Promise<InviteUserResu
  */
 export async function listTenantUsers(tenantId: string): Promise<TenantUser[]> {
   const descopeClient = getDescopeManagementClient();
+  const searchAll = descopeClient.management.user.searchAll as (
+    params: UserSearchParams,
+  ) => Promise<{ data?: DescopeUserRecord[] }>;
 
-  const searchResult = await descopeClient.management.user.searchAll({
-    tenantIds: [tenantId],
-  });
-
+  const searchResult = await searchAll({ tenantIds: [tenantId] });
   const users = searchResult.data ?? [];
 
   return users.map((u) => {
