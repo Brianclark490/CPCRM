@@ -116,7 +116,8 @@ export async function handleChangeRole(
   req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
-  const { userId } = req.params as { userId: string };
+  const { descopeUserId } = req.params as { descopeUserId: string };
+  const userId = descopeUserId;
   const tenantId = req.user!.tenantId!;
   const body = req.body as { role?: unknown };
   const newRole = typeof body.role === 'string' ? body.role : '';
@@ -153,7 +154,8 @@ export async function handleRemoveUser(
   req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
-  const { userId } = req.params as { userId: string };
+  const { descopeUserId } = req.params as { descopeUserId: string };
+  const userId = descopeUserId;
   const tenantId = req.user!.tenantId!;
 
   try {
@@ -169,5 +171,5 @@ export async function handleRemoveUser(
 
 adminUsersRouter.post('/invite', ...auth, handleInviteUser);
 adminUsersRouter.get('/', ...auth, handleListUsers);
-adminUsersRouter.put('/:userId/role', ...auth, handleChangeRole);
-adminUsersRouter.delete('/:userId', ...auth, handleRemoveUser);
+adminUsersRouter.put('/:descopeUserId/role', ...auth, handleChangeRole);
+adminUsersRouter.delete('/:descopeUserId', ...auth, handleRemoveUser);
