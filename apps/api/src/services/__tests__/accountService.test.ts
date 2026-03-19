@@ -182,6 +182,13 @@ describe('validateEmail', () => {
   it('returns an error for non-string values', () => {
     expect(validateEmail(42)).toBe('Email must be a string');
   });
+
+  it('completes quickly for a crafted ReDoS input', () => {
+    const redosInput = 'a@' + 'a.'.repeat(50) + '!';
+    const start = Date.now();
+    validateEmail(redosInput);
+    expect(Date.now() - start).toBeLessThan(500);
+  });
 });
 
 describe('validatePhone', () => {

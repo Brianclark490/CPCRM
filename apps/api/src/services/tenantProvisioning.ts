@@ -48,7 +48,7 @@ export interface TenantRow {
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
 /**
  * Validates a tenant slug.

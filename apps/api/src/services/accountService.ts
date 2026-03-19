@@ -134,7 +134,7 @@ export function validateName(name: unknown): string | null {
 export function validateEmail(email: unknown): string | null {
   if (email === undefined || email === null || email === '') return null;
   if (typeof email !== 'string') return 'Email must be a string';
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailRegex = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
   if (!emailRegex.test(email.trim())) {
     return 'Email must be a valid email address';
   }
