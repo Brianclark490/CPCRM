@@ -66,7 +66,7 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
 
     // INSERT INTO field_definitions
     if (s.startsWith('INSERT INTO FIELD_DEFINITIONS')) {
-      const [id, object_id, api_name, label, field_type, description, required, default_value, options, sort_order, is_system, created_at, updated_at] = params as unknown[];
+      const [id, _tenant_id, object_id, api_name, label, field_type, description, required, default_value, options, sort_order, is_system, created_at, updated_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, object_id, api_name, label, field_type, description, required,
         default_value, options: typeof options === 'string' ? JSON.parse(options as string) : options,
@@ -94,8 +94,8 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
       return { rows: [row] };
     }
 
-    // SELECT * FROM field_definitions WHERE object_id = $1 ORDER BY sort_order
-    if (s.startsWith('SELECT * FROM FIELD_DEFINITIONS WHERE OBJECT_ID = $1 ORDER BY')) {
+    // SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order
+    if (s.startsWith('SELECT * FROM FIELD_DEFINITIONS WHERE OBJECT_ID') && s.includes('ORDER BY')) {
       const objectId = params![0] as string;
       const rows = [...fakeFields.values()]
         .filter((f) => f.object_id === objectId)

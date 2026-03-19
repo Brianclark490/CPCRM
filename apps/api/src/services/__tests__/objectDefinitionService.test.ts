@@ -44,9 +44,9 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fa
       return { rows: [{ max_sort_order: String(maxOrder) }] };
     }
 
-    // SELECT id check for uniqueness
-    if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE API_NAME')) {
-      const apiName = params![0] as string;
+    // SELECT id check for uniqueness (tenant_id = $1 AND api_name = $2)
+    if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE TENANT_ID') && s.includes('API_NAME')) {
+      const apiName = params![1] as string;
       const match = [...fakeObjects.values()].find((r) => r.api_name === apiName);
       if (match) return { rows: [{ id: match.id }] };
       return { rows: [] };
@@ -54,7 +54,7 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fa
 
     // INSERT INTO object_definitions
     if (s.startsWith('INSERT INTO OBJECT_DEFINITIONS')) {
-      const [id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at] = params as unknown[];
+      const [id, _tenant_id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at,
       };
@@ -142,8 +142,8 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fa
 
     // UPDATE object_definitions
     if (s.startsWith('UPDATE OBJECT_DEFINITIONS')) {
-      // Find the id — it's the last param
-      const id = params![params!.length - 1] as string;
+      // id is second-to-last, tenantId is last
+      const id = params![params!.length - 2] as string;
       const existing = fakeObjects.get(id);
       if (!existing) return { rows: [] };
       const updated = { ...existing, updated_at: new Date() };
