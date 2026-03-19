@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useDescope, useSession } from '@descope/react-sdk';
+import { useDescope } from '@descope/react-sdk';
 import { useNavigate } from 'react-router-dom';
-import { setStoredTenant, getCurrentTenantId } from '../store/tenant.js';
+import { setStoredTenant } from '../store/tenant.js';
 import { sessionHistory } from '../store/sessionHistory.js';
 import styles from './TenantPickerPage.module.css';
 
@@ -12,7 +12,6 @@ interface TenantOption {
 
 export function TenantPickerPage() {
   const sdk = useDescope();
-  const { sessionToken } = useSession();
   const navigate = useNavigate();
 
   const [tenants, setTenants] = useState<TenantOption[]>([]);
@@ -38,12 +37,6 @@ export function TenantPickerPage() {
   );
 
   useEffect(() => {
-    // If the session token already contains a selected tenant, skip straight to dashboard
-    if (sessionToken && getCurrentTenantId(sessionToken)) {
-      void navigate('/dashboard', { replace: true });
-      return;
-    }
-
     let cancelled = false;
 
     const loadTenants = async () => {
@@ -82,7 +75,7 @@ export function TenantPickerPage() {
     return () => {
       cancelled = true;
     };
-  }, [sdk, sessionToken, navigate, handleSelectTenant]);
+  }, [sdk, navigate, handleSelectTenant]);
 
   if (loading && !error) {
     return (

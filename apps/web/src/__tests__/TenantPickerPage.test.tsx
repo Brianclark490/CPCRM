@@ -18,7 +18,6 @@ vi.mock('react-router-dom', async (importOriginal) => {
 
 vi.mock('@descope/react-sdk', () => ({
   useDescope: vi.fn(),
-  useSession: vi.fn(),
 }));
 
 vi.mock('../store/sessionHistory.js', () => ({
@@ -33,12 +32,11 @@ vi.mock('../store/sessionHistory.js', () => ({
 vi.mock('../store/tenant.js', () => ({
   setStoredTenant: vi.fn(),
   clearStoredTenant: vi.fn(),
-  getCurrentTenantId: vi.fn(),
 }));
 
-const { useDescope, useSession } = await import('@descope/react-sdk');
+const { useDescope } = await import('@descope/react-sdk');
 const { sessionHistory } = await import('../store/sessionHistory.js');
-const { setStoredTenant, getCurrentTenantId } = await import('../store/tenant.js');
+const { setStoredTenant } = await import('../store/tenant.js');
 
 function renderPage() {
   return render(
@@ -54,18 +52,11 @@ function renderPage() {
 
 describe('TenantPickerPage', () => {
   beforeEach(() => {
-    vi.mocked(useSession).mockReturnValue({
-      isAuthenticated: true,
-      isSessionLoading: false,
-      sessionToken: 'test-token',
-      claims: {},
-    });
     vi.mocked(useDescope).mockReturnValue({
       selectTenant: mockSelectTenant,
       myTenants: mockMyTenants,
       logout: vi.fn(),
     } as unknown as ReturnType<typeof useDescope>);
-    vi.mocked(getCurrentTenantId).mockReturnValue(null);
     mockSelectTenant.mockResolvedValue({ ok: true });
     mockMyTenants.mockResolvedValue({ ok: true, data: [] });
     mockNavigate.mockReset();
@@ -182,13 +173,5 @@ describe('TenantPickerPage', () => {
         'Failed to select organisation. Please try again.',
       );
     });
-  });
-
-  it('redirects to /dashboard if session token already contains a tenant', () => {
-    vi.mocked(getCurrentTenantId).mockReturnValue('T_EXISTING');
-
-    renderPage();
-
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard', { replace: true });
   });
 });
