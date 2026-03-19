@@ -74,7 +74,7 @@ const { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery } 
 
     // INSERT INTO record_relationships
     if (s.startsWith('INSERT INTO RECORD_RELATIONSHIPS')) {
-      const [id, relationship_id, source_record_id, target_record_id, created_at] = params as unknown[];
+      const [id, _tenant_id, relationship_id, source_record_id, target_record_id, created_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, relationship_id, source_record_id, target_record_id, created_at,
       };

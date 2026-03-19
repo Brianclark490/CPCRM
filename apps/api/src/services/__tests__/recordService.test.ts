@@ -116,7 +116,7 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
 
     // INSERT INTO records
     if (s.startsWith('INSERT INTO RECORDS')) {
-      const [id, object_id, name, field_values, owner_id, created_at, updated_at] =
+      const [id, _tenant_id, object_id, name, field_values, owner_id, created_at, updated_at] =
         params as unknown[];
       const row: Record<string, unknown> = {
         id, object_id, name, field_values: JSON.parse(field_values as string), owner_id, created_at, updated_at,

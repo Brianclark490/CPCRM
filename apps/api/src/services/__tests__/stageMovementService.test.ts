@@ -312,7 +312,7 @@ describe('moveRecordStage', () => {
     });
 
     try {
-      await moveRecordStage('opportunity', 'rec-1', 'stage-qualification', 'user-123');
+      await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
       expect.fail('Should have thrown');
     } catch (err: unknown) {
       const error = err as Error & { code: string; failures: Array<{ field: string; gate: string }> };

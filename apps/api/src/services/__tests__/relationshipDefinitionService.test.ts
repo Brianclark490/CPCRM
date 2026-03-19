@@ -44,7 +44,7 @@ const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
 
     // INSERT INTO relationship_definitions
     if (s.startsWith('INSERT INTO RELATIONSHIP_DEFINITIONS')) {
-      const [id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at] = params as unknown[];
+      const [id, _tenant_id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at,
       };
@@ -53,7 +53,7 @@ const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
     }
 
     // SELECT rd.*, src.label ... (list relationships with joins)
-    if (s.includes('FROM RELATIONSHIP_DEFINITIONS RD') && s.includes('JOIN OBJECT_DEFINITIONS SRC') && s.includes('JOIN OBJECT_DEFINITIONS TGT') && s.includes('WHERE RD.SOURCE_OBJECT_ID = $1 OR RD.TARGET_OBJECT_ID = $1')) {
+    if (s.includes('FROM RELATIONSHIP_DEFINITIONS RD') && s.includes('JOIN OBJECT_DEFINITIONS SRC') && s.includes('JOIN OBJECT_DEFINITIONS TGT') && s.includes('SOURCE_OBJECT_ID = $1 OR RD.TARGET_OBJECT_ID = $1')) {
       const objectId = params![0] as string;
       const rows = [...fakeRelationships.values()]
         .filter((r) => r.source_object_id === objectId || r.target_object_id === objectId)

@@ -60,7 +60,7 @@ const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi
 
     // INSERT INTO layout_definitions
     if (s.startsWith('INSERT INTO LAYOUT_DEFINITIONS')) {
-      const [id, object_id, name, layout_type, is_default, created_at, updated_at] = params as unknown[];
+      const [id, _tenant_id, object_id, name, layout_type, is_default, created_at, updated_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, object_id, name, layout_type, is_default, created_at, updated_at,
       };
@@ -68,8 +68,8 @@ const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi
       return { rows: [row] };
     }
 
-    // SELECT * FROM layout_definitions WHERE object_id = $1 ORDER BY
-    if (s.startsWith('SELECT * FROM LAYOUT_DEFINITIONS WHERE OBJECT_ID = $1 ORDER BY')) {
+    // SELECT * FROM layout_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY
+    if (s.startsWith('SELECT * FROM LAYOUT_DEFINITIONS WHERE OBJECT_ID') && s.includes('ORDER BY')) {
       const objectId = params![0] as string;
       const rows = [...fakeLayouts.values()]
         .filter((l) => l.object_id === objectId)

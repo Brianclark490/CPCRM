@@ -50,7 +50,7 @@ const {
 
     // INSERT INTO pipeline_definitions
     if (s.startsWith('INSERT INTO PIPELINE_DEFINITIONS')) {
-      const [id, object_id, name, api_name, description, is_default, is_system, owner_id, created_at, updated_at] = params as unknown[];
+      const [id, _tenant_id, object_id, name, api_name, description, is_default, is_system, owner_id, created_at, updated_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, object_id, name, api_name, description, is_default, is_system, owner_id, created_at, updated_at,
       };
@@ -120,8 +120,8 @@ const {
       return { rows: [] };
     }
 
-    // SELECT * FROM pipeline_definitions (list all)
-    if (s.startsWith('SELECT * FROM PIPELINE_DEFINITIONS') && !s.includes('WHERE')) {
+    // SELECT * FROM pipeline_definitions WHERE tenant_id = $1 ORDER BY (list all)
+    if (s.startsWith('SELECT * FROM PIPELINE_DEFINITIONS WHERE TENANT_ID') && s.includes('ORDER BY')) {
       const rows = [...fakePipelines.values()].sort((a, b) => {
         if (a.is_system && !b.is_system) return -1;
         if (!a.is_system && b.is_system) return 1;
