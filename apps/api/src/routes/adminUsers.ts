@@ -119,15 +119,12 @@ export async function handleChangeRole(
   const { userId } = req.params as { userId: string };
   const tenantId = req.user!.tenantId!;
   const body = req.body as { role?: unknown };
+  const newRole = typeof body.role === 'string' ? body.role : '';
 
   try {
-    await changeUserRole({
-      userId,
-      tenantId,
-      newRole: typeof body.role === 'string' ? body.role : '',
-    });
+    await changeUserRole({ userId, tenantId, newRole });
 
-    res.status(200).json({ userId, tenantId, role: body.role });
+    res.status(200).json({ userId, tenantId, role: newRole });
   } catch (err: unknown) {
     const error = err as Error & { code?: string };
 
