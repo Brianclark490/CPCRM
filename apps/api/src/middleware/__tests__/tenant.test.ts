@@ -5,6 +5,8 @@ import type { AuthenticatedRequest } from '../auth.js';
 const mockQuery = vi.fn();
 const mockLoggerWarn = vi.fn();
 const mockLoggerError = vi.fn();
+const mockLoggerInfo = vi.fn();
+const mockSeedDefaultObjects = vi.fn();
 
 vi.mock('../../db/client.js', () => ({
   pool: {
@@ -16,7 +18,12 @@ vi.mock('../../lib/logger.js', () => ({
   logger: {
     warn: mockLoggerWarn,
     error: mockLoggerError,
+    info: mockLoggerInfo,
   },
+}));
+
+vi.mock('../../services/seedDefaultObjects.js', () => ({
+  seedDefaultObjects: (...args: unknown[]) => mockSeedDefaultObjects(...args),
 }));
 
 const { requireTenant } = await import('../tenant.js');
@@ -37,6 +44,8 @@ describe('requireTenant middleware', () => {
     mockQuery.mockReset();
     mockLoggerWarn.mockReset();
     mockLoggerError.mockReset();
+    mockLoggerInfo.mockReset();
+    mockSeedDefaultObjects.mockReset();
   });
 
   it('returns 403 NO_TENANT when req.user is not set (requireAuth not called)', async () => {
@@ -70,8 +79,38 @@ describe('requireTenant middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('returns 403 INVALID_TENANT when tenant is not found in the database', async () => {
-    mockQuery.mockResolvedValue({ rows: [] });
+  it('auto-provisions tenant when not found in the database', async () => {
+    // First call: SELECT returns no rows (tenant not found)
+    // Second call: INSERT returns the new row
+    // Third call: SELECT returns the auto-provisioned row
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] }) // initial SELECT
+      .mockResolvedValueOnce({ rows: [{ id: 'tenant-new', status: 'active' }] }) // INSERT RETURNING
+      .mockResolvedValueOnce({ rows: [{ id: 'tenant-new', status: 'active' }] }); // re-read SELECT
+    mockSeedDefaultObjects.mockResolvedValue({});
+
+    const req = {
+      path: '/accounts',
+      user: { userId: 'user123', tenantId: 'tenant-new' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireTenant(req, res, next);
+
+    expect(mockQuery).toHaveBeenCalledWith(
+      'SELECT id, status FROM tenants WHERE id = $1',
+      ['tenant-new'],
+    );
+    expect(mockSeedDefaultObjects).toHaveBeenCalledWith('tenant-new', 'user123');
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 INVALID_TENANT when auto-provisioning fails completely', async () => {
+    // Initial SELECT: no rows; INSERT: fails; re-read: no rows
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] }) // initial SELECT
+      .mockRejectedValueOnce(new Error('insert failed')); // INSERT throws
 
     const req = {
       path: '/accounts',
@@ -81,13 +120,30 @@ describe('requireTenant middleware', () => {
 
     await requireTenant(req, res, next);
 
-    expect(mockQuery).toHaveBeenCalledWith(
-      'SELECT id, status FROM tenants WHERE id = $1',
-      ['tenant-unknown'],
-    );
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({ error: 'Tenant not found', code: 'INVALID_TENANT' });
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it('continues even if seeding fails after tenant row is created', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] }) // initial SELECT
+      .mockResolvedValueOnce({ rows: [{ id: 'tenant-new', status: 'active' }] }) // INSERT RETURNING
+      .mockResolvedValueOnce({ rows: [{ id: 'tenant-new', status: 'active' }] }); // re-read SELECT
+    mockSeedDefaultObjects.mockRejectedValue(new Error('seed failure'));
+
+    const req = {
+      path: '/accounts',
+      user: { userId: 'user123', tenantId: 'tenant-new' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireTenant(req, res, next);
+
+    // Should still proceed despite seed failure
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+    expect(mockLoggerError).toHaveBeenCalled();
   });
 
   it('returns 403 TENANT_SUSPENDED when tenant exists but is not active', async () => {
@@ -156,5 +212,24 @@ describe('requireTenant middleware', () => {
     expect(res.status).toHaveBeenCalledWith(503);
     expect(res.json).toHaveBeenCalledWith({ error: 'Tenant validation service unavailable' });
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it('skips seeding when tenant row was created by a concurrent request', async () => {
+    // Initial SELECT: no rows; INSERT: ON CONFLICT DO NOTHING (0 rows); re-read: found
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] }) // initial SELECT
+      .mockResolvedValueOnce({ rows: [] }) // INSERT with ON CONFLICT DO NOTHING
+      .mockResolvedValueOnce({ rows: [{ id: 'tenant-race', status: 'active' }] }); // re-read SELECT
+
+    const req = {
+      path: '/accounts',
+      user: { userId: 'user123', tenantId: 'tenant-race' },
+    } as AuthenticatedRequest;
+    const res = mockRes();
+
+    await requireTenant(req, res, next);
+
+    expect(mockSeedDefaultObjects).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalled();
   });
 });
