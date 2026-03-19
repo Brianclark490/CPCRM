@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import {
   createLayoutDefinition,
@@ -53,7 +54,7 @@ export async function handleCreateLayout(
   const isDefault = body.is_default ?? body.isDefault;
 
   try {
-    const layout = await createLayoutDefinition(objectId, {
+    const layout = await createLayoutDefinition(req.user!.tenantId!, objectId, {
       name: body.name ?? '',
       layoutType,
       isDefault,
@@ -102,7 +103,7 @@ export async function handleListLayouts(
   const { objectId } = req.params as { objectId: string };
 
   try {
-    const layouts = await listLayoutDefinitions(objectId);
+    const layouts = await listLayoutDefinitions(req.user!.tenantId!, objectId);
     res.status(200).json(layouts);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -135,7 +136,7 @@ export async function handleGetLayout(
   const { objectId, id } = req.params as { objectId: string; id: string };
 
   try {
-    const layout = await getLayoutDefinitionById(objectId, id);
+    const layout = await getLayoutDefinitionById(req.user!.tenantId!, objectId, id);
     res.status(200).json(layout);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -187,7 +188,7 @@ export async function handleUpdateLayout(
   if ('layoutType' in body && !('layout_type' in body)) params.layoutType = body.layoutType;
 
   try {
-    const updated = await updateLayoutDefinition(objectId, id, params);
+    const updated = await updateLayoutDefinition(req.user!.tenantId!, objectId, id, params);
     res.status(200).json(updated);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -252,7 +253,7 @@ export async function handleSetLayoutFields(
   };
 
   try {
-    const result = await setLayoutFields(objectId, id, body.sections ?? []);
+    const result = await setLayoutFields(req.user!.tenantId!, objectId, id, body.sections ?? []);
     res.status(200).json(result);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -291,7 +292,7 @@ export async function handleDeleteLayout(
   const { objectId, id } = req.params as { objectId: string; id: string };
 
   try {
-    await deleteLayoutDefinition(objectId, id);
+    await deleteLayoutDefinition(req.user!.tenantId!, objectId, id);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -311,9 +312,9 @@ export async function handleDeleteLayout(
   }
 }
 
-adminLayoutsRouter.post('/', requireAuth, handleCreateLayout);
-adminLayoutsRouter.get('/', requireAuth, handleListLayouts);
-adminLayoutsRouter.get('/:id', requireAuth, handleGetLayout);
-adminLayoutsRouter.put('/:id', requireAuth, handleUpdateLayout);
-adminLayoutsRouter.put('/:id/fields', requireAuth, handleSetLayoutFields);
-adminLayoutsRouter.delete('/:id', requireAuth, handleDeleteLayout);
+adminLayoutsRouter.post('/', requireAuth, requireTenant, handleCreateLayout);
+adminLayoutsRouter.get('/', requireAuth, requireTenant, handleListLayouts);
+adminLayoutsRouter.get('/:id', requireAuth, requireTenant, handleGetLayout);
+adminLayoutsRouter.put('/:id', requireAuth, requireTenant, handleUpdateLayout);
+adminLayoutsRouter.put('/:id/fields', requireAuth, requireTenant, handleSetLayoutFields);
+adminLayoutsRouter.delete('/:id', requireAuth, requireTenant, handleDeleteLayout);

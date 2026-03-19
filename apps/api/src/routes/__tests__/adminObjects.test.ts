@@ -8,6 +8,10 @@ vi.mock('../../middleware/auth.js', () => ({
   requireAuth: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
 }));
 
+vi.mock('../../middleware/tenant.js', () => ({
+  requireTenant: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
+}));
+
 // ─── Mock the service ────────────────────────────────────────────────────────
 
 const mockCreateObjectDefinition = vi.fn();
@@ -115,6 +119,7 @@ describe('POST /admin/objects', () => {
     await handleCreateObject(req, res);
 
     expect(mockCreateObjectDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       expect.objectContaining({
         apiName: 'custom_project',
         label: 'Custom Project',
@@ -149,6 +154,7 @@ describe('POST /admin/objects', () => {
     await handleCreateObject(req, res);
 
     expect(mockCreateObjectDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       expect.objectContaining({
         apiName: 'custom_task',
         pluralLabel: 'Custom Tasks',
@@ -279,7 +285,7 @@ describe('GET /admin/objects/:id', () => {
 
     await handleGetObject(req, res);
 
-    expect(mockGetObjectDefinitionById).toHaveBeenCalledWith('obj-uuid');
+    expect(mockGetObjectDefinitionById).toHaveBeenCalledWith('tenant-abc', 'obj-uuid');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(objectDef);
   });
@@ -341,6 +347,7 @@ describe('PUT /admin/objects/:id', () => {
     await handleUpdateObject(req, res);
 
     expect(mockUpdateObjectDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-uuid',
       expect.objectContaining({ label: 'Updated Label' }),
     );
@@ -416,7 +423,7 @@ describe('DELETE /admin/objects/:id', () => {
 
     await handleDeleteObject(req, res);
 
-    expect(mockDeleteObjectDefinition).toHaveBeenCalledWith('obj-uuid');
+    expect(mockDeleteObjectDefinition).toHaveBeenCalledWith('tenant-abc', 'obj-uuid');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -488,7 +495,7 @@ describe('PUT /admin/objects/reorder', () => {
 
     await handleReorderObjects(req, res);
 
-    expect(mockReorderObjectDefinitions).toHaveBeenCalledWith(['id-1', 'id-2', 'id-3']);
+    expect(mockReorderObjectDefinitions).toHaveBeenCalledWith('tenant-abc', ['id-1', 'id-2', 'id-3']);
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -523,7 +530,7 @@ describe('PUT /admin/objects/reorder', () => {
 
     await handleReorderObjects(req, res);
 
-    expect(mockReorderObjectDefinitions).toHaveBeenCalledWith([]);
+    expect(mockReorderObjectDefinitions).toHaveBeenCalledWith('tenant-abc', []);
     expect(res.status).toHaveBeenCalledWith(400);
   });
 

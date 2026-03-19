@@ -47,7 +47,7 @@ export async function handleLinkRecords(
   const targetRecordId = body.target_record_id ?? body.targetRecordId ?? '';
 
   try {
-    const link = await linkRecords(id, relationshipId, targetRecordId, ownerId);
+    const link = await linkRecords(req.user!.tenantId!, id, relationshipId, targetRecordId, ownerId);
     res.status(201).json(link);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -92,7 +92,7 @@ export async function handleUnlinkRecords(
   const { userId: ownerId } = req.user!;
 
   try {
-    await unlinkRecords(id, relId, ownerId);
+    await unlinkRecords(req.user!.tenantId!, id, relId, ownerId);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -136,7 +136,7 @@ export async function handleGetRelatedRecords(
   const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? '20', 10) || 20));
 
   try {
-    const result = await getRelatedRecords(id, objectApiName, ownerId, page, limit);
+    const result = await getRelatedRecords(req.user!.tenantId!, id, objectApiName, ownerId, page, limit);
     res.status(200).json(result);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;

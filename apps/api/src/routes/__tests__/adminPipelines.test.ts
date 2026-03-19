@@ -8,6 +8,10 @@ vi.mock('../../middleware/auth.js', () => ({
   requireAuth: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
 }));
 
+vi.mock('../../middleware/tenant.js', () => ({
+  requireTenant: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
+}));
+
 // ─── Mock the service ────────────────────────────────────────────────────────
 
 const mockCreatePipeline = vi.fn();
@@ -111,6 +115,7 @@ describe('POST /admin/pipelines', () => {
     await handleCreatePipeline(req, res);
 
     expect(mockCreatePipeline).toHaveBeenCalledWith(
+      'tenant-abc',
       expect.objectContaining({
         name: 'Custom Pipeline',
         apiName: 'custom_pipeline',
@@ -135,6 +140,7 @@ describe('POST /admin/pipelines', () => {
     await handleCreatePipeline(req, res);
 
     expect(mockCreatePipeline).toHaveBeenCalledWith(
+      'tenant-abc',
       expect.objectContaining({
         apiName: 'test_pipeline',
         objectId: 'obj-1',
@@ -249,7 +255,7 @@ describe('GET /admin/pipelines/:id', () => {
 
     await handleGetPipeline(req, res);
 
-    expect(mockGetPipelineById).toHaveBeenCalledWith('p1');
+    expect(mockGetPipelineById).toHaveBeenCalledWith('tenant-abc', 'p1');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(pipeline);
   });
@@ -299,6 +305,7 @@ describe('PUT /admin/pipelines/:id', () => {
     await handleUpdatePipeline(req, res);
 
     expect(mockUpdatePipeline).toHaveBeenCalledWith(
+      'tenant-abc',
       'p1',
       expect.objectContaining({ name: 'Updated Pipeline' }),
     );
@@ -319,6 +326,7 @@ describe('PUT /admin/pipelines/:id', () => {
     await handleUpdatePipeline(req, res);
 
     expect(mockUpdatePipeline).toHaveBeenCalledWith(
+      'tenant-abc',
       'p1',
       expect.objectContaining({ isDefault: true }),
     );
@@ -375,7 +383,7 @@ describe('DELETE /admin/pipelines/:id', () => {
 
     await handleDeletePipeline(req, res);
 
-    expect(mockDeletePipeline).toHaveBeenCalledWith('p1');
+    expect(mockDeletePipeline).toHaveBeenCalledWith('tenant-abc', 'p1');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -458,6 +466,7 @@ describe('POST /admin/pipelines/:pipelineId/stages', () => {
     await handleCreateStage(req, res);
 
     expect(mockCreateStage).toHaveBeenCalledWith(
+      'tenant-abc',
       'p1',
       expect.objectContaining({
         name: 'Discovery',
@@ -483,6 +492,7 @@ describe('POST /admin/pipelines/:pipelineId/stages', () => {
     await handleCreateStage(req, res);
 
     expect(mockCreateStage).toHaveBeenCalledWith(
+      'tenant-abc',
       'p1',
       expect.objectContaining({
         apiName: 'test_stage',
@@ -573,6 +583,7 @@ describe('PUT /admin/pipelines/:pipelineId/stages/:id', () => {
     await handleUpdateStage(req, res);
 
     expect(mockUpdateStage).toHaveBeenCalledWith(
+      'tenant-abc',
       'p1',
       's1',
       expect.objectContaining({ name: 'Updated Stage' }),
@@ -593,6 +604,7 @@ describe('PUT /admin/pipelines/:pipelineId/stages/:id', () => {
     await handleUpdateStage(req, res);
 
     expect(mockUpdateStage).toHaveBeenCalledWith(
+      'tenant-abc',
       'p1',
       's1',
       expect.objectContaining({
@@ -666,7 +678,7 @@ describe('DELETE /admin/pipelines/:pipelineId/stages/:id', () => {
 
     await handleDeleteStage(req, res);
 
-    expect(mockDeleteStage).toHaveBeenCalledWith('p1', 's1');
+    expect(mockDeleteStage).toHaveBeenCalledWith('tenant-abc', 'p1', 's1');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -760,7 +772,7 @@ describe('PATCH /admin/pipelines/:pipelineId/stages/reorder', () => {
 
     await handleReorderStages(req, res);
 
-    expect(mockReorderStages).toHaveBeenCalledWith('p1', ['s2', 's1', 's-won', 's-lost']);
+    expect(mockReorderStages).toHaveBeenCalledWith('tenant-abc', 'p1', ['s2', 's1', 's-won', 's-lost']);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(stages);
   });
@@ -777,7 +789,7 @@ describe('PATCH /admin/pipelines/:pipelineId/stages/reorder', () => {
 
     await handleReorderStages(req, res);
 
-    expect(mockReorderStages).toHaveBeenCalledWith('p1', ['s1', 's2']);
+    expect(mockReorderStages).toHaveBeenCalledWith('tenant-abc', 'p1', ['s1', 's2']);
   });
 
   it('returns 400 on VALIDATION_ERROR', async () => {

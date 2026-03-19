@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import {
   listStageGates,
@@ -31,7 +32,7 @@ export async function handleListGates(
   const { stageId } = req.params as { stageId: string };
 
   try {
-    const gates = await listStageGates(stageId);
+    const gates = await listStageGates(req.user!.tenantId!, stageId);
     res.status(200).json(gates);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -90,7 +91,7 @@ export async function handleCreateGate(
   const errorMessage = body.error_message ?? body.errorMessage;
 
   try {
-    const gate = await createStageGate(stageId, {
+    const gate = await createStageGate(req.user!.tenantId!, stageId, {
       fieldId,
       gateType,
       gateValue: gateValue ?? null,
@@ -164,7 +165,7 @@ export async function handleUpdateGate(
   if ('errorMessage' in body && !('error_message' in body)) params.errorMessage = body.errorMessage;
 
   try {
-    const gate = await updateStageGate(stageId, id, params);
+    const gate = await updateStageGate(req.user!.tenantId!, stageId, id, params);
 
     res.status(200).json(gate);
   } catch (err: unknown) {
@@ -203,7 +204,7 @@ export async function handleDeleteGate(
   const { stageId, id } = req.params as { stageId: string; id: string };
 
   try {
-    await deleteStageGate(stageId, id);
+    await deleteStageGate(req.user!.tenantId!, stageId, id);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -218,7 +219,7 @@ export async function handleDeleteGate(
   }
 }
 
-adminStageGatesRouter.get('/', requireAuth, handleListGates);
-adminStageGatesRouter.post('/', requireAuth, handleCreateGate);
-adminStageGatesRouter.put('/:id', requireAuth, handleUpdateGate);
-adminStageGatesRouter.delete('/:id', requireAuth, handleDeleteGate);
+adminStageGatesRouter.get('/', requireAuth, requireTenant, handleListGates);
+adminStageGatesRouter.post('/', requireAuth, requireTenant, handleCreateGate);
+adminStageGatesRouter.put('/:id', requireAuth, requireTenant, handleUpdateGate);
+adminStageGatesRouter.delete('/:id', requireAuth, requireTenant, handleDeleteGate);

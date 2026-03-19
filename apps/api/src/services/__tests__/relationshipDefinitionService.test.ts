@@ -8,6 +8,8 @@ import {
   validateRelationshipType,
 } from '../relationshipDefinitionService.js';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -42,7 +44,7 @@ const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
 
     // INSERT INTO relationship_definitions
     if (s.startsWith('INSERT INTO RELATIONSHIP_DEFINITIONS')) {
-      const [id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at] = params as unknown[];
+      const [id, _tenant_id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at,
       };
@@ -51,7 +53,7 @@ const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
     }
 
     // SELECT rd.*, src.label ... (list relationships with joins)
-    if (s.includes('FROM RELATIONSHIP_DEFINITIONS RD') && s.includes('JOIN OBJECT_DEFINITIONS SRC') && s.includes('JOIN OBJECT_DEFINITIONS TGT') && s.includes('WHERE RD.SOURCE_OBJECT_ID = $1 OR RD.TARGET_OBJECT_ID = $1')) {
+    if (s.includes('FROM RELATIONSHIP_DEFINITIONS RD') && s.includes('JOIN OBJECT_DEFINITIONS SRC') && s.includes('JOIN OBJECT_DEFINITIONS TGT') && s.includes('SOURCE_OBJECT_ID = $1 OR RD.TARGET_OBJECT_ID = $1')) {
       const objectId = params![0] as string;
       const rows = [...fakeRelationships.values()]
         .filter((r) => r.source_object_id === objectId || r.target_object_id === objectId)
@@ -217,7 +219,7 @@ describe('createRelationshipDefinition', () => {
   });
 
   it('creates a lookup relationship', async () => {
-    const result = await createRelationshipDefinition(baseParams);
+    const result = await createRelationshipDefinition(TENANT_ID, baseParams);
 
     expect(result.sourceObjectId).toBe('obj-custom');
     expect(result.targetObjectId).toBe('obj-account');
@@ -228,7 +230,7 @@ describe('createRelationshipDefinition', () => {
   });
 
   it('creates a parent_child relationship', async () => {
-    const result = await createRelationshipDefinition({
+    const result = await createRelationshipDefinition(TENANT_ID, {
       ...baseParams,
       relationshipType: 'parent_child',
     });
@@ -237,7 +239,7 @@ describe('createRelationshipDefinition', () => {
   });
 
   it('sets optional reverse_label and required', async () => {
-    const result = await createRelationshipDefinition({
+    const result = await createRelationshipDefinition(TENANT_ID, {
       ...baseParams,
       reverseLabel: 'Projects',
       required: true,
@@ -248,7 +250,7 @@ describe('createRelationshipDefinition', () => {
   });
 
   it('creates with a UUID id', async () => {
-    const result = await createRelationshipDefinition(baseParams);
+    const result = await createRelationshipDefinition(TENANT_ID, baseParams);
 
     expect(result.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
@@ -257,7 +259,7 @@ describe('createRelationshipDefinition', () => {
 
   it('throws VALIDATION_ERROR for missing source_object_id', async () => {
     await expect(
-      createRelationshipDefinition({ ...baseParams, sourceObjectId: '' }),
+      createRelationshipDefinition(TENANT_ID, { ...baseParams, sourceObjectId: '' }),
     ).rejects.toMatchObject({
       message: 'source_object_id is required',
       code: 'VALIDATION_ERROR',
@@ -266,7 +268,7 @@ describe('createRelationshipDefinition', () => {
 
   it('throws VALIDATION_ERROR for missing target_object_id', async () => {
     await expect(
-      createRelationshipDefinition({ ...baseParams, targetObjectId: '' }),
+      createRelationshipDefinition(TENANT_ID, { ...baseParams, targetObjectId: '' }),
     ).rejects.toMatchObject({
       message: 'target_object_id is required',
       code: 'VALIDATION_ERROR',
@@ -275,7 +277,7 @@ describe('createRelationshipDefinition', () => {
 
   it('throws VALIDATION_ERROR for invalid api_name', async () => {
     await expect(
-      createRelationshipDefinition({ ...baseParams, apiName: '' }),
+      createRelationshipDefinition(TENANT_ID, { ...baseParams, apiName: '' }),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
@@ -283,7 +285,7 @@ describe('createRelationshipDefinition', () => {
 
   it('throws VALIDATION_ERROR for empty label', async () => {
     await expect(
-      createRelationshipDefinition({ ...baseParams, label: '' }),
+      createRelationshipDefinition(TENANT_ID, { ...baseParams, label: '' }),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
@@ -291,7 +293,7 @@ describe('createRelationshipDefinition', () => {
 
   it('throws VALIDATION_ERROR for invalid relationship_type', async () => {
     await expect(
-      createRelationshipDefinition({ ...baseParams, relationshipType: 'many_to_many' }),
+      createRelationshipDefinition(TENANT_ID, { ...baseParams, relationshipType: 'many_to_many' }),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
@@ -299,7 +301,7 @@ describe('createRelationshipDefinition', () => {
 
   it('throws NOT_FOUND when source object does not exist', async () => {
     await expect(
-      createRelationshipDefinition({ ...baseParams, sourceObjectId: 'missing-obj' }),
+      createRelationshipDefinition(TENANT_ID, { ...baseParams, sourceObjectId: 'missing-obj' }),
     ).rejects.toMatchObject({
       message: 'Source object definition not found',
       code: 'NOT_FOUND',
@@ -308,7 +310,7 @@ describe('createRelationshipDefinition', () => {
 
   it('throws NOT_FOUND when target object does not exist', async () => {
     await expect(
-      createRelationshipDefinition({ ...baseParams, targetObjectId: 'missing-obj' }),
+      createRelationshipDefinition(TENANT_ID, { ...baseParams, targetObjectId: 'missing-obj' }),
     ).rejects.toMatchObject({
       message: 'Target object definition not found',
       code: 'NOT_FOUND',
@@ -316,10 +318,10 @@ describe('createRelationshipDefinition', () => {
   });
 
   it('throws CONFLICT when api_name already exists on source object', async () => {
-    await createRelationshipDefinition(baseParams);
+    await createRelationshipDefinition(TENANT_ID, baseParams);
 
     await expect(
-      createRelationshipDefinition(baseParams),
+      createRelationshipDefinition(TENANT_ID, baseParams),
     ).rejects.toMatchObject({
       code: 'CONFLICT',
     });
@@ -337,12 +339,12 @@ describe('listRelationshipDefinitions', () => {
   });
 
   it('returns empty array when no relationships exist', async () => {
-    const result = await listRelationshipDefinitions('obj-custom');
+    const result = await listRelationshipDefinitions(TENANT_ID, 'obj-custom');
     expect(result).toEqual([]);
   });
 
   it('returns relationships where object is the source', async () => {
-    await createRelationshipDefinition({
+    await createRelationshipDefinition(TENANT_ID, {
       sourceObjectId: 'obj-custom',
       targetObjectId: 'obj-account',
       relationshipType: 'lookup',
@@ -350,7 +352,7 @@ describe('listRelationshipDefinitions', () => {
       label: 'Account',
     });
 
-    const result = await listRelationshipDefinitions('obj-custom');
+    const result = await listRelationshipDefinitions(TENANT_ID, 'obj-custom');
 
     expect(result).toHaveLength(1);
     expect(result[0].apiName).toBe('project_account');
@@ -360,7 +362,7 @@ describe('listRelationshipDefinitions', () => {
   });
 
   it('returns relationships where object is the target', async () => {
-    await createRelationshipDefinition({
+    await createRelationshipDefinition(TENANT_ID, {
       sourceObjectId: 'obj-custom',
       targetObjectId: 'obj-account',
       relationshipType: 'lookup',
@@ -368,7 +370,7 @@ describe('listRelationshipDefinitions', () => {
       label: 'Account',
     });
 
-    const result = await listRelationshipDefinitions('obj-account');
+    const result = await listRelationshipDefinitions(TENANT_ID, 'obj-account');
 
     expect(result).toHaveLength(1);
     expect(result[0].sourceObjectApiName).toBe('custom_project');
@@ -377,7 +379,7 @@ describe('listRelationshipDefinitions', () => {
   });
 
   it('includes source and target object metadata', async () => {
-    await createRelationshipDefinition({
+    await createRelationshipDefinition(TENANT_ID, {
       sourceObjectId: 'obj-custom',
       targetObjectId: 'obj-account',
       relationshipType: 'lookup',
@@ -386,7 +388,7 @@ describe('listRelationshipDefinitions', () => {
       reverseLabel: 'Projects',
     });
 
-    const result = await listRelationshipDefinitions('obj-custom');
+    const result = await listRelationshipDefinitions(TENANT_ID, 'obj-custom');
 
     expect(result[0]).toHaveProperty('sourceObjectApiName');
     expect(result[0]).toHaveProperty('sourceObjectLabel');
@@ -398,7 +400,7 @@ describe('listRelationshipDefinitions', () => {
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      listRelationshipDefinitions('missing-obj'),
+      listRelationshipDefinitions(TENANT_ID, 'missing-obj'),
     ).rejects.toMatchObject({
       message: 'Object definition not found',
       code: 'NOT_FOUND',
@@ -417,7 +419,7 @@ describe('deleteRelationshipDefinition', () => {
   });
 
   it('deletes a custom relationship successfully', async () => {
-    const rel = await createRelationshipDefinition({
+    const rel = await createRelationshipDefinition(TENANT_ID, {
       sourceObjectId: 'obj-custom',
       targetObjectId: 'obj-account',
       relationshipType: 'lookup',
@@ -425,13 +427,13 @@ describe('deleteRelationshipDefinition', () => {
       label: 'Account',
     });
 
-    await expect(deleteRelationshipDefinition(rel.id)).resolves.toBeUndefined();
+    await expect(deleteRelationshipDefinition(TENANT_ID, rel.id)).resolves.toBeUndefined();
     expect(fakeRelationships.has(rel.id)).toBe(false);
   });
 
   it('throws NOT_FOUND when relationship does not exist', async () => {
     await expect(
-      deleteRelationshipDefinition('missing-rel-id'),
+      deleteRelationshipDefinition(TENANT_ID, 'missing-rel-id'),
     ).rejects.toMatchObject({
       message: 'Relationship definition not found',
       code: 'NOT_FOUND',
@@ -453,7 +455,7 @@ describe('deleteRelationshipDefinition', () => {
     });
 
     await expect(
-      deleteRelationshipDefinition('system-rel'),
+      deleteRelationshipDefinition(TENANT_ID, 'system-rel'),
     ).rejects.toMatchObject({
       message: 'Cannot delete system relationships',
       code: 'DELETE_BLOCKED',
@@ -461,7 +463,7 @@ describe('deleteRelationshipDefinition', () => {
   });
 
   it('allows deleting a relationship between custom and system objects', async () => {
-    const rel = await createRelationshipDefinition({
+    const rel = await createRelationshipDefinition(TENANT_ID, {
       sourceObjectId: 'obj-custom',
       targetObjectId: 'obj-opportunity',
       relationshipType: 'lookup',
@@ -469,6 +471,6 @@ describe('deleteRelationshipDefinition', () => {
       label: 'Opportunity',
     });
 
-    await expect(deleteRelationshipDefinition(rel.id)).resolves.toBeUndefined();
+    await expect(deleteRelationshipDefinition(TENANT_ID, rel.id)).resolves.toBeUndefined();
   });
 });

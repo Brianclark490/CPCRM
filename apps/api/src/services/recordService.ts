@@ -157,11 +157,12 @@ function resolveFieldLabels(
 // ─── Object & Field Resolution ───────────────────────────────────────────────
 
 export async function resolveObjectByApiName(
+  tenantId: string,
   apiName: string,
 ): Promise<ObjectDefinitionRow> {
   const result = await pool.query(
-    'SELECT * FROM object_definitions WHERE api_name = $1',
-    [apiName],
+    'SELECT * FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
+    [apiName, tenantId],
   );
 
   if (result.rows.length === 0) {
@@ -172,11 +173,12 @@ export async function resolveObjectByApiName(
 }
 
 export async function getFieldDefinitions(
+  tenantId: string,
   objectId: string,
 ): Promise<FieldDefinitionRow[]> {
   const result = await pool.query(
-    'SELECT * FROM field_definitions WHERE object_id = $1 ORDER BY sort_order ASC',
-    [objectId],
+    'SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    [objectId, tenantId],
   );
 
   return result.rows.map((row: Record<string, unknown>) => rowToFieldDef(row));
@@ -397,12 +399,13 @@ export function validateFieldValues(
  * 6. Insert into records table
  */
 export async function createRecord(
+  tenantId: string,
   apiName: string,
   fieldValues: Record<string, unknown>,
   ownerId: string,
 ): Promise<RecordWithLabels> {
-  const objectDef = await resolveObjectByApiName(apiName);
-  const fieldDefs = await getFieldDefinitions(objectDef.id);
+  const objectDef = await resolveObjectByApiName(tenantId, apiName);
+  const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
   // Filter field_values to only include known fields
   const knownFieldNames = new Set(fieldDefs.map((fd) => fd.apiName));
@@ -428,10 +431,10 @@ export async function createRecord(
     await client.query('BEGIN');
 
     await client.query(
-      `INSERT INTO records (id, object_id, name, field_values, owner_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [recordId, objectDef.id, name, JSON.stringify(cleanedValues), ownerId, now, now],
+      [recordId, tenantId, objectDef.id, name, JSON.stringify(cleanedValues), ownerId, now, now],
     );
 
     // Auto-assign default pipeline if one exists for this object
@@ -462,6 +465,7 @@ export async function createRecord(
  * Only returns records owned by the authenticated user.
  */
 export async function listRecords(params: {
+  tenantId: string;
   apiName: string;
   ownerId: string;
   search?: string;
@@ -470,13 +474,13 @@ export async function listRecords(params: {
   sortBy?: string;
   sortDir?: string;
 }): Promise<ListRecordsResult> {
-  const { apiName, ownerId, search, page, limit, sortBy, sortDir } = params;
+  const { tenantId, apiName, ownerId, search, page, limit, sortBy, sortDir } = params;
 
-  const objectDef = await resolveObjectByApiName(apiName);
-  const fieldDefs = await getFieldDefinitions(objectDef.id);
+  const objectDef = await resolveObjectByApiName(tenantId, apiName);
+  const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
-  const queryParams: unknown[] = [objectDef.id, ownerId];
-  let whereClause = 'WHERE r.object_id = $1 AND r.owner_id = $2';
+  const queryParams: unknown[] = [objectDef.id, ownerId, tenantId];
+  let whereClause = 'WHERE r.object_id = $1 AND r.owner_id = $2 AND r.tenant_id = $3';
 
   if (search && search.trim().length > 0) {
     const searchTerm = `%${search.trim()}%`;
@@ -544,16 +548,17 @@ export async function listRecords(params: {
  * Returns a single record by ID with field labels and related records.
  */
 export async function getRecord(
+  tenantId: string,
   apiName: string,
   recordId: string,
   ownerId: string,
 ): Promise<RecordDetail> {
-  const objectDef = await resolveObjectByApiName(apiName);
-  const fieldDefs = await getFieldDefinitions(objectDef.id);
+  const objectDef = await resolveObjectByApiName(tenantId, apiName);
+  const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
   const result = await pool.query(
-    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3',
-    [recordId, objectDef.id, ownerId],
+    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
+    [recordId, objectDef.id, ownerId, tenantId],
   );
 
   if (result.rows.length === 0) {
@@ -573,8 +578,8 @@ export async function getRecord(
      FROM relationship_definitions rd
      JOIN object_definitions src_obj ON src_obj.id = rd.source_object_id
      JOIN object_definitions tgt_obj ON tgt_obj.id = rd.target_object_id
-     WHERE rd.source_object_id = $1 OR rd.target_object_id = $1`,
-    [objectDef.id],
+     WHERE (rd.source_object_id = $1 OR rd.target_object_id = $1) AND rd.tenant_id = $2`,
+    [objectDef.id, tenantId],
   );
 
   const relationships: RecordDetail['relationships'] = [];
@@ -642,18 +647,19 @@ export async function getRecord(
  * Updates an existing record. Only validates fields that are present (partial update).
  */
 export async function updateRecord(
+  tenantId: string,
   apiName: string,
   recordId: string,
   fieldValues: Record<string, unknown>,
   ownerId: string,
 ): Promise<RecordWithLabels> {
-  const objectDef = await resolveObjectByApiName(apiName);
-  const fieldDefs = await getFieldDefinitions(objectDef.id);
+  const objectDef = await resolveObjectByApiName(tenantId, apiName);
+  const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
   // Verify the record exists and is owned by this user
   const existing = await pool.query(
-    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3',
-    [recordId, objectDef.id, ownerId],
+    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
+    [recordId, objectDef.id, ownerId, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -684,9 +690,9 @@ export async function updateRecord(
   const result = await pool.query(
     `UPDATE records
      SET name = $1, field_values = $2, updated_at = $3
-     WHERE id = $4 AND object_id = $5 AND owner_id = $6
+     WHERE id = $4 AND object_id = $5 AND owner_id = $6 AND tenant_id = $7
      RETURNING *`,
-    [name, JSON.stringify(mergedValues), now, recordId, objectDef.id, ownerId],
+    [name, JSON.stringify(mergedValues), now, recordId, objectDef.id, ownerId, tenantId],
   );
 
   logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record updated');
@@ -699,17 +705,18 @@ export async function updateRecord(
  * Deletes a record and its associated record_relationships.
  */
 export async function deleteRecord(
+  tenantId: string,
   apiName: string,
   recordId: string,
   ownerId: string,
 ): Promise<void> {
-  const objectDef = await resolveObjectByApiName(apiName);
+  const objectDef = await resolveObjectByApiName(tenantId, apiName);
 
   // record_relationships have ON DELETE CASCADE from records, so deleting
   // the record will automatically clean up relationships
   const result = await pool.query(
-    'DELETE FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3',
-    [recordId, objectDef.id, ownerId],
+    'DELETE FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
+    [recordId, objectDef.id, ownerId, tenantId],
   );
 
   if (result.rowCount === 0) {

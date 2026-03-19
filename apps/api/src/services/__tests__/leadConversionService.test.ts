@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -184,7 +186,7 @@ describe('convertLead', () => {
   it('converts a lead and creates account, contact, and opportunity', async () => {
     setupLeadConversionMocks();
 
-    const result = await convertLead('lead-1', 'user-123', {});
+    const result = await convertLead(TENANT_ID, 'lead-1', 'user-123', {});
 
     expect(result.account).toBeDefined();
     expect(result.account.name).toBe('Acme Corp');
@@ -210,7 +212,7 @@ describe('convertLead', () => {
     setupLeadConversionMocks({ leadExists: false });
 
     await expect(
-      convertLead('missing-lead', 'user-123', {}),
+      convertLead(TENANT_ID, 'missing-lead', 'user-123', {}),
     ).rejects.toThrow('Lead not found');
   });
 
@@ -225,14 +227,14 @@ describe('convertLead', () => {
     });
 
     await expect(
-      convertLead('lead-1', 'user-123', {}),
+      convertLead(TENANT_ID, 'lead-1', 'user-123', {}),
     ).rejects.toThrow('Lead has already been converted');
   });
 
   it('links to existing account when account_id is provided', async () => {
     setupLeadConversionMocks({ accountExists: true, existingAccountName: 'Existing Corp' });
 
-    const result = await convertLead('lead-1', 'user-123', {
+    const result = await convertLead(TENANT_ID, 'lead-1', 'user-123', {
       accountId: 'existing-account-id',
     });
 
@@ -244,14 +246,14 @@ describe('convertLead', () => {
     setupLeadConversionMocks({ accountExists: false });
 
     await expect(
-      convertLead('lead-1', 'user-123', { accountId: 'nonexistent-id' }),
+      convertLead(TENANT_ID, 'lead-1', 'user-123', { accountId: 'nonexistent-id' }),
     ).rejects.toThrow('Account not found');
   });
 
   it('skips opportunity creation when create_opportunity is false', async () => {
     setupLeadConversionMocks();
 
-    const result = await convertLead('lead-1', 'user-123', {
+    const result = await convertLead(TENANT_ID, 'lead-1', 'user-123', {
       createOpportunity: false,
     });
 
@@ -281,7 +283,7 @@ describe('convertLead', () => {
     });
 
     await expect(
-      convertLead('lead-1', 'user-123', {}),
+      convertLead(TENANT_ID, 'lead-1', 'user-123', {}),
     ).rejects.toThrow('Database error');
 
     // Verify ROLLBACK was called
@@ -304,7 +306,7 @@ describe('convertLead', () => {
       },
     });
 
-    const result = await convertLead('lead-1', 'user-123', {});
+    const result = await convertLead(TENANT_ID, 'lead-1', 'user-123', {});
 
     expect(result.opportunity).toBeDefined();
     expect(result.opportunity!.name).toBe('MegaCorp - Opportunity');
@@ -313,7 +315,7 @@ describe('convertLead', () => {
   it('defaults create_opportunity to true', async () => {
     setupLeadConversionMocks();
 
-    const result = await convertLead('lead-1', 'user-123', {});
+    const result = await convertLead(TENANT_ID, 'lead-1', 'user-123', {});
 
     expect(result.opportunity).not.toBeNull();
   });
@@ -321,7 +323,7 @@ describe('convertLead', () => {
   it('applies field mappings correctly from lead to created records', async () => {
     setupLeadConversionMocks();
 
-    await convertLead('lead-1', 'user-123', {});
+    await convertLead(TENANT_ID, 'lead-1', 'user-123', {});
 
     // Find INSERT INTO records calls
     const insertCalls = clientQuery.mock.calls.filter((c: unknown[]) => {
@@ -333,7 +335,7 @@ describe('convertLead', () => {
 
     // Account: lead.company → account.name, lead.industry → account.industry, etc.
     const accountParams = insertCalls[0][1] as unknown[];
-    const accountFieldValues = JSON.parse(accountParams[3] as string);
+    const accountFieldValues = JSON.parse(accountParams[4] as string);
     expect(accountFieldValues.name).toBe('Acme Corp');
     expect(accountFieldValues.industry).toBe('Technology');
     expect(accountFieldValues.website).toBe('https://acme.com');
@@ -343,7 +345,7 @@ describe('convertLead', () => {
 
     // Contact: lead.first_name → contact.first_name, etc.
     const contactParams = insertCalls[1][1] as unknown[];
-    const contactFieldValues = JSON.parse(contactParams[3] as string);
+    const contactFieldValues = JSON.parse(contactParams[4] as string);
     expect(contactFieldValues.first_name).toBe('John');
     expect(contactFieldValues.last_name).toBe('Smith');
     expect(contactFieldValues.email).toBe('john@acme.com');
@@ -352,7 +354,7 @@ describe('convertLead', () => {
 
     // Opportunity: lead.estimated_value → opportunity.value, etc.
     const oppParams = insertCalls[2][1] as unknown[];
-    const oppFieldValues = JSON.parse(oppParams[3] as string);
+    const oppFieldValues = JSON.parse(oppParams[4] as string);
     expect(oppFieldValues.value).toBe(50000);
     expect(oppFieldValues.source).toBe('Website');
     expect(oppFieldValues.description).toBe('A great lead');
@@ -361,7 +363,7 @@ describe('convertLead', () => {
   it('sets converted lead status and metadata after conversion', async () => {
     setupLeadConversionMocks();
 
-    const result = await convertLead('lead-1', 'user-123', {});
+    const result = await convertLead(TENANT_ID, 'lead-1', 'user-123', {});
 
     // Find UPDATE records call
     const updateCalls = clientQuery.mock.calls.filter((c: unknown[]) => {

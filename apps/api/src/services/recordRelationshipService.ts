@@ -88,6 +88,7 @@ function rowToRelatedRecord(row: Record<string, unknown>): RelatedRecordRow {
  * @throws {Error} CONFLICT — duplicate link or parent already exists
  */
 export async function linkRecords(
+  tenantId: string,
   sourceRecordId: string,
   relationshipId: string,
   targetRecordId: string,
@@ -105,8 +106,8 @@ export async function linkRecords(
 
   // Fetch the source record
   const sourceResult = await pool.query(
-    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2',
-    [sourceRecordId, ownerId],
+    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2 AND tenant_id = $3',
+    [sourceRecordId, ownerId, tenantId],
   );
   if (sourceResult.rows.length === 0) {
     throwNotFoundError('Source record not found');
@@ -115,8 +116,8 @@ export async function linkRecords(
 
   // Fetch the target record
   const targetResult = await pool.query(
-    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2',
-    [targetRecordId, ownerId],
+    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2 AND tenant_id = $3',
+    [targetRecordId, ownerId, tenantId],
   );
   if (targetResult.rows.length === 0) {
     throwNotFoundError('Target record not found');
@@ -125,8 +126,8 @@ export async function linkRecords(
 
   // Fetch the relationship definition
   const relDefResult = await pool.query(
-    'SELECT * FROM relationship_definitions WHERE id = $1',
-    [relationshipId],
+    'SELECT * FROM relationship_definitions WHERE id = $1 AND tenant_id = $2',
+    [relationshipId, tenantId],
   );
   if (relDefResult.rows.length === 0) {
     throwNotFoundError('Relationship definition not found');
@@ -174,10 +175,10 @@ export async function linkRecords(
   const now = new Date();
 
   const result = await pool.query(
-    `INSERT INTO record_relationships (id, relationship_id, source_record_id, target_record_id, created_at)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO record_relationships (id, tenant_id, relationship_id, source_record_id, target_record_id, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [linkId, relationshipId, sourceRecordId, targetRecordId, now],
+    [linkId, tenantId, relationshipId, sourceRecordId, targetRecordId, now],
   );
 
   logger.info(
@@ -196,14 +197,15 @@ export async function linkRecords(
  * @throws {Error} NOT_FOUND — record or relationship link not found
  */
 export async function unlinkRecords(
+  tenantId: string,
   sourceRecordId: string,
   recordRelationshipId: string,
   ownerId: string,
 ): Promise<void> {
   // Verify the source record exists and belongs to the owner
   const recordResult = await pool.query(
-    'SELECT id FROM records WHERE id = $1 AND owner_id = $2',
-    [sourceRecordId, ownerId],
+    'SELECT id FROM records WHERE id = $1 AND owner_id = $2 AND tenant_id = $3',
+    [sourceRecordId, ownerId, tenantId],
   );
   if (recordResult.rows.length === 0) {
     throwNotFoundError('Record not found');
@@ -234,6 +236,7 @@ export async function unlinkRecords(
  * @throws {Error} NOT_FOUND — record or object type not found
  */
 export async function getRelatedRecords(
+  tenantId: string,
   recordId: string,
   objectApiName: string,
   ownerId: string,
@@ -242,8 +245,8 @@ export async function getRelatedRecords(
 ): Promise<RelatedRecordsResult> {
   // Verify the record exists and belongs to the owner
   const recordResult = await pool.query(
-    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2',
-    [recordId, ownerId],
+    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2 AND tenant_id = $3',
+    [recordId, ownerId, tenantId],
   );
   if (recordResult.rows.length === 0) {
     throwNotFoundError('Record not found');
@@ -251,8 +254,8 @@ export async function getRelatedRecords(
 
   // Resolve the target object type
   const objectResult = await pool.query(
-    'SELECT id FROM object_definitions WHERE api_name = $1',
-    [objectApiName],
+    'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
+    [objectApiName, tenantId],
   );
   if (objectResult.rows.length === 0) {
     throwNotFoundError(`Object type '${objectApiName}' not found`);

@@ -8,6 +8,10 @@ vi.mock('../../middleware/auth.js', () => ({
   requireAuth: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
 }));
 
+vi.mock('../../middleware/tenant.js', () => ({
+  requireTenant: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
+}));
+
 // ─── Mock the analytics service ──────────────────────────────────────────────
 
 const mockGetPipelineSummary = vi.fn();
@@ -103,7 +107,7 @@ describe('GET /pipelines/:pipelineId/summary', () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(summaryData);
-    expect(mockGetPipelineSummary).toHaveBeenCalledWith(PIPELINE_ID, 'user-123');
+    expect(mockGetPipelineSummary).toHaveBeenCalledWith('tenant-abc', PIPELINE_ID, 'user-123');
   });
 
   it('returns 404 when pipeline not found', async () => {
@@ -169,7 +173,7 @@ describe('GET /pipelines/:pipelineId/velocity', () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(velocityData);
-    expect(mockGetPipelineVelocity).toHaveBeenCalledWith(PIPELINE_ID, 'user-123', '30d');
+    expect(mockGetPipelineVelocity).toHaveBeenCalledWith('tenant-abc', PIPELINE_ID, 'user-123', '30d');
   });
 
   it('passes period query parameter to service', async () => {
@@ -180,7 +184,7 @@ describe('GET /pipelines/:pipelineId/velocity', () => {
 
     await handleGetVelocity(req, res);
 
-    expect(mockGetPipelineVelocity).toHaveBeenCalledWith(PIPELINE_ID, 'user-123', '7d');
+    expect(mockGetPipelineVelocity).toHaveBeenCalledWith('tenant-abc', PIPELINE_ID, 'user-123', '7d');
   });
 
   it('returns 400 on invalid period', async () => {
@@ -254,7 +258,7 @@ describe('GET /pipelines/:pipelineId/overdue', () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(overdueData);
-    expect(mockGetOverdueRecords).toHaveBeenCalledWith(PIPELINE_ID, 'user-123');
+    expect(mockGetOverdueRecords).toHaveBeenCalledWith('tenant-abc', PIPELINE_ID, 'user-123');
   });
 
   it('returns 404 when pipeline not found', async () => {

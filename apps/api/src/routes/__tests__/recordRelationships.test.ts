@@ -88,7 +88,7 @@ describe('POST /records/:id/relationships', () => {
 
     await handleLinkRecords(req, res);
 
-    expect(mockLinkRecords).toHaveBeenCalledWith('rec-uuid', 'rel-1', 'rec-target', 'user-123');
+    expect(mockLinkRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'rel-1', 'rec-target', 'user-123');
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(expectedLink);
   });
@@ -101,7 +101,7 @@ describe('POST /records/:id/relationships', () => {
 
     await handleLinkRecords(req, res);
 
-    expect(mockLinkRecords).toHaveBeenCalledWith('rec-uuid', 'rel-1', 'rec-target', 'user-123');
+    expect(mockLinkRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'rel-1', 'rec-target', 'user-123');
   });
 
   it('returns 400 when validation fails', async () => {
@@ -182,7 +182,7 @@ describe('DELETE /records/:id/relationships/:relId', () => {
 
     await handleUnlinkRecords(req, res);
 
-    expect(mockUnlinkRecords).toHaveBeenCalledWith('rec-uuid', 'link-uuid', 'user-123');
+    expect(mockUnlinkRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'link-uuid', 'user-123');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -244,7 +244,7 @@ describe('GET /records/:id/related/:objectApiName', () => {
 
     await handleGetRelatedRecords(req, res);
 
-    expect(mockGetRelatedRecords).toHaveBeenCalledWith('rec-uuid', 'account', 'user-123', 1, 20);
+    expect(mockGetRelatedRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'account', 'user-123', 1, 20);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(result);
   });
@@ -262,7 +262,7 @@ describe('GET /records/:id/related/:objectApiName', () => {
 
     await handleGetRelatedRecords(req, res);
 
-    expect(mockGetRelatedRecords).toHaveBeenCalledWith('rec-uuid', 'account', 'user-123', 2, 10);
+    expect(mockGetRelatedRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'account', 'user-123', 2, 10);
   });
 
   it('clamps limit to maximum of 100', async () => {
@@ -279,7 +279,7 @@ describe('GET /records/:id/related/:objectApiName', () => {
     await handleGetRelatedRecords(req, res);
 
     expect(mockGetRelatedRecords).toHaveBeenCalledWith(
-      'rec-uuid', 'account', 'user-123', 1, 100,
+      'tenant-abc', 'rec-uuid', 'account', 'user-123', 1, 100,
     );
   });
 

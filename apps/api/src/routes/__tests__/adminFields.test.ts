@@ -8,6 +8,10 @@ vi.mock('../../middleware/auth.js', () => ({
   requireAuth: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
 }));
 
+vi.mock('../../middleware/tenant.js', () => ({
+  requireTenant: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
+}));
+
 // ─── Mock the service ────────────────────────────────────────────────────────
 
 const mockCreateFieldDefinition = vi.fn();
@@ -98,6 +102,7 @@ describe('POST /admin/objects/:objectId/fields', () => {
     await handleCreateField(req, res);
 
     expect(mockCreateFieldDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-1',
       expect.objectContaining({
         apiName: 'company_name',
@@ -126,6 +131,7 @@ describe('POST /admin/objects/:objectId/fields', () => {
     await handleCreateField(req, res);
 
     expect(mockCreateFieldDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-1',
       expect.objectContaining({
         apiName: 'test_field',
@@ -203,7 +209,7 @@ describe('GET /admin/objects/:objectId/fields', () => {
 
     await handleListFields(req, res);
 
-    expect(mockListFieldDefinitions).toHaveBeenCalledWith('obj-1');
+    expect(mockListFieldDefinitions).toHaveBeenCalledWith('tenant-abc', 'obj-1');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(fields);
   });
@@ -259,6 +265,7 @@ describe('PUT /admin/objects/:objectId/fields/:id', () => {
     await handleUpdateField(req, res);
 
     expect(mockUpdateFieldDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-1',
       'f1',
       expect.objectContaining({ label: 'Updated Label' }),
@@ -280,6 +287,7 @@ describe('PUT /admin/objects/:objectId/fields/:id', () => {
     await handleUpdateField(req, res);
 
     expect(mockUpdateFieldDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       'obj-1',
       'f1',
       expect.objectContaining({ fieldType: 'number', defaultValue: '42' }),
@@ -353,7 +361,7 @@ describe('DELETE /admin/objects/:objectId/fields/:id', () => {
 
     await handleDeleteField(req, res);
 
-    expect(mockDeleteFieldDefinition).toHaveBeenCalledWith('obj-1', 'f1');
+    expect(mockDeleteFieldDefinition).toHaveBeenCalledWith('tenant-abc', 'obj-1', 'f1');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -426,7 +434,7 @@ describe('PATCH /admin/objects/:objectId/fields/reorder', () => {
 
     await handleReorderFields(req, res);
 
-    expect(mockReorderFieldDefinitions).toHaveBeenCalledWith('obj-1', ['f2', 'f1']);
+    expect(mockReorderFieldDefinitions).toHaveBeenCalledWith('tenant-abc', 'obj-1', ['f2', 'f1']);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(fields);
   });
@@ -439,7 +447,7 @@ describe('PATCH /admin/objects/:objectId/fields/reorder', () => {
 
     await handleReorderFields(req, res);
 
-    expect(mockReorderFieldDefinitions).toHaveBeenCalledWith('obj-1', ['f1', 'f2']);
+    expect(mockReorderFieldDefinitions).toHaveBeenCalledWith('tenant-abc', 'obj-1', ['f1', 'f2']);
   });
 
   it('returns 400 on VALIDATION_ERROR', async () => {

@@ -227,6 +227,7 @@ export function validateStageType(stageType: unknown): string | null {
  * @throws {Error} CONFLICT — api_name already exists
  */
 export async function createPipeline(
+  tenantId: string,
   params: CreatePipelineParams,
 ): Promise<PipelineWithStages> {
   const { name, apiName, objectId, description, ownerId } = params;
@@ -238,28 +239,28 @@ export async function createPipeline(
   const apiNameError = validatePipelineApiName(apiName);
   if (apiNameError) throwValidationError(apiNameError);
 
-  // Validate object_id exists
+  // Validate object_id exists within tenant
   const objectResult = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1',
-    [objectId],
+    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
+    [objectId, tenantId],
   );
   if (objectResult.rows.length === 0) {
     throwNotFoundError('Object definition not found');
   }
 
-  // Check uniqueness
+  // Check uniqueness within tenant
   const existing = await pool.query(
-    'SELECT id FROM pipeline_definitions WHERE api_name = $1',
-    [apiName.trim()],
+    'SELECT id FROM pipeline_definitions WHERE api_name = $1 AND tenant_id = $2',
+    [apiName.trim(), tenantId],
   );
   if (existing.rows.length > 0) {
     throwConflictError(`A pipeline with api_name "${apiName.trim()}" already exists`);
   }
 
-  // Determine is_default: true if this is the first pipeline for the object
+  // Determine is_default: true if this is the first pipeline for the object in this tenant
   const existingPipelines = await pool.query(
-    'SELECT id FROM pipeline_definitions WHERE object_id = $1',
-    [objectId],
+    'SELECT id FROM pipeline_definitions WHERE object_id = $1 AND tenant_id = $2',
+    [objectId, tenantId],
   );
   const isDefault = existingPipelines.rows.length === 0;
 
@@ -268,11 +269,12 @@ export async function createPipeline(
 
   const pipelineResult = await pool.query(
     `INSERT INTO pipeline_definitions
-       (id, object_id, name, api_name, description, is_default, is_system, owner_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (id, tenant_id, object_id, name, api_name, description, is_default, is_system, owner_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       pipelineId,
+      tenantId,
       objectId,
       name.trim(),
       apiName.trim(),
@@ -315,10 +317,12 @@ export async function createPipeline(
 /**
  * Returns all pipeline definitions.
  */
-export async function listPipelines(): Promise<PipelineDefinition[]> {
+export async function listPipelines(tenantId: string): Promise<PipelineDefinition[]> {
   const result = await pool.query(
     `SELECT * FROM pipeline_definitions
+     WHERE tenant_id = $1
      ORDER BY is_system DESC, created_at ASC`,
+    [tenantId],
   );
 
   return result.rows.map((row: Record<string, unknown>) => rowToPipeline(row));
@@ -329,11 +333,12 @@ export async function listPipelines(): Promise<PipelineDefinition[]> {
  * Returns null if not found.
  */
 export async function getPipelineById(
+  tenantId: string,
   id: string,
 ): Promise<PipelineDetail | null> {
   const pipelineResult = await pool.query(
-    'SELECT * FROM pipeline_definitions WHERE id = $1',
-    [id],
+    'SELECT * FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (pipelineResult.rows.length === 0) return null;
@@ -383,12 +388,13 @@ export async function getPipelineById(
  * @throws {Error} VALIDATION_ERROR — invalid input
  */
 export async function updatePipeline(
+  tenantId: string,
   id: string,
   params: UpdatePipelineParams,
 ): Promise<PipelineDefinition> {
   const existing = await pool.query(
-    'SELECT * FROM pipeline_definitions WHERE id = $1',
-    [id],
+    'SELECT * FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -445,10 +451,10 @@ export async function updatePipeline(
  * @throws {Error} NOT_FOUND — pipeline does not exist
  * @throws {Error} DELETE_BLOCKED — system pipeline or records exist
  */
-export async function deletePipeline(id: string): Promise<void> {
+export async function deletePipeline(tenantId: string, id: string): Promise<void> {
   const existing = await pool.query(
-    'SELECT * FROM pipeline_definitions WHERE id = $1',
-    [id],
+    'SELECT * FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -487,13 +493,14 @@ export async function deletePipeline(id: string): Promise<void> {
  * @throws {Error} CONFLICT — api_name already exists on this pipeline
  */
 export async function createStage(
+  tenantId: string,
   pipelineId: string,
   params: CreateStageParams,
 ): Promise<StageDefinition> {
-  // Validate pipeline exists
+  // Validate pipeline exists within tenant
   const pipelineResult = await pool.query(
-    'SELECT * FROM pipeline_definitions WHERE id = $1',
-    [pipelineId],
+    'SELECT * FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    [pipelineId, tenantId],
   );
   if (pipelineResult.rows.length === 0) {
     throwNotFoundError('Pipeline not found');
@@ -596,14 +603,15 @@ export async function createStage(
  * @throws {Error} VALIDATION_ERROR — invalid input
  */
 export async function updateStage(
+  tenantId: string,
   pipelineId: string,
   stageId: string,
   params: UpdateStageParams,
 ): Promise<StageDefinition> {
-  // Validate pipeline exists
+  // Validate pipeline exists within tenant
   const pipelineResult = await pool.query(
-    'SELECT id FROM pipeline_definitions WHERE id = $1',
-    [pipelineId],
+    'SELECT id FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    [pipelineId, tenantId],
   );
   if (pipelineResult.rows.length === 0) {
     throwNotFoundError('Pipeline not found');
@@ -684,13 +692,14 @@ export async function updateStage(
  * @throws {Error} DELETE_BLOCKED — deletion not allowed
  */
 export async function deleteStage(
+  tenantId: string,
   pipelineId: string,
   stageId: string,
 ): Promise<void> {
-  // Validate pipeline exists
+  // Validate pipeline exists within tenant
   const pipelineResult = await pool.query(
-    'SELECT * FROM pipeline_definitions WHERE id = $1',
-    [pipelineId],
+    'SELECT * FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    [pipelineId, tenantId],
   );
   if (pipelineResult.rows.length === 0) {
     throwNotFoundError('Pipeline not found');
@@ -750,13 +759,14 @@ export async function deleteStage(
  * @throws {Error} VALIDATION_ERROR — invalid stage_ids or ordering constraint violated
  */
 export async function reorderStages(
+  tenantId: string,
   pipelineId: string,
   stageIds: string[],
 ): Promise<StageDefinition[]> {
-  // Validate pipeline exists
+  // Validate pipeline exists within tenant
   const pipelineResult = await pool.query(
-    'SELECT id FROM pipeline_definitions WHERE id = $1',
-    [pipelineId],
+    'SELECT id FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    [pipelineId, tenantId],
   );
   if (pipelineResult.rows.length === 0) {
     throwNotFoundError('Pipeline not found');

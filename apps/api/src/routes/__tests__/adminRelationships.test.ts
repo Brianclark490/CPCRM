@@ -8,6 +8,10 @@ vi.mock('../../middleware/auth.js', () => ({
   requireAuth: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
 }));
 
+vi.mock('../../middleware/tenant.js', () => ({
+  requireTenant: vi.fn((_req: AuthenticatedRequest, _res: Response, next: NextFunction) => next()),
+}));
+
 // ─── Mock the service ────────────────────────────────────────────────────────
 
 const mockCreateRelationshipDefinition = vi.fn();
@@ -92,6 +96,7 @@ describe('POST /admin/relationships', () => {
     await handleCreateRelationship(req, res);
 
     expect(mockCreateRelationshipDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       expect.objectContaining({
         sourceObjectId: 'obj-1',
         targetObjectId: 'obj-2',
@@ -128,6 +133,7 @@ describe('POST /admin/relationships', () => {
     await handleCreateRelationship(req, res);
 
     expect(mockCreateRelationshipDefinition).toHaveBeenCalledWith(
+      'tenant-abc',
       expect.objectContaining({
         sourceObjectId: 'obj-1',
         targetObjectId: 'obj-2',
@@ -235,7 +241,7 @@ describe('GET /admin/objects/:objectId/relationships', () => {
 
     await handleListRelationships(req, res);
 
-    expect(mockListRelationshipDefinitions).toHaveBeenCalledWith('obj-1');
+    expect(mockListRelationshipDefinitions).toHaveBeenCalledWith('tenant-abc', 'obj-1');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(relationships);
   });
@@ -279,7 +285,7 @@ describe('DELETE /admin/relationships/:id', () => {
 
     await handleDeleteRelationship(req, res);
 
-    expect(mockDeleteRelationshipDefinition).toHaveBeenCalledWith('rel-1');
+    expect(mockDeleteRelationshipDefinition).toHaveBeenCalledWith('tenant-abc', 'rel-1');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });

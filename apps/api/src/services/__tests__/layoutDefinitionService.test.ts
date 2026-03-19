@@ -10,6 +10,8 @@ import {
   validateLayoutType,
 } from '../layoutDefinitionService.js';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -58,7 +60,7 @@ const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi
 
     // INSERT INTO layout_definitions
     if (s.startsWith('INSERT INTO LAYOUT_DEFINITIONS')) {
-      const [id, object_id, name, layout_type, is_default, created_at, updated_at] = params as unknown[];
+      const [id, _tenant_id, object_id, name, layout_type, is_default, created_at, updated_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, object_id, name, layout_type, is_default, created_at, updated_at,
       };
@@ -66,8 +68,8 @@ const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi
       return { rows: [row] };
     }
 
-    // SELECT * FROM layout_definitions WHERE object_id = $1 ORDER BY
-    if (s.startsWith('SELECT * FROM LAYOUT_DEFINITIONS WHERE OBJECT_ID = $1 ORDER BY')) {
+    // SELECT * FROM layout_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY
+    if (s.startsWith('SELECT * FROM LAYOUT_DEFINITIONS WHERE OBJECT_ID') && s.includes('ORDER BY')) {
       const objectId = params![0] as string;
       const rows = [...fakeLayouts.values()]
         .filter((l) => l.object_id === objectId)
@@ -292,7 +294,7 @@ describe('createLayoutDefinition', () => {
   it('creates a layout on a valid object', async () => {
     seedObject('obj-1');
 
-    const result = await createLayoutDefinition('obj-1', {
+    const result = await createLayoutDefinition(TENANT_ID, 'obj-1', {
       name: 'Custom Form',
       layoutType: 'form',
     });
@@ -305,7 +307,7 @@ describe('createLayoutDefinition', () => {
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      createLayoutDefinition('missing', { name: 'Test', layoutType: 'form' }),
+      createLayoutDefinition(TENANT_ID, 'missing', { name: 'Test', layoutType: 'form' }),
     ).rejects.toThrow('Object definition not found');
   });
 
@@ -313,7 +315,7 @@ describe('createLayoutDefinition', () => {
     seedObject('obj-1');
 
     await expect(
-      createLayoutDefinition('obj-1', { name: '', layoutType: 'form' }),
+      createLayoutDefinition(TENANT_ID, 'obj-1', { name: '', layoutType: 'form' }),
     ).rejects.toThrow('name is required');
   });
 
@@ -321,7 +323,7 @@ describe('createLayoutDefinition', () => {
     seedObject('obj-1');
 
     await expect(
-      createLayoutDefinition('obj-1', { name: 'Test', layoutType: 'invalid' }),
+      createLayoutDefinition(TENANT_ID, 'obj-1', { name: 'Test', layoutType: 'invalid' }),
     ).rejects.toThrow('layout_type must be one of');
   });
 
@@ -330,7 +332,7 @@ describe('createLayoutDefinition', () => {
     seedLayout('l1', 'obj-1', { name: 'Custom Form' });
 
     await expect(
-      createLayoutDefinition('obj-1', { name: 'Custom Form', layoutType: 'form' }),
+      createLayoutDefinition(TENANT_ID, 'obj-1', { name: 'Custom Form', layoutType: 'form' }),
     ).rejects.toThrow('already exists');
   });
 });
@@ -351,7 +353,7 @@ describe('listLayoutDefinitions', () => {
     seedLayout('l1', 'obj-1', { name: 'Default Form', layout_type: 'form' });
     seedLayout('l2', 'obj-1', { name: 'List View', layout_type: 'list' });
 
-    const result = await listLayoutDefinitions('obj-1');
+    const result = await listLayoutDefinitions(TENANT_ID, 'obj-1');
 
     expect(result).toHaveLength(2);
   });
@@ -359,14 +361,14 @@ describe('listLayoutDefinitions', () => {
   it('returns empty array when no layouts exist', async () => {
     seedObject('obj-1');
 
-    const result = await listLayoutDefinitions('obj-1');
+    const result = await listLayoutDefinitions(TENANT_ID, 'obj-1');
 
     expect(result).toHaveLength(0);
   });
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      listLayoutDefinitions('missing'),
+      listLayoutDefinitions(TENANT_ID, 'missing'),
     ).rejects.toThrow('Object definition not found');
   });
 });
@@ -396,7 +398,7 @@ describe('getLayoutDefinitionById', () => {
       width: 'full',
     });
 
-    const result = await getLayoutDefinitionById('obj-1', 'l1');
+    const result = await getLayoutDefinitionById(TENANT_ID, 'obj-1', 'l1');
 
     expect(result.id).toBe('l1');
     expect(result.fields).toHaveLength(1);
@@ -409,13 +411,13 @@ describe('getLayoutDefinitionById', () => {
     seedObject('obj-1');
 
     await expect(
-      getLayoutDefinitionById('obj-1', 'missing'),
+      getLayoutDefinitionById(TENANT_ID, 'obj-1', 'missing'),
     ).rejects.toThrow('Layout definition not found');
   });
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      getLayoutDefinitionById('missing', 'l1'),
+      getLayoutDefinitionById(TENANT_ID, 'missing', 'l1'),
     ).rejects.toThrow('Object definition not found');
   });
 });
@@ -435,7 +437,7 @@ describe('updateLayoutDefinition', () => {
     seedObject('obj-1');
     seedLayout('l1', 'obj-1');
 
-    const result = await updateLayoutDefinition('obj-1', 'l1', { name: 'Updated Name' });
+    const result = await updateLayoutDefinition(TENANT_ID, 'obj-1', 'l1', { name: 'Updated Name' });
 
     expect(result.name).toBe('Updated Name');
   });
@@ -444,7 +446,7 @@ describe('updateLayoutDefinition', () => {
     seedObject('obj-1');
     seedLayout('l1', 'obj-1');
 
-    const result = await updateLayoutDefinition('obj-1', 'l1', {});
+    const result = await updateLayoutDefinition(TENANT_ID, 'obj-1', 'l1', {});
 
     expect(result.name).toBe('Default Form');
   });
@@ -453,7 +455,7 @@ describe('updateLayoutDefinition', () => {
     seedObject('obj-1');
 
     await expect(
-      updateLayoutDefinition('obj-1', 'missing', { name: 'New' }),
+      updateLayoutDefinition(TENANT_ID, 'obj-1', 'missing', { name: 'New' }),
     ).rejects.toThrow('Layout definition not found');
   });
 
@@ -462,7 +464,7 @@ describe('updateLayoutDefinition', () => {
     seedLayout('l1', 'obj-1');
 
     await expect(
-      updateLayoutDefinition('obj-1', 'l1', { name: '' }),
+      updateLayoutDefinition(TENANT_ID, 'obj-1', 'l1', { name: '' }),
     ).rejects.toThrow('name is required');
   });
 
@@ -472,7 +474,7 @@ describe('updateLayoutDefinition', () => {
     seedLayout('l2', 'obj-1', { name: 'List View' });
 
     await expect(
-      updateLayoutDefinition('obj-1', 'l2', { name: 'Default Form' }),
+      updateLayoutDefinition(TENANT_ID, 'obj-1', 'l2', { name: 'Default Form' }),
     ).rejects.toThrow('already exists');
   });
 });
@@ -494,7 +496,7 @@ describe('setLayoutFields', () => {
     seedField('f1', 'obj-1', { api_name: 'name', label: 'Name' });
     seedField('f2', 'obj-1', { api_name: 'email', label: 'Email' });
 
-    const result = await setLayoutFields('obj-1', 'l1', [
+    const result = await setLayoutFields(TENANT_ID, 'obj-1', 'l1', [
       {
         label: 'Basic Info',
         fields: [
@@ -520,7 +522,7 @@ describe('setLayoutFields', () => {
       id: 'lf1', layout_id: 'l1', field_id: 'f1', section: 0, section_label: null, sort_order: 1, width: 'full',
     });
 
-    const result = await setLayoutFields('obj-1', 'l1', []);
+    const result = await setLayoutFields(TENANT_ID, 'obj-1', 'l1', []);
 
     expect(result.fields).toHaveLength(0);
   });
@@ -531,7 +533,7 @@ describe('setLayoutFields', () => {
     seedField('f1', 'obj-1', { api_name: 'name', label: 'Name' });
     seedField('f2', 'obj-1', { api_name: 'email', label: 'Email' });
 
-    const result = await setLayoutFields('obj-1', 'l1', [
+    const result = await setLayoutFields(TENANT_ID, 'obj-1', 'l1', [
       {
         label: 'Section A',
         fields: [{ field_id: 'f1', width: 'full' }],
@@ -553,7 +555,7 @@ describe('setLayoutFields', () => {
     seedObject('obj-1');
 
     await expect(
-      setLayoutFields('obj-1', 'missing', []),
+      setLayoutFields(TENANT_ID, 'obj-1', 'missing', []),
     ).rejects.toThrow('Layout definition not found');
   });
 
@@ -562,7 +564,7 @@ describe('setLayoutFields', () => {
     seedLayout('l1', 'obj-1');
 
     await expect(
-      setLayoutFields('obj-1', 'l1', [
+      setLayoutFields(TENANT_ID, 'obj-1', 'l1', [
         { fields: [{ field_id: 'unknown-field' }] },
       ]),
     ).rejects.toThrow('does not belong to this object');
@@ -574,7 +576,7 @@ describe('setLayoutFields', () => {
     seedField('f1', 'obj-1');
 
     await expect(
-      setLayoutFields('obj-1', 'l1', [
+      setLayoutFields(TENANT_ID, 'obj-1', 'l1', [
         { fields: [{ field_id: 'f1' }, { field_id: 'f1' }] },
       ]),
     ).rejects.toThrow('Duplicate field IDs');
@@ -585,7 +587,7 @@ describe('setLayoutFields', () => {
     seedLayout('l1', 'obj-1');
 
     await expect(
-      setLayoutFields('obj-1', 'l1', [
+      setLayoutFields(TENANT_ID, 'obj-1', 'l1', [
         { fields: [{}] },
       ]),
     ).rejects.toThrow('Each field must have a field_id');
@@ -596,7 +598,7 @@ describe('setLayoutFields', () => {
     seedLayout('l1', 'obj-1');
     seedField('f1', 'obj-1', { api_name: 'name', label: 'Name' });
 
-    const result = await setLayoutFields('obj-1', 'l1', [
+    const result = await setLayoutFields(TENANT_ID, 'obj-1', 'l1', [
       { fields: [{ fieldId: 'f1' }] },
     ]);
 
@@ -619,7 +621,7 @@ describe('deleteLayoutDefinition', () => {
     seedObject('obj-1');
     seedLayout('l1', 'obj-1', { is_default: false, name: 'Custom Form' });
 
-    await deleteLayoutDefinition('obj-1', 'l1');
+    await deleteLayoutDefinition(TENANT_ID, 'obj-1', 'l1');
 
     expect(fakeLayouts.has('l1')).toBe(false);
   });
@@ -629,7 +631,7 @@ describe('deleteLayoutDefinition', () => {
     seedLayout('l1', 'obj-1', { is_default: true });
 
     await expect(
-      deleteLayoutDefinition('obj-1', 'l1'),
+      deleteLayoutDefinition(TENANT_ID, 'obj-1', 'l1'),
     ).rejects.toThrow('Cannot delete default layouts');
   });
 
@@ -637,13 +639,13 @@ describe('deleteLayoutDefinition', () => {
     seedObject('obj-1');
 
     await expect(
-      deleteLayoutDefinition('obj-1', 'missing'),
+      deleteLayoutDefinition(TENANT_ID, 'obj-1', 'missing'),
     ).rejects.toThrow('Layout definition not found');
   });
 
   it('throws NOT_FOUND when object does not exist', async () => {
     await expect(
-      deleteLayoutDefinition('missing', 'l1'),
+      deleteLayoutDefinition(TENANT_ID, 'missing', 'l1'),
     ).rejects.toThrow('Object definition not found');
   });
 });

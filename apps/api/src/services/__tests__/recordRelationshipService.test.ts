@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -72,7 +74,7 @@ const { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery } 
 
     // INSERT INTO record_relationships
     if (s.startsWith('INSERT INTO RECORD_RELATIONSHIPS')) {
-      const [id, relationship_id, source_record_id, target_record_id, created_at] = params as unknown[];
+      const [id, _tenant_id, relationship_id, source_record_id, target_record_id, created_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, relationship_id, source_record_id, target_record_id, created_at,
       };
@@ -176,7 +178,7 @@ describe('linkRecords', () => {
   it('creates a link between two records', async () => {
     seedData();
 
-    const result = await linkRecords('rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123');
+    const result = await linkRecords(TENANT_ID, 'rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123');
 
     expect(result.relationshipId).toBe('rel-lookup-1');
     expect(result.sourceRecordId).toBe('rec-opp-1');
@@ -188,7 +190,7 @@ describe('linkRecords', () => {
     seedData();
 
     await expect(
-      linkRecords('missing-id', 'rel-lookup-1', 'rec-acct-1', 'user-123'),
+      linkRecords(TENANT_ID, 'missing-id', 'rel-lookup-1', 'rec-acct-1', 'user-123'),
     ).rejects.toThrow('Source record not found');
   });
 
@@ -196,7 +198,7 @@ describe('linkRecords', () => {
     seedData();
 
     await expect(
-      linkRecords('rec-opp-1', 'rel-lookup-1', 'missing-id', 'user-123'),
+      linkRecords(TENANT_ID, 'rec-opp-1', 'rel-lookup-1', 'missing-id', 'user-123'),
     ).rejects.toThrow('Target record not found');
   });
 
@@ -204,7 +206,7 @@ describe('linkRecords', () => {
     seedData();
 
     await expect(
-      linkRecords('rec-opp-1', 'missing-rel', 'rec-acct-1', 'user-123'),
+      linkRecords(TENANT_ID, 'rec-opp-1', 'missing-rel', 'rec-acct-1', 'user-123'),
     ).rejects.toThrow('Relationship definition not found');
   });
 
@@ -218,7 +220,7 @@ describe('linkRecords', () => {
     });
 
     await expect(
-      linkRecords('rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123'),
+      linkRecords(TENANT_ID, 'rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123'),
     ).rejects.toThrow('Source record object type does not match relationship source object');
   });
 
@@ -232,7 +234,7 @@ describe('linkRecords', () => {
     });
 
     await expect(
-      linkRecords('rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123'),
+      linkRecords(TENANT_ID, 'rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123'),
     ).rejects.toThrow('Target record object type does not match relationship target object');
   });
 
@@ -246,7 +248,7 @@ describe('linkRecords', () => {
     });
 
     await expect(
-      linkRecords('rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123'),
+      linkRecords(TENANT_ID, 'rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123'),
     ).rejects.toThrow('This relationship link already exists');
   });
 
@@ -259,10 +261,10 @@ describe('linkRecords', () => {
     });
 
     // First link
-    await linkRecords('rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123');
+    await linkRecords(TENANT_ID, 'rec-opp-1', 'rel-lookup-1', 'rec-acct-1', 'user-123');
 
     // Second link should succeed for lookup
-    const result = await linkRecords('rec-opp-1', 'rel-lookup-1', 'rec-acct-2', 'user-123');
+    const result = await linkRecords(TENANT_ID, 'rec-opp-1', 'rel-lookup-1', 'rec-acct-2', 'user-123');
     expect(result.targetRecordId).toBe('rec-acct-2');
   });
 
@@ -275,23 +277,23 @@ describe('linkRecords', () => {
     });
 
     // First parent_child link
-    await linkRecords('rec-opp-1', 'rel-parent-1', 'rec-acct-1', 'user-123');
+    await linkRecords(TENANT_ID, 'rec-opp-1', 'rel-parent-1', 'rec-acct-1', 'user-123');
 
     // Second parent_child link should fail
     await expect(
-      linkRecords('rec-opp-1', 'rel-parent-1', 'rec-acct-2', 'user-123'),
+      linkRecords(TENANT_ID, 'rec-opp-1', 'rel-parent-1', 'rec-acct-2', 'user-123'),
     ).rejects.toThrow('This record already has a parent for this relationship');
   });
 
   it('throws VALIDATION_ERROR when relationship_id is empty', async () => {
     await expect(
-      linkRecords('rec-1', '', 'rec-2', 'user-123'),
+      linkRecords(TENANT_ID, 'rec-1', '', 'rec-2', 'user-123'),
     ).rejects.toThrow('relationship_id is required');
   });
 
   it('throws VALIDATION_ERROR when target_record_id is empty', async () => {
     await expect(
-      linkRecords('rec-1', 'rel-1', '', 'user-123'),
+      linkRecords(TENANT_ID, 'rec-1', 'rel-1', '', 'user-123'),
     ).rejects.toThrow('target_record_id is required');
   });
 });
@@ -313,13 +315,13 @@ describe('unlinkRecords', () => {
       target_record_id: 'rec-2',
     });
 
-    await expect(unlinkRecords('rec-1', 'link-1', 'user-123')).resolves.toBeUndefined();
+    await expect(unlinkRecords(TENANT_ID, 'rec-1', 'link-1', 'user-123')).resolves.toBeUndefined();
     expect(fakeRecordRelationships.has('link-1')).toBe(false);
   });
 
   it('throws NOT_FOUND when record does not exist', async () => {
     await expect(
-      unlinkRecords('missing-id', 'link-1', 'user-123'),
+      unlinkRecords(TENANT_ID, 'missing-id', 'link-1', 'user-123'),
     ).rejects.toThrow('Record not found');
   });
 
@@ -327,7 +329,7 @@ describe('unlinkRecords', () => {
     fakeRecords.set('rec-1', { id: 'rec-1', owner_id: 'user-123' });
 
     await expect(
-      unlinkRecords('rec-1', 'missing-link', 'user-123'),
+      unlinkRecords(TENANT_ID, 'rec-1', 'missing-link', 'user-123'),
     ).rejects.toThrow('Relationship link not found');
   });
 
@@ -340,7 +342,7 @@ describe('unlinkRecords', () => {
     });
 
     await expect(
-      unlinkRecords('rec-1', 'link-1', 'user-123'),
+      unlinkRecords(TENANT_ID, 'rec-1', 'link-1', 'user-123'),
     ).rejects.toThrow('Relationship link not found');
   });
 });
@@ -355,7 +357,7 @@ describe('getRelatedRecords', () => {
 
   it('throws NOT_FOUND when record does not exist', async () => {
     await expect(
-      getRelatedRecords('missing-id', 'account', 'user-123', 1, 20),
+      getRelatedRecords(TENANT_ID, 'missing-id', 'account', 'user-123', 1, 20),
     ).rejects.toThrow('Record not found');
   });
 
@@ -363,14 +365,14 @@ describe('getRelatedRecords', () => {
     fakeRecords.set('rec-1', { id: 'rec-1', owner_id: 'user-123', object_id: 'obj-1' });
 
     await expect(
-      getRelatedRecords('rec-1', 'nonexistent', 'user-123', 1, 20),
+      getRelatedRecords(TENANT_ID, 'rec-1', 'nonexistent', 'user-123', 1, 20),
     ).rejects.toThrow("Object type 'nonexistent' not found");
   });
 
   it('returns empty result for records with no relationships', async () => {
     fakeRecords.set('rec-1', { id: 'rec-1', owner_id: 'user-123', object_id: 'obj-1' });
 
-    const result = await getRelatedRecords('rec-1', 'account', 'user-123', 1, 20);
+    const result = await getRelatedRecords(TENANT_ID, 'rec-1', 'account', 'user-123', 1, 20);
 
     expect(result.data).toEqual([]);
     expect(result.total).toBe(0);

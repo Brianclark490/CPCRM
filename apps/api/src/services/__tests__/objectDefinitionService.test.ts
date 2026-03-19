@@ -10,6 +10,8 @@ import {
   validatePluralLabel,
 } from '../objectDefinitionService.js';
 
+const TENANT_ID = 'test-tenant-001';
+
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -42,9 +44,9 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fa
       return { rows: [{ max_sort_order: String(maxOrder) }] };
     }
 
-    // SELECT id check for uniqueness
-    if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE API_NAME')) {
-      const apiName = params![0] as string;
+    // SELECT id check for uniqueness (tenant_id = $1 AND api_name = $2)
+    if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE TENANT_ID') && s.includes('API_NAME')) {
+      const apiName = params![1] as string;
       const match = [...fakeObjects.values()].find((r) => r.api_name === apiName);
       if (match) return { rows: [{ id: match.id }] };
       return { rows: [] };
@@ -52,7 +54,7 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fa
 
     // INSERT INTO object_definitions
     if (s.startsWith('INSERT INTO OBJECT_DEFINITIONS')) {
-      const [id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at] = params as unknown[];
+      const [id, _tenant_id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at,
       };
@@ -140,8 +142,8 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fa
 
     // UPDATE object_definitions
     if (s.startsWith('UPDATE OBJECT_DEFINITIONS')) {
-      // Find the id — it's the last param
-      const id = params![params!.length - 1] as string;
+      // id is second-to-last, tenantId is last
+      const id = params![params!.length - 2] as string;
       const existing = fakeObjects.get(id);
       if (!existing) return { rows: [] };
       const updated = { ...existing, updated_at: new Date() };
@@ -298,7 +300,7 @@ describe('createObjectDefinition', () => {
   });
 
   it('returns the created object definition', async () => {
-    const result = await createObjectDefinition(baseParams);
+    const result = await createObjectDefinition(TENANT_ID, baseParams);
 
     expect(result.apiName).toBe('custom_project');
     expect(result.label).toBe('Custom Project');
@@ -308,7 +310,7 @@ describe('createObjectDefinition', () => {
   });
 
   it('creates with a UUID id', async () => {
-    const result = await createObjectDefinition(baseParams);
+    const result = await createObjectDefinition(TENANT_ID, baseParams);
 
     expect(result.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
@@ -316,7 +318,7 @@ describe('createObjectDefinition', () => {
   });
 
   it('auto-creates default form and list layouts', async () => {
-    const result = await createObjectDefinition(baseParams);
+    const result = await createObjectDefinition(TENANT_ID, baseParams);
 
     const objectLayouts = [...fakeLayouts.values()].filter(
       (l) => l.object_id === result.id,
@@ -329,7 +331,7 @@ describe('createObjectDefinition', () => {
 
   it('throws VALIDATION_ERROR for invalid api_name', async () => {
     await expect(
-      createObjectDefinition({ ...baseParams, apiName: '' }),
+      createObjectDefinition(TENANT_ID, { ...baseParams, apiName: '' }),
     ).rejects.toMatchObject({
       message: 'api_name is required',
       code: 'VALIDATION_ERROR',
@@ -338,7 +340,7 @@ describe('createObjectDefinition', () => {
 
   it('throws VALIDATION_ERROR for empty label', async () => {
     await expect(
-      createObjectDefinition({ ...baseParams, label: '' }),
+      createObjectDefinition(TENANT_ID, { ...baseParams, label: '' }),
     ).rejects.toMatchObject({
       message: 'label is required',
       code: 'VALIDATION_ERROR',
@@ -347,7 +349,7 @@ describe('createObjectDefinition', () => {
 
   it('throws VALIDATION_ERROR for empty pluralLabel', async () => {
     await expect(
-      createObjectDefinition({ ...baseParams, pluralLabel: '' }),
+      createObjectDefinition(TENANT_ID, { ...baseParams, pluralLabel: '' }),
     ).rejects.toMatchObject({
       message: 'plural_label is required',
       code: 'VALIDATION_ERROR',
@@ -355,17 +357,17 @@ describe('createObjectDefinition', () => {
   });
 
   it('throws CONFLICT when api_name already exists', async () => {
-    await createObjectDefinition(baseParams);
+    await createObjectDefinition(TENANT_ID, baseParams);
 
     await expect(
-      createObjectDefinition(baseParams),
+      createObjectDefinition(TENANT_ID, baseParams),
     ).rejects.toMatchObject({
       code: 'CONFLICT',
     });
   });
 
   it('sets optional description and icon', async () => {
-    const result = await createObjectDefinition({
+    const result = await createObjectDefinition(TENANT_ID, {
       ...baseParams,
       description: 'A custom project object',
       icon: 'folder',
@@ -376,7 +378,7 @@ describe('createObjectDefinition', () => {
   });
 
   it('auto-creates default permissions for all four roles', async () => {
-    const result = await createObjectDefinition(baseParams);
+    const result = await createObjectDefinition(TENANT_ID, baseParams);
 
     const objectPerms = [...fakePermissions.values()].filter(
       (p) => p.object_id === result.id,
@@ -400,7 +402,7 @@ describe('createObjectDefinition', () => {
   });
 
   it('wraps creation in a transaction', async () => {
-    await createObjectDefinition(baseParams);
+    await createObjectDefinition(TENANT_ID, baseParams);
 
     // Verify that pool.connect was called (transaction path)
     expect(mockConnect).toHaveBeenCalled();
@@ -428,19 +430,19 @@ describe('listObjectDefinitions', () => {
   });
 
   it('returns empty array when no objects exist', async () => {
-    const result = await listObjectDefinitions();
+    const result = await listObjectDefinitions(TENANT_ID);
     expect(result).toEqual([]);
   });
 
   it('returns objects with field and record counts', async () => {
-    await createObjectDefinition({
+    await createObjectDefinition(TENANT_ID, {
       apiName: 'custom_one',
       label: 'Custom One',
       pluralLabel: 'Custom Ones',
       ownerId: 'user-123',
     });
 
-    const result = await listObjectDefinitions();
+    const result = await listObjectDefinitions(TENANT_ID);
 
     expect(result).toHaveLength(1);
     expect(result[0].apiName).toBe('custom_one');
@@ -463,14 +465,14 @@ describe('getObjectDefinitionById', () => {
   });
 
   it('returns the object with nested fields, relationships, and layouts', async () => {
-    const created = await createObjectDefinition({
+    const created = await createObjectDefinition(TENANT_ID, {
       apiName: 'custom_two',
       label: 'Custom Two',
       pluralLabel: 'Custom Twos',
       ownerId: 'user-123',
     });
 
-    const result = await getObjectDefinitionById(created.id);
+    const result = await getObjectDefinitionById(TENANT_ID, created.id);
 
     expect(result).not.toBeNull();
     expect(result!.apiName).toBe('custom_two');
@@ -480,7 +482,7 @@ describe('getObjectDefinitionById', () => {
   });
 
   it('returns null when the object does not exist', async () => {
-    const result = await getObjectDefinitionById('missing-id');
+    const result = await getObjectDefinitionById(TENANT_ID, 'missing-id');
     expect(result).toBeNull();
   });
 });
@@ -499,21 +501,21 @@ describe('updateObjectDefinition', () => {
   });
 
   it('returns the updated object definition', async () => {
-    const created = await createObjectDefinition({
+    const created = await createObjectDefinition(TENANT_ID, {
       apiName: 'custom_three',
       label: 'Custom Three',
       pluralLabel: 'Custom Threes',
       ownerId: 'user-123',
     });
 
-    const result = await updateObjectDefinition(created.id, { label: 'Updated Label' });
+    const result = await updateObjectDefinition(TENANT_ID, created.id, { label: 'Updated Label' });
 
     expect(result).toBeDefined();
   });
 
   it('throws NOT_FOUND when the object does not exist', async () => {
     await expect(
-      updateObjectDefinition('missing-id', { label: 'Updated' }),
+      updateObjectDefinition(TENANT_ID, 'missing-id', { label: 'Updated' }),
     ).rejects.toMatchObject({
       message: 'Object definition not found',
       code: 'NOT_FOUND',
@@ -521,7 +523,7 @@ describe('updateObjectDefinition', () => {
   });
 
   it('throws VALIDATION_ERROR when label is empty', async () => {
-    const created = await createObjectDefinition({
+    const created = await createObjectDefinition(TENANT_ID, {
       apiName: 'custom_four',
       label: 'Custom Four',
       pluralLabel: 'Custom Fours',
@@ -529,21 +531,21 @@ describe('updateObjectDefinition', () => {
     });
 
     await expect(
-      updateObjectDefinition(created.id, { label: '' }),
+      updateObjectDefinition(TENANT_ID, created.id, { label: '' }),
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
   });
 
   it('returns unchanged object when no params are provided', async () => {
-    const created = await createObjectDefinition({
+    const created = await createObjectDefinition(TENANT_ID, {
       apiName: 'custom_five',
       label: 'Custom Five',
       pluralLabel: 'Custom Fives',
       ownerId: 'user-123',
     });
 
-    const result = await updateObjectDefinition(created.id, {});
+    const result = await updateObjectDefinition(TENANT_ID, created.id, {});
 
     expect(result.apiName).toBe('custom_five');
   });
@@ -563,19 +565,19 @@ describe('deleteObjectDefinition', () => {
   });
 
   it('deletes the object successfully', async () => {
-    const created = await createObjectDefinition({
+    const created = await createObjectDefinition(TENANT_ID, {
       apiName: 'custom_six',
       label: 'Custom Six',
       pluralLabel: 'Custom Sixes',
       ownerId: 'user-123',
     });
 
-    await expect(deleteObjectDefinition(created.id)).resolves.toBeUndefined();
+    await expect(deleteObjectDefinition(TENANT_ID, created.id)).resolves.toBeUndefined();
   });
 
   it('throws NOT_FOUND when the object does not exist', async () => {
     await expect(
-      deleteObjectDefinition('missing-id'),
+      deleteObjectDefinition(TENANT_ID, 'missing-id'),
     ).rejects.toMatchObject({
       message: 'Object definition not found',
       code: 'NOT_FOUND',
@@ -599,7 +601,7 @@ describe('deleteObjectDefinition', () => {
     });
 
     await expect(
-      deleteObjectDefinition(id),
+      deleteObjectDefinition(TENANT_ID, id),
     ).rejects.toMatchObject({
       message: 'Cannot delete system objects',
       code: 'DELETE_BLOCKED',
@@ -607,7 +609,7 @@ describe('deleteObjectDefinition', () => {
   });
 
   it('throws DELETE_BLOCKED when records exist for the object', async () => {
-    const created = await createObjectDefinition({
+    const created = await createObjectDefinition(TENANT_ID, {
       apiName: 'custom_seven',
       label: 'Custom Seven',
       pluralLabel: 'Custom Sevens',
@@ -626,7 +628,7 @@ describe('deleteObjectDefinition', () => {
     });
 
     await expect(
-      deleteObjectDefinition(created.id),
+      deleteObjectDefinition(TENANT_ID, created.id),
     ).rejects.toMatchObject({
       message: 'Delete all records first',
       code: 'DELETE_BLOCKED',
@@ -634,7 +636,7 @@ describe('deleteObjectDefinition', () => {
   });
 
   it('cascades permission deletion when object is deleted', async () => {
-    const created = await createObjectDefinition({
+    const created = await createObjectDefinition(TENANT_ID, {
       apiName: 'custom_eight',
       label: 'Custom Eight',
       pluralLabel: 'Custom Eights',
@@ -647,7 +649,7 @@ describe('deleteObjectDefinition', () => {
     );
     expect(permsBefore).toHaveLength(4);
 
-    await deleteObjectDefinition(created.id);
+    await deleteObjectDefinition(TENANT_ID, created.id);
 
     // Verify permissions were cleaned up (simulating ON DELETE CASCADE)
     const permsAfter = [...fakePermissions.values()].filter(

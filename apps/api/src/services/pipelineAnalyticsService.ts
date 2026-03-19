@@ -88,11 +88,12 @@ function periodToDays(period: string): number | null {
 }
 
 async function resolvePipeline(
+  tenantId: string,
   pipelineId: string,
 ): Promise<{ id: string; name: string }> {
   const result = await pool.query(
-    'SELECT id, name FROM pipeline_definitions WHERE id = $1',
-    [pipelineId],
+    'SELECT id, name FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    [pipelineId, tenantId],
   );
 
   if (result.rows.length === 0) {
@@ -113,10 +114,11 @@ async function resolvePipeline(
  * @throws {Error} NOT_FOUND — pipeline does not exist
  */
 export async function getPipelineSummary(
+  tenantId: string,
   pipelineId: string,
   ownerId: string,
 ): Promise<PipelineSummaryResponse> {
-  const pipeline = await resolvePipeline(pipelineId);
+  const pipeline = await resolvePipeline(tenantId, pipelineId);
 
   // Fetch all stages for this pipeline
   const stagesResult = await pool.query(
@@ -262,6 +264,7 @@ export async function getPipelineSummary(
  * @throws {Error} VALIDATION_ERROR — invalid period parameter
  */
 export async function getPipelineVelocity(
+  tenantId: string,
   pipelineId: string,
   ownerId: string,
   period: string,
@@ -270,7 +273,7 @@ export async function getPipelineVelocity(
     throwValidationError(`period must be one of: ${[...ALLOWED_PERIODS].join(', ')}`);
   }
 
-  const pipeline = await resolvePipeline(pipelineId);
+  const pipeline = await resolvePipeline(tenantId, pipelineId);
   void pipeline; // used for validation only
 
   // Fetch stages
@@ -422,10 +425,11 @@ export async function getPipelineVelocity(
  * @throws {Error} NOT_FOUND — pipeline does not exist
  */
 export async function getOverdueRecords(
+  tenantId: string,
   pipelineId: string,
   ownerId: string,
 ): Promise<OverdueRecord[]> {
-  const pipeline = await resolvePipeline(pipelineId);
+  const pipeline = await resolvePipeline(tenantId, pipelineId);
   void pipeline; // used for validation only
 
   const result = await pool.query(

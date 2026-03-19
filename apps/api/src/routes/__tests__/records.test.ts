@@ -120,7 +120,7 @@ describe('POST /objects/:apiName/records', () => {
 
     await handleCreateRecord(req, res);
 
-    expect(mockCreateRecord).toHaveBeenCalledWith('account', { name: 'Acme Corp' }, 'user-123');
+    expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', { name: 'Acme Corp' }, 'user-123');
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(expectedRecord);
   });
@@ -191,7 +191,7 @@ describe('POST /objects/:apiName/records', () => {
 
     await handleCreateRecord(req, res);
 
-    expect(mockCreateRecord).toHaveBeenCalledWith('account', {}, 'user-123');
+    expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', {}, 'user-123');
   });
 });
 
@@ -219,6 +219,7 @@ describe('GET /objects/:apiName/records', () => {
     await handleListRecords(req, res);
 
     expect(mockListRecords).toHaveBeenCalledWith({
+      tenantId: 'tenant-abc',
       apiName: 'account',
       ownerId: 'user-123',
       search: undefined,
@@ -245,6 +246,7 @@ describe('GET /objects/:apiName/records', () => {
     await handleListRecords(req, res);
 
     expect(mockListRecords).toHaveBeenCalledWith({
+      tenantId: 'tenant-abc',
       apiName: 'account',
       ownerId: 'user-123',
       search: 'acme',
@@ -324,7 +326,7 @@ describe('GET /objects/:apiName/records/:id', () => {
 
     await handleGetRecord(req, res);
 
-    expect(mockGetRecord).toHaveBeenCalledWith('account', VALID_UUID, 'user-123');
+    expect(mockGetRecord).toHaveBeenCalledWith('tenant-abc', 'account', VALID_UUID, 'user-123');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(record);
   });
@@ -412,6 +414,7 @@ describe('PUT /objects/:apiName/records/:id', () => {
     await handleUpdateRecord(req, res);
 
     expect(mockUpdateRecord).toHaveBeenCalledWith(
+      'tenant-abc',
       'account',
       VALID_UUID,
       { name: 'Updated Corp' },
@@ -512,7 +515,7 @@ describe('DELETE /objects/:apiName/records/:id', () => {
 
     await handleDeleteRecord(req, res);
 
-    expect(mockDeleteRecord).toHaveBeenCalledWith('account', VALID_UUID, 'user-123');
+    expect(mockDeleteRecord).toHaveBeenCalledWith('tenant-abc', 'account', VALID_UUID, 'user-123');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -594,7 +597,7 @@ describe('POST /objects/lead/records/:id/convert', () => {
 
     await handleConvertLead(req, res);
 
-    expect(mockConvertLead).toHaveBeenCalledWith(VALID_UUID, 'user-123', {
+    expect(mockConvertLead).toHaveBeenCalledWith('tenant-abc', VALID_UUID, 'user-123', {
       createAccount: true,
       accountId: undefined,
       createOpportunity: true,
@@ -724,7 +727,7 @@ describe('POST /objects/lead/records/:id/convert', () => {
 
     await handleConvertLead(req, res);
 
-    expect(mockConvertLead).toHaveBeenCalledWith(VALID_UUID, 'user-123', {
+    expect(mockConvertLead).toHaveBeenCalledWith('tenant-abc', VALID_UUID, 'user-123', {
       createAccount: undefined,
       accountId: VALID_UUID_2,
       createOpportunity: false,
@@ -765,7 +768,7 @@ describe('POST /objects/:apiName/records/:id/move-stage', () => {
 
     await handleMoveStage(req, res);
 
-    expect(mockMoveRecordStage).toHaveBeenCalledWith('opportunity', VALID_UUID, VALID_UUID_2, 'user-123');
+    expect(mockMoveRecordStage).toHaveBeenCalledWith('tenant-abc', 'opportunity', VALID_UUID, VALID_UUID_2, 'user-123');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(moveResult);
   });

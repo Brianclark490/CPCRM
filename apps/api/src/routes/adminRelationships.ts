@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import {
   createRelationshipDefinition,
@@ -62,7 +63,7 @@ export async function handleCreateRelationship(
   const reverseLabel = body.reverse_label ?? body.reverseLabel;
 
   try {
-    const relationship = await createRelationshipDefinition({
+    const relationship = await createRelationshipDefinition(req.user!.tenantId!, {
       sourceObjectId,
       targetObjectId,
       relationshipType,
@@ -116,7 +117,7 @@ export async function handleListRelationships(
   const { objectId } = req.params as { objectId: string };
 
   try {
-    const relationships = await listRelationshipDefinitions(objectId);
+    const relationships = await listRelationshipDefinitions(req.user!.tenantId!, objectId);
     res.status(200).json(relationships);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -152,7 +153,7 @@ export async function handleDeleteRelationship(
   const { id } = req.params as { id: string };
 
   try {
-    await deleteRelationshipDefinition(id);
+    await deleteRelationshipDefinition(req.user!.tenantId!, id);
     res.status(204).end();
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -172,7 +173,7 @@ export async function handleDeleteRelationship(
   }
 }
 
-adminRelationshipsRouter.post('/', requireAuth, handleCreateRelationship);
-adminRelationshipsRouter.delete('/:id', requireAuth, handleDeleteRelationship);
+adminRelationshipsRouter.post('/', requireAuth, requireTenant, handleCreateRelationship);
+adminRelationshipsRouter.delete('/:id', requireAuth, requireTenant, handleDeleteRelationship);
 
-adminObjectRelationshipsRouter.get('/', requireAuth, handleListRelationships);
+adminObjectRelationshipsRouter.get('/', requireAuth, requireTenant, handleListRelationships);
