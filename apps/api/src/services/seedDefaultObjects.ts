@@ -458,18 +458,20 @@ interface QueryClient {
  * - Wrapped in a single database transaction.
  * - Logs progress (created vs skipped counts).
  *
+ * @param tenantId - The tenant this seed data belongs to.
  * @param ownerId - The owner/tenant identifier (e.g. Descope user ID or 'SYSTEM').
  */
-export async function seedDefaultObjects(ownerId: string): Promise<SeedResult> {
+export async function seedDefaultObjects(tenantId: string, ownerId: string): Promise<SeedResult> {
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
-    const result = await seedWithClient(client, ownerId);
+    const result = await seedWithClient(client, tenantId, ownerId);
     await client.query('COMMIT');
 
     logger.info(
       {
+        tenantId,
         ownerId,
         objectsCreated: result.objectsCreated,
         objectsSkipped: result.objectsSkipped,
@@ -502,6 +504,7 @@ export async function seedDefaultObjects(ownerId: string): Promise<SeedResult> {
  */
 export async function seedWithClient(
   client: QueryClient,
+  tenantId: string,
   ownerId: string,
 ): Promise<SeedResult> {
   const result: SeedResult = {
@@ -520,25 +523,25 @@ export async function seedWithClient(
   };
 
   // Step 1: Seed object definitions
-  const objectIdMap = await seedObjects(client, ownerId, result);
+  const objectIdMap = await seedObjects(client, tenantId, ownerId, result);
 
   // Step 2: Seed field definitions
-  const fieldIdMap = await seedFields(client, objectIdMap, result);
+  const fieldIdMap = await seedFields(client, tenantId, objectIdMap, result);
 
   // Step 2b: Update name_field_id and name_template on object definitions
   await seedNameFieldConfig(client, objectIdMap, fieldIdMap);
 
   // Step 3: Seed relationship definitions
-  await seedRelationships(client, objectIdMap, result);
+  await seedRelationships(client, tenantId, objectIdMap, result);
 
   // Step 4: Seed layout definitions
-  const layoutIdMap = await seedLayouts(client, objectIdMap, result);
+  const layoutIdMap = await seedLayouts(client, tenantId, objectIdMap, result);
 
   // Step 5: Seed layout fields
-  await seedLayoutFields(client, fieldIdMap, layoutIdMap, result);
+  await seedLayoutFields(client, tenantId, fieldIdMap, layoutIdMap, result);
 
   // Step 6: Seed lead conversion mappings
-  await seedLeadConversionMappings(client, result);
+  await seedLeadConversionMappings(client, tenantId, result);
 
   return result;
 }
@@ -547,6 +550,7 @@ export async function seedWithClient(
 
 async function seedObjects(
   client: QueryClient,
+  tenantId: string,
   ownerId: string,
   result: SeedResult,
 ): Promise<Map<string, string>> {
@@ -555,11 +559,11 @@ async function seedObjects(
   for (const obj of OBJECT_SEEDS) {
     const id = randomUUID();
     const { rows } = await client.query(
-      `INSERT INTO object_definitions (id, api_name, label, plural_label, description, icon, is_system, owner_id)
-       VALUES ($1, $2, $3, $4, $5, $6, true, $7)
-       ON CONFLICT (api_name) DO NOTHING
+      `INSERT INTO object_definitions (id, api_name, label, plural_label, description, icon, is_system, owner_id, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)
+       ON CONFLICT (tenant_id, api_name) DO NOTHING
        RETURNING id`,
-      [id, obj.apiName, obj.label, obj.pluralLabel, obj.description, obj.icon, ownerId],
+      [id, obj.apiName, obj.label, obj.pluralLabel, obj.description, obj.icon, ownerId, tenantId],
     );
 
     if (rows.length > 0) {
@@ -573,8 +577,8 @@ async function seedObjects(
   // Fetch IDs for objects that already existed (skipped by ON CONFLICT)
   if (result.objectsSkipped > 0) {
     const { rows } = await client.query(
-      `SELECT id, api_name FROM object_definitions WHERE api_name = ANY($1)`,
-      [OBJECT_SEEDS.map((o) => o.apiName)],
+      `SELECT id, api_name FROM object_definitions WHERE api_name = ANY($1) AND tenant_id = $2`,
+      [OBJECT_SEEDS.map((o) => o.apiName), tenantId],
     );
     for (const row of rows) {
       objectIdMap.set(row.api_name as string, row.id as string);
@@ -591,6 +595,7 @@ async function seedObjects(
 
 async function seedFields(
   client: QueryClient,
+  tenantId: string,
   objectIdMap: Map<string, string>,
   result: SeedResult,
 ): Promise<Map<string, string>> {
@@ -602,11 +607,11 @@ async function seedFields(
 
     const id = randomUUID();
     const { rows } = await client.query(
-      `INSERT INTO field_definitions (id, object_id, api_name, label, field_type, required, options, sort_order, is_system)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
-       ON CONFLICT (object_id, api_name) DO NOTHING
+      `INSERT INTO field_definitions (id, object_id, api_name, label, field_type, required, options, sort_order, is_system, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)
+       ON CONFLICT (tenant_id, object_id, api_name) DO NOTHING
        RETURNING id`,
-      [id, objectId, field.apiName, field.label, field.fieldType, field.required, JSON.stringify(field.options), field.sortOrder],
+      [id, objectId, field.apiName, field.label, field.fieldType, field.required, JSON.stringify(field.options), field.sortOrder, tenantId],
     );
 
     const key = `${field.objectApiName}.${field.apiName}`;
@@ -624,8 +629,8 @@ async function seedFields(
       `SELECT fd.id, od.api_name AS object_api_name, fd.api_name
        FROM field_definitions fd
        JOIN object_definitions od ON fd.object_id = od.id
-       WHERE od.api_name = ANY($1)`,
-      [OBJECT_SEEDS.map((o) => o.apiName)],
+       WHERE od.api_name = ANY($1) AND fd.tenant_id = $2`,
+      [OBJECT_SEEDS.map((o) => o.apiName), tenantId],
     );
     for (const row of rows) {
       const key = `${row.object_api_name}.${row.api_name}`;
@@ -674,6 +679,7 @@ async function seedNameFieldConfig(
 
 async function seedRelationships(
   client: QueryClient,
+  tenantId: string,
   objectIdMap: Map<string, string>,
   result: SeedResult,
 ): Promise<void> {
@@ -684,11 +690,11 @@ async function seedRelationships(
 
     const id = randomUUID();
     const { rows } = await client.query(
-      `INSERT INTO relationship_definitions (id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (source_object_id, api_name) DO NOTHING
+      `INSERT INTO relationship_definitions (id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (tenant_id, source_object_id, api_name) DO NOTHING
        RETURNING id`,
-      [id, sourceObjectId, targetObjectId, rel.relationshipType, rel.apiName, rel.label, rel.reverseLabel, rel.required],
+      [id, sourceObjectId, targetObjectId, rel.relationshipType, rel.apiName, rel.label, rel.reverseLabel, rel.required, tenantId],
     );
 
     if (rows.length > 0) {
@@ -706,6 +712,7 @@ async function seedRelationships(
 
 async function seedLayouts(
   client: QueryClient,
+  tenantId: string,
   objectIdMap: Map<string, string>,
   result: SeedResult,
 ): Promise<Map<string, string>> {
@@ -717,11 +724,11 @@ async function seedLayouts(
 
     const id = randomUUID();
     const { rows } = await client.query(
-      `INSERT INTO layout_definitions (id, object_id, name, layout_type, is_default)
-       VALUES ($1, $2, $3, $4, true)
-       ON CONFLICT (object_id, name) DO NOTHING
+      `INSERT INTO layout_definitions (id, object_id, name, layout_type, is_default, tenant_id)
+       VALUES ($1, $2, $3, $4, true, $5)
+       ON CONFLICT (tenant_id, object_id, name) DO NOTHING
        RETURNING id`,
-      [id, objectId, layout.name, layout.layoutType],
+      [id, objectId, layout.name, layout.layoutType, tenantId],
     );
 
     const key = `${layout.objectApiName}.${layout.name}`;
@@ -739,8 +746,8 @@ async function seedLayouts(
       `SELECT ld.id, od.api_name AS object_api_name, ld.name
        FROM layout_definitions ld
        JOIN object_definitions od ON ld.object_id = od.id
-       WHERE od.api_name = ANY($1)`,
-      [OBJECT_SEEDS.map((o) => o.apiName)],
+       WHERE od.api_name = ANY($1) AND ld.tenant_id = $2`,
+      [OBJECT_SEEDS.map((o) => o.apiName), tenantId],
     );
     for (const row of rows) {
       const key = `${row.object_api_name}.${row.name}`;
@@ -758,6 +765,7 @@ async function seedLayouts(
 
 async function seedLayoutFields(
   client: QueryClient,
+  tenantId: string,
   fieldIdMap: Map<string, string>,
   layoutIdMap: Map<string, string>,
   result: SeedResult,
@@ -773,11 +781,11 @@ async function seedLayoutFields(
 
     const id = randomUUID();
     const { rows } = await client.query(
-      `INSERT INTO layout_fields (id, layout_id, field_id, section, section_label, sort_order, width)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (layout_id, field_id) DO NOTHING
+      `INSERT INTO layout_fields (id, layout_id, field_id, section, section_label, sort_order, width, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (tenant_id, layout_id, field_id) DO NOTHING
        RETURNING id`,
-      [id, layoutId, fieldId, lf.section, lf.sectionLabel, lf.sortOrder, lf.width],
+      [id, layoutId, fieldId, lf.section, lf.sectionLabel, lf.sortOrder, lf.width, tenantId],
     );
 
     if (rows.length > 0) {
@@ -795,16 +803,17 @@ async function seedLayoutFields(
 
 async function seedLeadConversionMappings(
   client: QueryClient,
+  tenantId: string,
   result: SeedResult,
 ): Promise<void> {
   for (const mapping of LEAD_CONVERSION_MAPPING_SEEDS) {
     const id = randomUUID();
     const { rows } = await client.query(
-      `INSERT INTO lead_conversion_mappings (id, lead_field_api_name, target_object, target_field_api_name)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (lead_field_api_name, target_object, target_field_api_name) DO NOTHING
+      `INSERT INTO lead_conversion_mappings (id, lead_field_api_name, target_object, target_field_api_name, tenant_id)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (tenant_id, lead_field_api_name, target_object, target_field_api_name) DO NOTHING
        RETURNING id`,
-      [id, mapping.leadFieldApiName, mapping.targetObject, mapping.targetFieldApiName],
+      [id, mapping.leadFieldApiName, mapping.targetObject, mapping.targetFieldApiName, tenantId],
     );
 
     if (rows.length > 0) {
