@@ -10,6 +10,7 @@ import {
   updateTenant,
   deleteTenant,
 } from '../services/tenantProvisioning.js';
+import { listTenantUsers, inviteUser } from '../services/adminUserService.js';
 import { logger } from '../lib/logger.js';
 
 export const platformTenantsRouter = Router();
@@ -198,6 +199,71 @@ export async function handleDeleteTenant(
   }
 }
 
+/**
+ * GET /api/platform/tenants/:id/users
+ *
+ * Lists all users belonging to a specific tenant.
+ * Super-admin only.
+ */
+export async function handleListTenantUsers(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const { id } = req.params;
+  const tenantId = resolveParam(id);
+
+  try {
+    const users = await listTenantUsers(tenantId);
+    res.json(users);
+  } catch (err: unknown) {
+    logger.error({ err, tenantId }, 'Unexpected error listing tenant users');
+    res.status(500).json({ error: 'An unexpected error occurred' });
+  }
+}
+
+/**
+ * POST /api/platform/tenants/:id/users/invite
+ *
+ * Invites a user to a specific tenant.
+ * Super-admin only.
+ *
+ * Request body:
+ *   { email, name, role }
+ */
+export async function handleInviteTenantUser(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const { id } = req.params;
+  const tenantId = resolveParam(id);
+  const body = req.body as { email?: unknown; name?: unknown; role?: unknown };
+
+  try {
+    const result = await inviteUser({
+      email: typeof body.email === 'string' ? body.email : '',
+      name: typeof body.name === 'string' ? body.name : '',
+      role: typeof body.role === 'string' ? body.role : '',
+      tenantId,
+    });
+
+    res.status(201).json(result);
+  } catch (err: unknown) {
+    const error = err as Error & { code?: string };
+
+    if (error.code === 'VALIDATION_ERROR') {
+      res.status(400).json({ error: error.message, code: 'VALIDATION_ERROR' });
+      return;
+    }
+    if (error.code === 'INVITE_FAILED') {
+      res.status(500).json({ error: error.message, code: 'INVITE_FAILED' });
+      return;
+    }
+
+    logger.error({ err, tenantId }, 'Unexpected error inviting user to tenant');
+    res.status(500).json({ error: 'An unexpected error occurred' });
+  }
+}
+
 // ─── Route bindings ───────────────────────────────────────────────────────────
 
 platformTenantsRouter.post('/', ...auth, handleCreateTenant);
@@ -205,3 +271,5 @@ platformTenantsRouter.get('/', ...auth, handleListTenants);
 platformTenantsRouter.get('/:id', ...auth, handleGetTenant);
 platformTenantsRouter.put('/:id', ...auth, handleUpdateTenant);
 platformTenantsRouter.delete('/:id', ...auth, handleDeleteTenant);
+platformTenantsRouter.get('/:id/users', ...auth, handleListTenantUsers);
+platformTenantsRouter.post('/:id/users/invite', ...auth, handleInviteTenantUser);

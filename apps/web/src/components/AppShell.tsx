@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useUser, useDescope, useSession } from '@descope/react-sdk';
 import { sessionHistory } from '../store/sessionHistory.js';
 import { useTenant, clearStoredTenant } from '../store/tenant.js';
+import { useSuperAdmin } from '../store/superAdmin.js';
 import styles from './AppShell.module.css';
 
 interface AppShellProps {
@@ -62,6 +63,7 @@ export function AppShell({ children }: AppShellProps) {
   const { sessionToken } = useSession();
   const navigate = useNavigate();
   const { tenantName } = useTenant();
+  const { isSuperAdmin } = useSuperAdmin();
 
   const [objectNavItems, setObjectNavItems] = useState<ObjectDefinitionNavItem[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -224,6 +226,16 @@ export function AppShell({ children }: AppShellProps) {
           >
             Dashboard
           </NavLink>
+          {isSuperAdmin && (
+            <NavLink
+              to="/platform/tenants"
+              className={({ isActive }) =>
+                `${styles.headerNavLink} ${isActive ? styles.headerNavLinkActive : ''}`
+              }
+            >
+              Platform
+            </NavLink>
+          )}
         </div>
 
         <div className={styles.headerActions}>
