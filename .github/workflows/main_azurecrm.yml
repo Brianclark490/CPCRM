@@ -96,7 +96,8 @@ jobs:
             --resource-group "$RESOURCE_GROUP" \
             --settings \
               NODE_ENV="production" \
-              DATABASE_URL="${{ secrets.DATABASE_URL }}"
+              DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              DESCOPE_PROJECT_ID="${{ secrets.VITE_DESCOPE_PROJECT_ID }}"
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
