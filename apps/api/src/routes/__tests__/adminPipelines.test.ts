@@ -326,6 +326,7 @@ describe('PUT /admin/pipelines/:id', () => {
     await handleUpdatePipeline(req, res);
 
     expect(mockUpdatePipeline).toHaveBeenCalledWith(
+      'tenant-abc',
       'p1',
       expect.objectContaining({ isDefault: true }),
     );

@@ -335,7 +335,7 @@ describe('DELETE /admin/stages/:stageId/gates/:id', () => {
 
     await handleDeleteGate(req, res);
 
-    expect(mockDeleteStageGate).toHaveBeenCalledWith('stage-1', 'gate-uuid');
+    expect(mockDeleteStageGate).toHaveBeenCalledWith('tenant-abc', 'stage-1', 'gate-uuid');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
