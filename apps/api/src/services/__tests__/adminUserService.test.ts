@@ -179,6 +179,7 @@ describe('listTenantUsers', () => {
       data: [
         {
           userId: 'user-1',
+          loginIds: ['alice@acme.com'],
           email: 'alice@acme.com',
           name: 'Alice',
           displayName: 'Alice Smith',
@@ -188,6 +189,7 @@ describe('listTenantUsers', () => {
         },
         {
           userId: 'user-2',
+          loginIds: ['bob@acme.com'],
           email: 'bob@acme.com',
           name: '',
           displayName: 'Bob Jones',
@@ -204,6 +206,7 @@ describe('listTenantUsers', () => {
     expect(users).toHaveLength(2);
     expect(users[0]).toEqual({
       userId: 'user-1',
+      loginId: 'alice@acme.com',
       email: 'alice@acme.com',
       name: 'Alice',
       roles: ['admin'],
@@ -212,6 +215,7 @@ describe('listTenantUsers', () => {
     });
     expect(users[1]).toEqual({
       userId: 'user-2',
+      loginId: 'bob@acme.com',
       email: 'bob@acme.com',
       name: 'Bob Jones',
       roles: ['user'],
@@ -242,13 +246,13 @@ describe('listTenantUsers', () => {
 describe('changeUserRole', () => {
   it('throws VALIDATION_ERROR for invalid role', async () => {
     await expect(
-      changeUserRole({ userId: 'user-1', tenantId: 'acme-corp', newRole: 'superuser' }),
+      changeUserRole({ loginId: 'alice@acme.com', tenantId: 'acme-corp', newRole: 'superuser' }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   it('throws VALIDATION_ERROR for empty role', async () => {
     await expect(
-      changeUserRole({ userId: 'user-1', tenantId: 'acme-corp', newRole: '' }),
+      changeUserRole({ loginId: 'alice@acme.com', tenantId: 'acme-corp', newRole: '' }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
@@ -256,23 +260,23 @@ describe('changeUserRole', () => {
     mockRemoveTenantRoles.mockResolvedValue({});
     mockAddTenantRoles.mockResolvedValue({});
 
-    await changeUserRole({ userId: 'user-1', tenantId: 'acme-corp', newRole: 'manager' });
+    await changeUserRole({ loginId: 'alice@acme.com', tenantId: 'acme-corp', newRole: 'manager' });
 
     expect(mockRemoveTenantRoles).toHaveBeenCalledWith(
-      'user-1',
+      'alice@acme.com',
       'acme-corp',
       ['admin', 'manager', 'user', 'read_only'],
     );
-    expect(mockAddTenantRoles).toHaveBeenCalledWith('user-1', 'acme-corp', ['manager']);
+    expect(mockAddTenantRoles).toHaveBeenCalledWith('alice@acme.com', 'acme-corp', ['manager']);
   });
 
   it('still adds new role when removal of old roles fails', async () => {
     mockRemoveTenantRoles.mockRejectedValue(new Error('Some roles not found'));
     mockAddTenantRoles.mockResolvedValue({});
 
-    await changeUserRole({ userId: 'user-1', tenantId: 'acme-corp', newRole: 'user' });
+    await changeUserRole({ loginId: 'alice@acme.com', tenantId: 'acme-corp', newRole: 'user' });
 
-    expect(mockAddTenantRoles).toHaveBeenCalledWith('user-1', 'acme-corp', ['user']);
+    expect(mockAddTenantRoles).toHaveBeenCalledWith('alice@acme.com', 'acme-corp', ['user']);
   });
 });
 
@@ -282,16 +286,16 @@ describe('removeUserFromTenant', () => {
   it('calls Descope removeTenant with correct params', async () => {
     mockRemoveTenant.mockResolvedValue({});
 
-    await removeUserFromTenant('user-1', 'acme-corp');
+    await removeUserFromTenant('alice@acme.com', 'acme-corp');
 
-    expect(mockRemoveTenant).toHaveBeenCalledWith('user-1', 'acme-corp');
+    expect(mockRemoveTenant).toHaveBeenCalledWith('alice@acme.com', 'acme-corp');
   });
 
   it('propagates Descope errors', async () => {
     mockRemoveTenant.mockRejectedValue(new Error('User not found'));
 
     await expect(
-      removeUserFromTenant('user-1', 'acme-corp'),
+      removeUserFromTenant('alice@acme.com', 'acme-corp'),
     ).rejects.toThrow('User not found');
   });
 });

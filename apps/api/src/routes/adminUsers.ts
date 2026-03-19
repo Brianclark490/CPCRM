@@ -74,7 +74,7 @@ export async function handleInviteUser(
  *
  * Lists all users in the current tenant.
  *
- * Returns: array of users with userId, email, name, roles, status, lastLogin.
+ * Returns: array of users with userId, loginId, email, name, roles, status, lastLogin.
  *
  * Responses:
  *   200  – user list
@@ -98,7 +98,7 @@ export async function handleListUsers(
 }
 
 /**
- * PUT /api/admin/users/:userId/role
+ * PUT /api/admin/users/:loginId/role
  *
  * Changes a user's role within the current tenant.
  *
@@ -116,16 +116,15 @@ export async function handleChangeRole(
   req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
-  const { descopeUserId } = req.params as { descopeUserId: string };
-  const userId = descopeUserId;
+  const { loginId } = req.params as { loginId: string };
   const tenantId = req.user!.tenantId!;
   const body = req.body as { role?: unknown };
   const newRole = typeof body.role === 'string' ? body.role : '';
 
   try {
-    await changeUserRole({ userId, tenantId, newRole });
+    await changeUserRole({ loginId, tenantId, newRole });
 
-    res.status(200).json({ userId, tenantId, role: newRole });
+    res.status(200).json({ loginId, tenantId, role: newRole });
   } catch (err: unknown) {
     const error = err as Error & { code?: string };
 
@@ -134,13 +133,13 @@ export async function handleChangeRole(
       return;
     }
 
-    logger.error({ err, userId, tenantId }, 'Unexpected error changing user role');
+    logger.error({ err, loginId, tenantId }, 'Unexpected error changing user role');
     res.status(500).json({ error: 'An unexpected error occurred' });
   }
 }
 
 /**
- * DELETE /api/admin/users/:userId
+ * DELETE /api/admin/users/:loginId
  *
  * Removes a user from the current tenant. Does not delete the user from Descope entirely.
  *
@@ -154,15 +153,14 @@ export async function handleRemoveUser(
   req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
-  const { descopeUserId } = req.params as { descopeUserId: string };
-  const userId = descopeUserId;
+  const { loginId } = req.params as { loginId: string };
   const tenantId = req.user!.tenantId!;
 
   try {
-    await removeUserFromTenant(userId, tenantId);
+    await removeUserFromTenant(loginId, tenantId);
     res.status(204).end();
   } catch (err: unknown) {
-    logger.error({ err, userId, tenantId }, 'Unexpected error removing user from tenant');
+    logger.error({ err, loginId, tenantId }, 'Unexpected error removing user from tenant');
     res.status(500).json({ error: 'An unexpected error occurred' });
   }
 }
@@ -171,5 +169,5 @@ export async function handleRemoveUser(
 
 adminUsersRouter.post('/invite', ...auth, handleInviteUser);
 adminUsersRouter.get('/', ...auth, handleListUsers);
-adminUsersRouter.put('/:descopeUserId/role', ...auth, handleChangeRole);
-adminUsersRouter.delete('/:descopeUserId', ...auth, handleRemoveUser);
+adminUsersRouter.put('/:loginId/role', ...auth, handleChangeRole);
+adminUsersRouter.delete('/:loginId', ...auth, handleRemoveUser);

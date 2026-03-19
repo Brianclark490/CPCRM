@@ -20,6 +20,7 @@ export interface InviteUserResult {
 
 export interface TenantUser {
   userId: string;
+  loginId: string;
   email: string;
   name: string;
   roles: string[];
@@ -28,7 +29,7 @@ export interface TenantUser {
 }
 
 export interface ChangeRoleInput {
-  userId: string;
+  loginId: string;
   tenantId: string;
   newRole: string;
 }
@@ -183,6 +184,7 @@ export async function listTenantUsers(tenantId: string): Promise<TenantUser[]> {
 
     return {
       userId: u.userId ?? '',
+      loginId: u.loginIds?.[0] ?? u.email ?? '',
       email: u.email ?? '',
       name: u.name ?? u.displayName ?? '',
       roles,
@@ -200,7 +202,7 @@ export async function listTenantUsers(tenantId: string): Promise<TenantUser[]> {
  * @throws {Error} with `code: 'VALIDATION_ERROR'` for invalid role.
  */
 export async function changeUserRole(input: ChangeRoleInput): Promise<void> {
-  const { userId, tenantId, newRole } = input;
+  const { loginId, tenantId, newRole } = input;
 
   if (!newRole || !VALID_ROLES.includes(newRole)) {
     throw Object.assign(
@@ -214,24 +216,24 @@ export async function changeUserRole(input: ChangeRoleInput): Promise<void> {
   // Remove all existing CRM roles from the tenant, then assign the new one
   const oldRoles = [...VALID_ROLES];
   try {
-    await descopeClient.management.user.removeTenantRoles(userId, tenantId, oldRoles);
+    await descopeClient.management.user.removeTenantRoles(loginId, tenantId, oldRoles);
   } catch {
     // Removal may fail if user doesn't have some roles — safe to ignore
-    logger.debug({ userId, tenantId }, 'Some old roles may not have existed during removal');
+    logger.debug({ loginId, tenantId }, 'Some old roles may not have existed during removal');
   }
 
-  await descopeClient.management.user.addTenantRoles(userId, tenantId, [newRole]);
-  logger.info({ userId, tenantId, newRole }, 'User role updated');
+  await descopeClient.management.user.addTenantRoles(loginId, tenantId, [newRole]);
+  logger.info({ loginId, tenantId, newRole }, 'User role updated');
 }
 
 /**
  * Removes a user from a tenant (does not delete the user from Descope entirely).
  */
 export async function removeUserFromTenant(
-  userId: string,
+  loginId: string,
   tenantId: string,
 ): Promise<void> {
   const descopeClient = getDescopeManagementClient();
-  await descopeClient.management.user.removeTenant(userId, tenantId);
-  logger.info({ userId, tenantId }, 'User removed from tenant');
+  await descopeClient.management.user.removeTenant(loginId, tenantId);
+  logger.info({ loginId, tenantId }, 'User removed from tenant');
 }

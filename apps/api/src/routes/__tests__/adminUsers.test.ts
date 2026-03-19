@@ -193,6 +193,7 @@ describe('GET /api/admin/users', () => {
     const users = [
       {
         userId: 'user-1',
+        loginId: 'alice@acme.com',
         email: 'alice@acme.com',
         name: 'Alice',
         roles: ['admin'],
@@ -201,6 +202,7 @@ describe('GET /api/admin/users', () => {
       },
       {
         userId: 'user-2',
+        loginId: 'bob@acme.com',
         email: 'bob@acme.com',
         name: 'Bob',
         roles: ['user'],
@@ -233,9 +235,9 @@ describe('GET /api/admin/users', () => {
   });
 });
 
-// ─── PUT /api/admin/users/:userId/role ────────────────────────────────────────
+// ─── PUT /api/admin/users/:loginId/role ────────────────────────────────────────
 
-describe('PUT /api/admin/users/:userId/role', () => {
+describe('PUT /api/admin/users/:loginId/role', () => {
   beforeEach(() => {
     mockChangeUserRole.mockReset();
   });
@@ -243,19 +245,19 @@ describe('PUT /api/admin/users/:userId/role', () => {
   it('returns 200 on successful role change', async () => {
     mockChangeUserRole.mockResolvedValue(undefined);
 
-    const req = mockReq({ role: 'manager' }, { userId: 'user-1' });
+    const req = mockReq({ role: 'manager' }, { loginId: 'alice@acme.com' });
     const res = mockRes();
 
     await handleChangeRole(req, res);
 
     expect(mockChangeUserRole).toHaveBeenCalledWith({
-      userId: 'user-1',
+      loginId: 'alice@acme.com',
       tenantId: 'acme-corp',
       newRole: 'manager',
     });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
-      userId: 'user-1',
+      loginId: 'alice@acme.com',
       tenantId: 'acme-corp',
       role: 'manager',
     });
@@ -266,7 +268,7 @@ describe('PUT /api/admin/users/:userId/role', () => {
       Object.assign(new Error('Invalid role "bogus"'), { code: 'VALIDATION_ERROR' }),
     );
 
-    const req = mockReq({ role: 'bogus' }, { userId: 'user-1' });
+    const req = mockReq({ role: 'bogus' }, { loginId: 'alice@acme.com' });
     const res = mockRes();
 
     await handleChangeRole(req, res);
@@ -281,7 +283,7 @@ describe('PUT /api/admin/users/:userId/role', () => {
   it('returns 500 on unexpected error', async () => {
     mockChangeUserRole.mockRejectedValue(new Error('Descope failure'));
 
-    const req = mockReq({ role: 'manager' }, { userId: 'user-1' });
+    const req = mockReq({ role: 'manager' }, { loginId: 'alice@acme.com' });
     const res = mockRes();
 
     await handleChangeRole(req, res);
@@ -291,9 +293,9 @@ describe('PUT /api/admin/users/:userId/role', () => {
   });
 });
 
-// ─── DELETE /api/admin/users/:userId ──────────────────────────────────────────
+// ─── DELETE /api/admin/users/:loginId ──────────────────────────────────────
 
-describe('DELETE /api/admin/users/:userId', () => {
+describe('DELETE /api/admin/users/:loginId', () => {
   beforeEach(() => {
     mockRemoveUserFromTenant.mockReset();
   });
@@ -301,12 +303,12 @@ describe('DELETE /api/admin/users/:userId', () => {
   it('returns 204 on successful removal', async () => {
     mockRemoveUserFromTenant.mockResolvedValue(undefined);
 
-    const req = mockReq({}, { userId: 'user-1' });
+    const req = mockReq({}, { loginId: 'alice@acme.com' });
     const res = mockRes();
 
     await handleRemoveUser(req, res);
 
-    expect(mockRemoveUserFromTenant).toHaveBeenCalledWith('user-1', 'acme-corp');
+    expect(mockRemoveUserFromTenant).toHaveBeenCalledWith('alice@acme.com', 'acme-corp');
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalled();
   });
@@ -314,7 +316,7 @@ describe('DELETE /api/admin/users/:userId', () => {
   it('returns 500 on unexpected error', async () => {
     mockRemoveUserFromTenant.mockRejectedValue(new Error('Descope failure'));
 
-    const req = mockReq({}, { userId: 'user-1' });
+    const req = mockReq({}, { loginId: 'alice@acme.com' });
     const res = mockRes();
 
     await handleRemoveUser(req, res);
