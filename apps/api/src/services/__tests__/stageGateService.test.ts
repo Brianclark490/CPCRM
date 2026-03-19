@@ -58,8 +58,8 @@ const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery
 
     // INSERT INTO stage_gates
     if (s.startsWith('INSERT INTO STAGE_GATES')) {
-      const [id, stage_id, field_id, gate_type, gate_value, error_message] = params as unknown[];
-      const row: Record<string, unknown> = { id, stage_id, field_id, gate_type, gate_value, error_message };
+      const [id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message] = params as unknown[];
+      const row: Record<string, unknown> = { id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message };
       fakeGates.set(id as string, row);
       return { rows: [row] };
     }
@@ -125,8 +125,8 @@ const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery
 
     // UPDATE stage_gates SET ...
     if (s.startsWith('UPDATE STAGE_GATES SET')) {
-      const gateId = params![params!.length - 2] as string;
-      const stageId = params![params!.length - 1] as string;
+      const gateId = params![params!.length - 3] as string;
+      const stageId = params![params!.length - 2] as string;
       const gate = fakeGates.get(gateId);
       if (gate && gate.stage_id === stageId) {
         let paramIdx = 0;
