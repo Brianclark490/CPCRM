@@ -1,4 +1,4 @@
-import DescopeClient from '@descope/node-sdk';
+import { getDescopeManagementClient } from '../lib/descopeManagementClient.js';
 import { logger } from '../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,25 +58,6 @@ interface DescopeUserRecord {
 
 const VALID_ROLES = ['admin', 'manager', 'user', 'read_only'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// ─── Descope management client ────────────────────────────────────────────────
-
-let descopeManagementClient: ReturnType<typeof DescopeClient> | undefined;
-
-function getDescopeManagementClient(): ReturnType<typeof DescopeClient> {
-  if (!descopeManagementClient) {
-    const projectId = process.env.DESCOPE_PROJECT_ID;
-    if (!projectId) {
-      throw new Error('DESCOPE_PROJECT_ID environment variable is required');
-    }
-    const managementKey = process.env.DESCOPE_MANAGEMENT_KEY;
-    if (!managementKey) {
-      throw new Error('DESCOPE_MANAGEMENT_KEY environment variable is required');
-    }
-    descopeManagementClient = DescopeClient({ projectId, managementKey });
-  }
-  return descopeManagementClient;
-}
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 

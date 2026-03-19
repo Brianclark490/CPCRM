@@ -1,6 +1,6 @@
-import DescopeClient from '@descope/node-sdk';
 import { randomUUID } from 'crypto';
 import { pool } from '../db/client.js';
+import { getDescopeManagementClient } from '../lib/descopeManagementClient.js';
 import { logger } from '../lib/logger.js';
 import { seedWithClient } from './seedDefaultObjects.js';
 import type { SeedResult } from './seedDefaultObjects.js';
@@ -68,31 +68,6 @@ export function validateSlug(slug: unknown): string | null {
     return 'Slug must contain only lowercase letters, digits, and hyphens (no leading/trailing hyphens)';
   }
   return null;
-}
-
-// ─── Descope management client ────────────────────────────────────────────────
-
-let descopeManagementClient: ReturnType<typeof DescopeClient> | undefined;
-
-/**
- * Returns a Descope SDK client configured with the management key.
- * The management client is required for tenant and user management operations.
- *
- * Requires DESCOPE_PROJECT_ID and DESCOPE_MANAGEMENT_KEY environment variables.
- */
-function getDescopeManagementClient(): ReturnType<typeof DescopeClient> {
-  if (!descopeManagementClient) {
-    const projectId = process.env.DESCOPE_PROJECT_ID;
-    if (!projectId) {
-      throw new Error('DESCOPE_PROJECT_ID environment variable is required');
-    }
-    const managementKey = process.env.DESCOPE_MANAGEMENT_KEY;
-    if (!managementKey) {
-      throw new Error('DESCOPE_MANAGEMENT_KEY environment variable is required');
-    }
-    descopeManagementClient = DescopeClient({ projectId, managementKey });
-  }
-  return descopeManagementClient;
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────

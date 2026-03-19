@@ -14,8 +14,8 @@ const mockAddTenantRoles = vi.fn();
 const mockRemoveTenantRoles = vi.fn();
 const mockRemoveTenant = vi.fn();
 
-vi.mock('@descope/node-sdk', () => ({
-  default: vi.fn(() => ({
+vi.mock('../../lib/descopeManagementClient.js', () => ({
+  getDescopeManagementClient: vi.fn(() => ({
     management: {
       user: {
         searchAll: mockSearchAll,
@@ -27,10 +27,6 @@ vi.mock('@descope/node-sdk', () => ({
     },
   })),
 }));
-
-// Set required env vars before importing the module
-process.env.DESCOPE_PROJECT_ID = 'test-project-id';
-process.env.DESCOPE_MANAGEMENT_KEY = 'test-management-key';
 
 const {
   inviteUser,
