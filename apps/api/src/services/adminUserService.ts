@@ -58,7 +58,7 @@ interface DescopeUserRecord {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const VALID_ROLES = ['admin', 'manager', 'user', 'read_only'];
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
