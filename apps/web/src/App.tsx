@@ -19,6 +19,7 @@ import { RecordDetailPage } from './pages/RecordDetailPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
+import { TenantPickerPage } from './pages/TenantPickerPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
 import { AppShell } from './components/AppShell.js';
 
@@ -28,6 +29,14 @@ export function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
+        <Route
+          path="/select-tenant"
+          element={
+            <ProtectedRoute>
+              <TenantPickerPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={

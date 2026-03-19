@@ -56,6 +56,26 @@
   color: var(--color-text-primary);
 }
 
+/* ── Tenant badge ────────────────────────────────────────── */
+
+.tenantBadge {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-primary-text);
+  background-color: var(--color-primary-subtle);
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base);
+}
+
+.tenantBadge:hover {
+  background-color: rgba(99, 102, 241, 0.2);
+  color: var(--color-text-primary);
+}
+
 /* ── Header actions ───────────────────────────────────────── */
 
 .headerActions {
