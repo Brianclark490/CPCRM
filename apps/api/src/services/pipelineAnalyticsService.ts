@@ -109,7 +109,7 @@ async function resolvePipeline(
 /**
  * Returns per-stage aggregates and pipeline totals for a given pipeline.
  *
- * Record-level access: all records within the tenant's pipeline are included.
+ * Record-level access: only records owned by the specified user are included.
  *
  * @throws {Error} NOT_FOUND — pipeline does not exist
  */
@@ -138,9 +138,10 @@ export async function getPipelineSummary(
      FROM records r
      WHERE r.pipeline_id = $1
        AND r.tenant_id = $2
+       AND r.owner_id = $3
        AND r.current_stage_id IS NOT NULL
      GROUP BY r.current_stage_id`,
-    [pipelineId, tenantId],
+    [pipelineId, tenantId, ownerId],
   );
 
   const aggregatesByStage = new Map<string, Record<string, unknown>>();
@@ -157,12 +158,13 @@ export async function getPipelineSummary(
      JOIN stage_definitions sd ON sd.id = r.current_stage_id
      WHERE r.pipeline_id = $1
        AND r.tenant_id = $2
+       AND r.owner_id = $3
        AND r.current_stage_id IS NOT NULL
        AND sd.expected_days IS NOT NULL
        AND r.stage_entered_at IS NOT NULL
        AND EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 > sd.expected_days
      GROUP BY r.current_stage_id`,
-    [pipelineId, tenantId],
+    [pipelineId, tenantId, ownerId],
   );
 
   const overdueByStage = new Map<string, number>();
@@ -213,9 +215,10 @@ export async function getPipelineSummary(
      JOIN records r ON r.id = sh.record_id
      WHERE sh.pipeline_id = $1
        AND r.tenant_id = $2
+       AND r.owner_id = $3
        AND sd.stage_type = 'won'
-       AND sh.changed_at >= $3`,
-    [pipelineId, tenantId, monthStart],
+       AND sh.changed_at >= $4`,
+    [pipelineId, tenantId, ownerId, monthStart],
   );
 
   const wonRow = wonThisMonthResult.rows[0] as Record<string, unknown>;
@@ -229,9 +232,10 @@ export async function getPipelineSummary(
      JOIN records r ON r.id = sh.record_id
      WHERE sh.pipeline_id = $1
        AND r.tenant_id = $2
+       AND r.owner_id = $3
        AND sd.stage_type = 'lost'
-       AND sh.changed_at >= $3`,
-    [pipelineId, tenantId, monthStart],
+       AND sh.changed_at >= $4`,
+    [pipelineId, tenantId, ownerId, monthStart],
   );
 
   const lostRow = lostThisMonthResult.rows[0] as Record<string, unknown>;
@@ -420,7 +424,7 @@ export async function getPipelineVelocity(
 /**
  * Returns records that have exceeded their stage's expected_days threshold.
  *
- * Record-level access: all records within the tenant's pipeline are included.
+ * Record-level access: only records owned by the specified user are included.
  *
  * @throws {Error} NOT_FOUND — pipeline does not exist
  */
@@ -445,12 +449,13 @@ export async function getOverdueRecords(
      JOIN stage_definitions sd ON sd.id = r.current_stage_id
      WHERE r.pipeline_id = $1
        AND r.tenant_id = $2
+       AND r.owner_id = $3
        AND r.current_stage_id IS NOT NULL
        AND sd.expected_days IS NOT NULL
        AND r.stage_entered_at IS NOT NULL
        AND EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 > sd.expected_days
      ORDER BY (EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 - sd.expected_days) DESC`,
-    [pipelineId, tenantId],
+    [pipelineId, tenantId, ownerId],
   );
 
   logger.info({ pipelineId, ownerId, count: result.rows.length }, 'Overdue records fetched');
