@@ -61,9 +61,8 @@ const {
     // Per-stage aggregates (GROUP BY current_stage_id — first query in summary)
     if (s.includes('CURRENT_STAGE_ID AS STAGE_ID') && s.includes('RECORD_COUNT') && s.includes('GROUP BY')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![1] as string;
       const matching = [...fakeRecords.values()].filter(
-        (r) => r.pipeline_id === pipelineId && r.owner_id === ownerId && r.current_stage_id,
+        (r) => r.pipeline_id === pipelineId && r.current_stage_id,
       );
       const grouped = new Map<string, { count: number; totalValue: number; totalDays: number }>();
       for (const r of matching) {
@@ -87,11 +86,9 @@ const {
     // Overdue count per stage
     if (s.includes('OVERDUE_COUNT') && s.includes('GROUP BY')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![1] as string;
       const matching = [...fakeRecords.values()].filter(
         (r) =>
           r.pipeline_id === pipelineId &&
-          r.owner_id === ownerId &&
           r.current_stage_id &&
           r.stage_entered_at,
       );
@@ -116,7 +113,6 @@ const {
     // Won this month (COUNT DISTINCT + SUM)
     if (s.includes('WON_COUNT') && s.includes('WON_VALUE')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![1] as string;
       const monthStart = params![2] as Date;
       const wonStageIds = [...fakeStages.values()]
         .filter((st) => st.stage_type === 'won')
@@ -131,7 +127,7 @@ const {
           new Date(h.changed_at as string) >= monthStart
         ) {
           const rec = fakeRecords.get(h.record_id as string);
-          if (rec && rec.owner_id === ownerId && !seenRecords.has(rec.id as string)) {
+          if (rec && !seenRecords.has(rec.id as string)) {
             seenRecords.add(rec.id as string);
             wonCount++;
             wonValue += Number((rec.field_values as Record<string, unknown>)?.value ?? 0);
@@ -144,7 +140,6 @@ const {
     // Lost this month
     if (s.includes('LOST_COUNT')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![1] as string;
       const monthStart = params![2] as Date;
       const lostStageIds = [...fakeStages.values()]
         .filter((st) => st.stage_type === 'lost')
@@ -158,7 +153,7 @@ const {
           new Date(h.changed_at as string) >= monthStart
         ) {
           const rec = fakeRecords.get(h.record_id as string);
-          if (rec && rec.owner_id === ownerId && !seenRecords.has(rec.id as string)) {
+          if (rec && !seenRecords.has(rec.id as string)) {
             seenRecords.add(rec.id as string);
             lostCount++;
           }
@@ -170,10 +165,8 @@ const {
     // Entered count (to_stage_id)
     if (s.includes('TO_STAGE_ID AS STAGE_ID') && s.includes('ENTERED') && s.includes('GROUP BY')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![1] as string;
       const history = [...fakeStageHistory.values()].filter((h) => {
-        const rec = fakeRecords.get(h.record_id as string);
-        return h.pipeline_id === pipelineId && rec && rec.owner_id === ownerId;
+        return h.pipeline_id === pipelineId;
       });
       const grouped = new Map<string, number>();
       for (const h of history) {
@@ -190,13 +183,9 @@ const {
     // Exited count (from_stage_id)
     if (s.includes('FROM_STAGE_ID AS STAGE_ID') && s.includes('EXITED') && s.includes('GROUP BY')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![1] as string;
       const history = [...fakeStageHistory.values()].filter((h) => {
-        const rec = fakeRecords.get(h.record_id as string);
         return (
           h.pipeline_id === pipelineId &&
-          rec &&
-          rec.owner_id === ownerId &&
           h.from_stage_id
         );
       });
@@ -224,12 +213,10 @@ const {
     // Overdue records (for getOverdueRecords)
     if (s.includes('DAYS_IN_STAGE') && s.includes('STAGE_NAME') && s.includes('RECORDS R')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![1] as string;
       const results: Array<Record<string, unknown>> = [];
       for (const r of fakeRecords.values()) {
         if (
           r.pipeline_id !== pipelineId ||
-          r.owner_id !== ownerId ||
           !r.current_stage_id ||
           !r.stage_entered_at
         )
