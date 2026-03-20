@@ -68,13 +68,12 @@ describe('AdminPage', () => {
     expect(screen.getByText('Login history, role changes, data access')).toBeInTheDocument();
   });
 
-  it('renders a card linking to Tenant Settings with coming soon badge', () => {
+  it('renders a card linking to Tenant Settings', () => {
     renderPage();
 
     const link = screen.getByRole('link', { name: /Tenant settings/i });
     expect(link).toHaveAttribute('href', '/admin/settings');
     expect(screen.getByText('Company name, branding, defaults')).toBeInTheDocument();
-    expect(screen.getByText('Coming soon')).toBeInTheDocument();
   });
 
   it('renders a card linking to Roles when user is a super-admin', () => {

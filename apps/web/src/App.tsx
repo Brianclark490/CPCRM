@@ -25,6 +25,7 @@ import { NotFoundPage } from './pages/NotFoundPage.js';
 import { TenantPickerPage } from './pages/TenantPickerPage.js';
 import { PlatformTenantsPage } from './pages/PlatformTenantsPage.js';
 import { PlatformTenantDetailPage } from './pages/PlatformTenantDetailPage.js';
+import { AdminTenantSettingsPage } from './pages/AdminTenantSettingsPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
 import { TenantGuard } from './components/TenantGuard.js';
 import { AppShell } from './components/AppShell.js';
@@ -208,6 +209,16 @@ export function App() {
                   <AdminRolesPage />
                 </AppShell>
               </TenantGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/settings"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <AdminTenantSettingsPage />
+              </AppShell>
             </ProtectedRoute>
           }
         />
