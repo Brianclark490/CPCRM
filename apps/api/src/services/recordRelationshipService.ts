@@ -75,7 +75,7 @@ function rowToRelatedRecord(row: Record<string, unknown>): RelatedRecordRow {
  * Links two records through a defined relationship.
  *
  * Validations:
- * - Both records must exist and belong to the authenticated user
+ * - Both records must exist and belong to the tenant
  * - The relationship definition must exist
  * - Source record's object type must match relationship's source_object_id
  * - Target record's object type must match relationship's target_object_id
@@ -106,8 +106,8 @@ export async function linkRecords(
 
   // Fetch the source record
   const sourceResult = await pool.query(
-    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2 AND tenant_id = $3',
-    [sourceRecordId, ownerId, tenantId],
+    'SELECT id, object_id FROM records WHERE id = $1 AND tenant_id = $2',
+    [sourceRecordId, tenantId],
   );
   if (sourceResult.rows.length === 0) {
     throwNotFoundError('Source record not found');
@@ -116,8 +116,8 @@ export async function linkRecords(
 
   // Fetch the target record
   const targetResult = await pool.query(
-    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2 AND tenant_id = $3',
-    [targetRecordId, ownerId, tenantId],
+    'SELECT id, object_id FROM records WHERE id = $1 AND tenant_id = $2',
+    [targetRecordId, tenantId],
   );
   if (targetResult.rows.length === 0) {
     throwNotFoundError('Target record not found');
@@ -202,10 +202,10 @@ export async function unlinkRecords(
   recordRelationshipId: string,
   ownerId: string,
 ): Promise<void> {
-  // Verify the source record exists and belongs to the owner
+  // Verify the source record exists within the tenant
   const recordResult = await pool.query(
-    'SELECT id FROM records WHERE id = $1 AND owner_id = $2 AND tenant_id = $3',
-    [sourceRecordId, ownerId, tenantId],
+    'SELECT id FROM records WHERE id = $1 AND tenant_id = $2',
+    [sourceRecordId, tenantId],
   );
   if (recordResult.rows.length === 0) {
     throwNotFoundError('Record not found');
@@ -243,10 +243,10 @@ export async function getRelatedRecords(
   page: number,
   limit: number,
 ): Promise<RelatedRecordsResult> {
-  // Verify the record exists and belongs to the owner
+  // Verify the record exists within the tenant
   const recordResult = await pool.query(
-    'SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2 AND tenant_id = $3',
-    [recordId, ownerId, tenantId],
+    'SELECT id, object_id FROM records WHERE id = $1 AND tenant_id = $2',
+    [recordId, tenantId],
   );
   if (recordResult.rows.length === 0) {
     throwNotFoundError('Record not found');

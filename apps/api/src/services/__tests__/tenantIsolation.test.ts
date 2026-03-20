@@ -158,43 +158,40 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
       return { rows: match ? [match] : [] };
     }
 
-    // SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4
+    // SELECT * FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3
     if (s.startsWith('SELECT * FROM RECORDS WHERE ID') && s.includes('TENANT_ID')) {
       const id = params![0] as string;
       const objectId = params![1] as string;
-      const ownerId = params![2] as string;
-      const tenantId = params![3] as string;
+      const tenantId = params![2] as string;
       const match = fakeRecords.get(id);
-      if (match && match.object_id === objectId && match.owner_id === ownerId && match.tenant_id === tenantId) {
+      if (match && match.object_id === objectId && match.tenant_id === tenantId) {
         return { rows: [match] };
       }
       return { rows: [] };
     }
 
-    // DELETE FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4
+    // DELETE FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3
     if (s.startsWith('DELETE FROM RECORDS WHERE ID')) {
       const id = params![0] as string;
       const objectId = params![1] as string;
-      const ownerId = params![2] as string;
-      const tenantId = params![3] as string;
+      const tenantId = params![2] as string;
       const match = fakeRecords.get(id);
-      if (match && match.object_id === objectId && match.owner_id === ownerId && match.tenant_id === tenantId) {
+      if (match && match.object_id === objectId && match.tenant_id === tenantId) {
         fakeRecords.delete(id);
         return { rowCount: 1, rows: [] };
       }
       return { rowCount: 0, rows: [] };
     }
 
-    // UPDATE records SET ... WHERE id = $4 AND object_id = $5 AND owner_id = $6 AND tenant_id = $7
+    // UPDATE records SET ... WHERE id = $4 AND object_id = $5 AND tenant_id = $6
     if (s.startsWith('UPDATE RECORDS')) {
-      // Extract last 4 params: id, object_id, owner_id, tenant_id
+      // Extract last 3 params: id, object_id, tenant_id
       const pArr = params as unknown[];
       const recordId = pArr[3] as string;
       const objectId = pArr[4] as string;
-      const ownerId = pArr[5] as string;
-      const tenantId = pArr[6] as string;
+      const tenantId = pArr[5] as string;
       const match = fakeRecords.get(recordId);
-      if (match && match.object_id === objectId && match.owner_id === ownerId && match.tenant_id === tenantId) {
+      if (match && match.object_id === objectId && match.tenant_id === tenantId) {
         match.name = pArr[0];
         match.field_values = typeof pArr[1] === 'string' ? JSON.parse(pArr[1] as string) : pArr[1];
         match.updated_at = pArr[2];
@@ -206,10 +203,9 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
     // SELECT COUNT(*) AS total FROM records r WHERE ... (listRecords count query)
     if (s.includes('COUNT(*)') && s.includes('AS TOTAL') && s.includes('FROM RECORDS R')) {
       const objectId = params![0] as string;
-      const ownerId = params![1] as string;
-      const tenantId = params![2] as string;
+      const tenantId = params![1] as string;
       const count = [...fakeRecords.values()].filter(
-        (r) => r.object_id === objectId && r.owner_id === ownerId && r.tenant_id === tenantId,
+        (r) => r.object_id === objectId && r.tenant_id === tenantId,
       ).length;
       return { rows: [{ total: String(count) }] };
     }
@@ -217,10 +213,9 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
     // SELECT * FROM records r WHERE ... (listRecords data query with LIMIT/OFFSET)
     if (s.includes('FROM RECORDS R') && s.includes('LIMIT')) {
       const objectId = params![0] as string;
-      const ownerId = params![1] as string;
-      const tenantId = params![2] as string;
+      const tenantId = params![1] as string;
       const rows = [...fakeRecords.values()].filter(
-        (r) => r.object_id === objectId && r.owner_id === ownerId && r.tenant_id === tenantId,
+        (r) => r.object_id === objectId && r.tenant_id === tenantId,
       );
       return { rows };
     }

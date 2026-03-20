@@ -31,13 +31,12 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Record lookup by id, object_id, owner_id
-    if (s.startsWith('SELECT * FROM RECORDS WHERE ID') && s.includes('OBJECT_ID') && s.includes('OWNER_ID')) {
+    // Record lookup by id, object_id, tenant_id
+    if (s.startsWith('SELECT * FROM RECORDS WHERE ID') && s.includes('OBJECT_ID') && s.includes('TENANT_ID')) {
       const id = params![0] as string;
       const objectId = params![1] as string;
-      const ownerId = params![2] as string;
       const record = fakeRecords.get(id);
-      if (record && record.object_id === objectId && record.owner_id === ownerId) {
+      if (record && record.object_id === objectId) {
         return { rows: [record] };
       }
       return { rows: [] };

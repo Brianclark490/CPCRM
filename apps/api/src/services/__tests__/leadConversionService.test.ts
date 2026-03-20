@@ -94,9 +94,12 @@ function setupLeadConversionMocks(overrides: {
       return { rows: [{ id: 'obj-opportunity-id' }] };
     }
 
-    // Fetch lead record
-    if (s.includes('FROM RECORDS WHERE ID') && s.includes('OBJECT_ID') && s.includes('OWNER_ID') && !s.startsWith('UPDATE')) {
-      if (!leadExists) return { rows: [] };
+    // Fetch lead record or existing account lookup
+    if (s.includes('FROM RECORDS WHERE ID') && s.includes('OBJECT_ID') && s.includes('TENANT_ID') && !s.startsWith('UPDATE')) {
+      if (!leadExists) {
+        // Only fail for lead lookups, not for account lookups
+        if (params?.[1] === 'obj-lead-id') return { rows: [] };
+      }
 
       // If it's checking for a lead (obj-lead-id)
       if (params?.[1] === 'obj-lead-id') {

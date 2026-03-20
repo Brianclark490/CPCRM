@@ -216,10 +216,10 @@ export async function moveRecordStage(
     }
     const objectId = (objectResult.rows[0] as Record<string, unknown>).id as string;
 
-    // 2. Fetch the record and verify ownership
+    // 2. Fetch the record and verify it belongs to this tenant
     const recordResult = await client.query(
-      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
-      [recordId, objectId, ownerId, tenantId],
+      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+      [recordId, objectId, tenantId],
     );
     if (recordResult.rows.length === 0) {
       throwNotFoundError('Record not found');
@@ -356,9 +356,9 @@ export async function moveRecordStage(
            stage_entered_at = NOW(),
            field_values = $2,
            updated_at = NOW()
-       WHERE id = $3 AND object_id = $4 AND owner_id = $5 AND tenant_id = $6
+       WHERE id = $3 AND object_id = $4 AND tenant_id = $5
        RETURNING *`,
-      [targetStageId, JSON.stringify(updatedFieldValues), recordId, objectId, ownerId, tenantId],
+      [targetStageId, JSON.stringify(updatedFieldValues), recordId, objectId, tenantId],
     );
 
     await client.query('COMMIT');

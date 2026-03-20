@@ -462,7 +462,7 @@ export async function createRecord(
 
 /**
  * Lists records for the given object type with search, pagination, and sorting.
- * Only returns records owned by the authenticated user.
+ * Returns records belonging to the specified tenant.
  */
 export async function listRecords(params: {
   tenantId: string;
@@ -479,8 +479,8 @@ export async function listRecords(params: {
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
-  const queryParams: unknown[] = [objectDef.id, ownerId, tenantId];
-  let whereClause = 'WHERE r.object_id = $1 AND r.owner_id = $2 AND r.tenant_id = $3';
+  const queryParams: unknown[] = [objectDef.id, tenantId];
+  let whereClause = 'WHERE r.object_id = $1 AND r.tenant_id = $2';
 
   if (search && search.trim().length > 0) {
     const searchTerm = `%${search.trim()}%`;
@@ -557,8 +557,8 @@ export async function getRecord(
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
   const result = await pool.query(
-    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
-    [recordId, objectDef.id, ownerId, tenantId],
+    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+    [recordId, objectDef.id, tenantId],
   );
 
   if (result.rows.length === 0) {
@@ -656,10 +656,10 @@ export async function updateRecord(
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
-  // Verify the record exists and is owned by this user
+  // Verify the record exists within this tenant
   const existing = await pool.query(
-    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
-    [recordId, objectDef.id, ownerId, tenantId],
+    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+    [recordId, objectDef.id, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -690,9 +690,9 @@ export async function updateRecord(
   const result = await pool.query(
     `UPDATE records
      SET name = $1, field_values = $2, updated_at = $3
-     WHERE id = $4 AND object_id = $5 AND owner_id = $6 AND tenant_id = $7
+     WHERE id = $4 AND object_id = $5 AND tenant_id = $6
      RETURNING *`,
-    [name, JSON.stringify(mergedValues), now, recordId, objectDef.id, ownerId, tenantId],
+    [name, JSON.stringify(mergedValues), now, recordId, objectDef.id, tenantId],
   );
 
   logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record updated');
@@ -715,8 +715,8 @@ export async function deleteRecord(
   // record_relationships have ON DELETE CASCADE from records, so deleting
   // the record will automatically clean up relationships
   const result = await pool.query(
-    'DELETE FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
-    [recordId, objectDef.id, ownerId, tenantId],
+    'DELETE FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+    [recordId, objectDef.id, tenantId],
   );
 
   if (result.rowCount === 0) {
