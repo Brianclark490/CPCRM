@@ -112,14 +112,14 @@ describe('AppShell', () => {
     );
 
     // Admin links not visible until dropdown is opened
-    expect(screen.queryByRole('link', { name: /Object manager/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Object manager/ })).not.toBeInTheDocument();
 
     // Open the profile dropdown
     await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
 
     // Admin links visible in the dropdown
-    expect(screen.getByRole('link', { name: /Object manager/ })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Pipeline manager/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Object manager/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Pipeline manager/ })).toBeInTheDocument();
   });
 
   it('renders My profile link inside the profile dropdown', async () => {
@@ -134,7 +134,7 @@ describe('AppShell', () => {
     // Open the profile dropdown
     await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
 
-    const profileLink = screen.getByRole('link', { name: /My profile/ });
+    const profileLink = screen.getByRole('menuitem', { name: /My profile/ });
     expect(profileLink).toBeInTheDocument();
     expect(profileLink).toHaveAttribute('href', '/settings/profile');
   });
@@ -373,8 +373,8 @@ describe('AppShell', () => {
     // Open the profile dropdown
     await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
 
-    expect(screen.getByRole('link', { name: /Tenant management/ })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Tenant management/ })).toHaveAttribute('href', '/platform/tenants');
+    expect(screen.getByRole('menuitem', { name: /Tenant management/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Tenant management/ })).toHaveAttribute('href', '/platform/tenants');
   });
 
   it('does not show Platform link for non-super-admins', async () => {
@@ -391,6 +391,6 @@ describe('AppShell', () => {
     // Open the profile dropdown
     await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
 
-    expect(screen.queryByRole('link', { name: /Tenant management/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Tenant management/ })).not.toBeInTheDocument();
   });
 });
