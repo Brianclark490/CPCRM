@@ -94,8 +94,8 @@ export async function convertLead(
 
     // 2. Fetch the lead record
     const leadResult = await client.query(
-      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
-      [leadRecordId, leadObjectId, ownerId, tenantId],
+      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+      [leadRecordId, leadObjectId, tenantId],
     );
     if (leadResult.rows.length === 0) {
       throwNotFoundError('Lead not found');
@@ -141,8 +141,8 @@ export async function convertLead(
     if (options.accountId) {
       // Use existing account
       const existingAccount = await client.query(
-        'SELECT id, name FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
-        [options.accountId, accountObjectId, ownerId, tenantId],
+        'SELECT id, name FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
+        [options.accountId, accountObjectId, tenantId],
       );
       if (existingAccount.rows.length === 0) {
         throwNotFoundError('Account not found');
@@ -232,8 +232,8 @@ export async function convertLead(
     await client.query(
       `UPDATE records
        SET field_values = $1, updated_at = $2
-       WHERE id = $3 AND object_id = $4 AND owner_id = $5 AND tenant_id = $6`,
-      [JSON.stringify(updatedFieldValues), new Date(), leadRecordId, leadObjectId, ownerId, tenantId],
+       WHERE id = $3 AND object_id = $4 AND tenant_id = $5`,
+      [JSON.stringify(updatedFieldValues), new Date(), leadRecordId, leadObjectId, tenantId],
     );
 
     await client.query('COMMIT');

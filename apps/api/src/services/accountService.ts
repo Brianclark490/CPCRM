@@ -287,7 +287,7 @@ export async function createAccount(
 }
 
 /**
- * Returns a paginated list of accounts belonging to the authenticated user.
+ * Returns a paginated list of accounts belonging to the specified tenant.
  * Supports searching by name and email.
  */
 export async function listAccounts(
@@ -296,8 +296,8 @@ export async function listAccounts(
   const { tenantId, ownerId, search, page, limit } = params;
   const offset = (page - 1) * limit;
 
-  const queryParams: unknown[] = [tenantId, ownerId];
-  let whereClause = 'WHERE a.tenant_id = $1 AND a.owner_id = $2';
+  const queryParams: unknown[] = [tenantId];
+  let whereClause = 'WHERE a.tenant_id = $1';
 
   if (search && search.trim().length > 0) {
     const searchTerm = `%${search.trim()}%`;
@@ -330,8 +330,8 @@ export async function listAccounts(
 
 /**
  * Returns a single account by ID with linked opportunities.
- * Scoped to the given tenant and owner.
- * Returns null if the account does not exist, belongs to a different tenant, or is not owned by the user.
+ * Scoped to the given tenant.
+ * Returns null if the account does not exist or belongs to a different tenant.
  */
 export async function getAccountWithOpportunities(
   id: string,
@@ -339,8 +339,8 @@ export async function getAccountWithOpportunities(
   ownerId: string,
 ): Promise<AccountWithOpportunities | null> {
   const accountResult = await pool.query(
-    'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3',
-    [id, tenantId, ownerId],
+    'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (accountResult.rows.length === 0) return null;
@@ -384,10 +384,10 @@ export async function updateAccount(
   ownerId: string,
   params: UpdateAccountParams,
 ): Promise<Account> {
-  // Check existence and ownership
+  // Check existence within tenant
   const existing = await pool.query(
-    'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3',
-    [id, tenantId, ownerId],
+    'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (existing.rows.length === 0) {
@@ -473,10 +473,10 @@ export async function updateAccount(
   updates.push(`updated_at = $${paramIndex++}`);
   values.push(now);
 
-  values.push(id, tenantId, ownerId);
+  values.push(id, tenantId);
 
   const result = await pool.query(
-    `UPDATE accounts SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex++} AND owner_id = $${paramIndex} RETURNING *`,
+    `UPDATE accounts SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex} RETURNING *`,
     values,
   );
 
@@ -486,7 +486,7 @@ export async function updateAccount(
 }
 
 /**
- * Deletes an account by ID, scoped to the given tenant and owner.
+ * Deletes an account by ID, scoped to the given tenant.
  *
  * @throws {Error} with a `code` property of "NOT_FOUND" when the account does not exist.
  */
@@ -496,8 +496,8 @@ export async function deleteAccount(
   ownerId: string,
 ): Promise<void> {
   const result = await pool.query(
-    'DELETE FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3',
-    [id, tenantId, ownerId],
+    'DELETE FROM accounts WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId],
   );
 
   if (result.rowCount === 0) {

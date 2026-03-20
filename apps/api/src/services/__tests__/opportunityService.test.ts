@@ -46,10 +46,10 @@ const { fakeRows, fakeAccounts, mockQuery } = vi.hoisted(() => {
       return { rows: [row] };
     }
 
-    if (s.startsWith('SELECT 1 FROM ACCOUNTS WHERE ID = $1 AND TENANT_ID = $2 AND OWNER_ID = $3')) {
-      const [id, tenant_id, owner_id] = params as string[];
+    if (s.startsWith('SELECT 1 FROM ACCOUNTS WHERE ID = $1 AND TENANT_ID = $2')) {
+      const [id, tenant_id] = params as string[];
       const account = fakeAccounts.get(id);
-      if (account && account.tenant_id === tenant_id && account.owner_id === owner_id) {
+      if (account && account.tenant_id === tenant_id) {
         return { rows: [{ '?column?': 1 }] };
       }
       return { rows: [] };
@@ -155,7 +155,7 @@ describe('validateAccountExists', () => {
     fakeAccounts.clear();
   });
 
-  it('returns null when the account exists and matches tenant + owner', async () => {
+  it('returns null when the account exists and matches tenant', async () => {
     fakeAccounts.set('acct-1', { id: 'acct-1', tenant_id: 't1', owner_id: 'u1' });
     const result = await validateAccountExists('acct-1', 't1', 'u1');
     expect(result).toBeNull();
@@ -163,19 +163,19 @@ describe('validateAccountExists', () => {
 
   it('returns an error when the account does not exist', async () => {
     const result = await validateAccountExists('missing', 't1', 'u1');
-    expect(result).toBe('Account not found or does not belong to you');
+    expect(result).toBe('Account not found');
   });
 
   it('returns an error when the account belongs to a different tenant', async () => {
     fakeAccounts.set('acct-1', { id: 'acct-1', tenant_id: 'other', owner_id: 'u1' });
     const result = await validateAccountExists('acct-1', 't1', 'u1');
-    expect(result).toBe('Account not found or does not belong to you');
+    expect(result).toBe('Account not found');
   });
 
-  it('returns an error when the account belongs to a different owner', async () => {
+  it('returns null when the account belongs to a different owner but same tenant', async () => {
     fakeAccounts.set('acct-1', { id: 'acct-1', tenant_id: 't1', owner_id: 'other' });
     const result = await validateAccountExists('acct-1', 't1', 'u1');
-    expect(result).toBe('Account not found or does not belong to you');
+    expect(result).toBeNull();
   });
 });
 
@@ -333,7 +333,7 @@ describe('createOpportunity', () => {
     await expect(
       createOpportunity({ ...baseParams, accountId: 'non-existent-account' }),
     ).rejects.toMatchObject({
-      message: 'Account not found or does not belong to you',
+      message: 'Account not found',
       code: 'ACCOUNT_NOT_FOUND',
     });
   });
@@ -352,18 +352,15 @@ describe('createOpportunity', () => {
     });
   });
 
-  it('throws an ACCOUNT_NOT_FOUND error when account belongs to a different user', async () => {
+  it('allows linking to an account owned by a different user in the same tenant', async () => {
     fakeAccounts.set('other-user-account', {
       id: 'other-user-account',
       tenant_id: 'tenant-abc',
       owner_id: 'other-user',
     });
 
-    await expect(
-      createOpportunity({ ...baseParams, accountId: 'other-user-account' }),
-    ).rejects.toMatchObject({
-      code: 'ACCOUNT_NOT_FOUND',
-    });
+    const result = await createOpportunity({ ...baseParams, accountId: 'other-user-account' });
+    expect(result.accountId).toBe('other-user-account');
   });
 
   it('initialises stageHistory with a single prospecting entry', async () => {
