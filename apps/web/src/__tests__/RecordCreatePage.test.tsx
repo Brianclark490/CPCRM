@@ -44,6 +44,16 @@ function mockFetch(overrides: {
       width: string;
     }>;
   };
+  fieldDefs?: Array<{
+    id: string;
+    objectId: string;
+    apiName: string;
+    label: string;
+    fieldType: string;
+    required: boolean;
+    options: Record<string, unknown>;
+    sortOrder: number;
+  }>;
   relationships?: Array<{
     id: string;
     sourceObjectId: string;
@@ -114,12 +124,26 @@ function mockFetch(overrides: {
 
   const relationships = overrides.relationships ?? [];
 
+  const fieldDefs = overrides.fieldDefs ?? [
+    { id: 'f0', objectId: 'obj-1', apiName: 'name', label: 'Account Name', fieldType: 'text', required: true, options: { max_length: 255 }, sortOrder: 1 },
+    { id: 'f1', objectId: 'obj-1', apiName: 'industry', label: 'Industry', fieldType: 'text', required: false, options: {}, sortOrder: 2 },
+    { id: 'f2', objectId: 'obj-1', apiName: 'email', label: 'Email', fieldType: 'email', required: false, options: {}, sortOrder: 3 },
+  ];
+
   const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     // Admin objects list
-    if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts') && !url.includes('/relationships')) {
+    if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts') && !url.includes('/relationships') && !url.includes('/fields')) {
       return Promise.resolve({
         ok: true,
         json: async () => objects,
+      } as Response);
+    }
+
+    // Field definitions list
+    if (typeof url === 'string' && url.includes('/fields')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => fieldDefs,
       } as Response);
     }
 
@@ -635,5 +659,49 @@ describe('RecordCreatePage', () => {
     await waitFor(() => {
       expect(screen.getByText('Amount must be at most 1000')).toBeInTheDocument();
     });
+  });
+
+  it('falls back to field definitions when no form layout exists', async () => {
+    mockFetch({
+      layouts: [],
+      fieldDefs: [
+        { id: 'f0', objectId: 'obj-1', apiName: 'name', label: 'Account Name', fieldType: 'text', required: true, options: { max_length: 255 }, sortOrder: 1 },
+        { id: 'f1', objectId: 'obj-1', apiName: 'acr_gbp', label: 'ACR (GBP)', fieldType: 'currency', required: false, options: {}, sortOrder: 2 },
+        { id: 'f2', objectId: 'obj-1', apiName: 'gp_percent', label: 'GP %', fieldType: 'number', required: false, options: {}, sortOrder: 3 },
+      ],
+    });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Account Name/)).toBeInTheDocument();
+      expect(screen.getByLabelText('ACR (GBP)')).toBeInTheDocument();
+      expect(screen.getByLabelText('GP %')).toBeInTheDocument();
+    });
+  });
+
+  it('falls back to field definitions when form layout has no fields', async () => {
+    mockFetch({
+      layoutDetail: {
+        id: 'layout-1',
+        objectId: 'obj-1',
+        name: 'Default Form',
+        layoutType: 'form',
+        isDefault: true,
+        fields: [],
+      },
+      fieldDefs: [
+        { id: 'f0', objectId: 'obj-1', apiName: 'name', label: 'Account Name', fieldType: 'text', required: true, options: { max_length: 255 }, sortOrder: 1 },
+        { id: 'f1', objectId: 'obj-1', apiName: 'industry', label: 'Industry', fieldType: 'text', required: false, options: {}, sortOrder: 2 },
+      ],
+    });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Account Name/)).toBeInTheDocument();
+      expect(screen.getByLabelText('Industry')).toBeInTheDocument();
+    });
+
+    // Section label should use the object label
+    expect(screen.getByText('Account details')).toBeInTheDocument();
   });
 });
