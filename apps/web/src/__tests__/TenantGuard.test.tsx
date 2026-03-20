@@ -102,7 +102,7 @@ describe('TenantGuard', () => {
     vi.mocked(useUser).mockReturnValue({
       user: { ...baseMockUser, userTenants: [{ tenantId: 'T_ACME' }] },
       isUserLoading: false,
-    } as ReturnType<typeof useUser>);
+    } as unknown as ReturnType<typeof useUser>);
 
     renderGuard();
 
@@ -119,7 +119,7 @@ describe('TenantGuard', () => {
     vi.mocked(useUser).mockReturnValue({
       user: { ...baseMockUser, userTenants: [] },
       isUserLoading: true,
-    } as ReturnType<typeof useUser>);
+    } as unknown as ReturnType<typeof useUser>);
 
     renderGuard();
 
@@ -139,7 +139,7 @@ describe('TenantGuard', () => {
     vi.mocked(useUser).mockReturnValue({
       user: { ...baseMockUser, userTenants: [{ tenantId: 'T1', tenantName: 'Acme Corp' }] },
       isUserLoading: false,
-    } as ReturnType<typeof useUser>);
+    } as unknown as ReturnType<typeof useUser>);
 
     renderGuard();
 
@@ -163,7 +163,7 @@ describe('TenantGuard', () => {
     vi.mocked(useUser).mockReturnValue({
       user: { ...baseMockUser, userTenants: [{ tenantId: 'T1' }] },
       isUserLoading: false,
-    } as ReturnType<typeof useUser>);
+    } as unknown as ReturnType<typeof useUser>);
 
     renderGuard();
 
@@ -191,7 +191,7 @@ describe('TenantGuard', () => {
         ],
       },
       isUserLoading: false,
-    } as ReturnType<typeof useUser>);
+    } as unknown as ReturnType<typeof useUser>);
 
     renderGuard();
 
@@ -212,7 +212,7 @@ describe('TenantGuard', () => {
     vi.mocked(useUser).mockReturnValue({
       user: { ...baseMockUser, userTenants: [] },
       isUserLoading: false,
-    } as ReturnType<typeof useUser>);
+    } as unknown as ReturnType<typeof useUser>);
 
     renderGuard();
 
@@ -233,7 +233,7 @@ describe('TenantGuard', () => {
     vi.mocked(useUser).mockReturnValue({
       user: { ...baseMockUser, userTenants: [{ tenantId: 'T1' }] },
       isUserLoading: false,
-    } as ReturnType<typeof useUser>);
+    } as unknown as ReturnType<typeof useUser>);
 
     mockSelectTenant.mockRejectedValue(new Error('Select failed'));
 
@@ -256,7 +256,7 @@ describe('TenantGuard', () => {
     vi.mocked(useUser).mockReturnValue({
       user: { ...baseMockUser, userTenants: [{ tenantId: 'T_ACME' }] },
       isUserLoading: false,
-    } as ReturnType<typeof useUser>);
+    } as unknown as ReturnType<typeof useUser>);
 
     renderGuard();
 
