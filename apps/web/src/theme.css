@@ -1,0 +1,165 @@
+/* ============================================================
+   CPCRM Theme System — Light & Dark mode via CSS variables
+   Toggle by setting data-theme="light" or data-theme="dark" on <html>
+   ============================================================ */
+
+:root,
+[data-theme='light'] {
+  /* ── New semantic tokens ──────────────────────────────────── */
+
+  /* Backgrounds */
+  --bg-page: #f8f7f4;
+  --bg-surface: #ffffff;
+  --bg-muted: #f0efe9;
+  --bg-elevated: #ffffff;
+
+  /* Text */
+  --text-primary: #1a1a1a;
+  --text-secondary: #6b6b6b;
+  --text-tertiary: #9e9e9e;
+
+  /* Borders */
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.15);
+
+  /* Accent — purple */
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-soft: #f3eefb;
+  --accent-text: #6d28d9;
+  --accent-gradient: linear-gradient(135deg, #7c3aed, #9333ea, #a855f7);
+
+  /* Semantic */
+  --success: #059669;
+  --success-bg: #ecfdf5;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --warning: #b45309;
+  --warning-bg: #fffbeb;
+
+  /* Surfaces */
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+  --dropdown-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --nav-blur: rgba(248, 247, 244, 0.85);
+
+  /* Menu */
+  --menu-bg: #ffffff;
+  --menu-border: rgba(0, 0, 0, 0.12);
+  --menu-hover: rgba(0, 0, 0, 0.04);
+  --menu-divider: rgba(0, 0, 0, 0.08);
+
+  /* ── Legacy variable mappings (backwards compat) ─────────── */
+  --color-bg: #f8f7f4;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f0efe9;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-border-subtle: rgba(0, 0, 0, 0.06);
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #6b6b6b;
+  --color-text-muted: #9e9e9e;
+  --color-primary: #7c3aed;
+  --color-primary-dark: #6d28d9;
+  --color-primary-subtle: #f3eefb;
+  --color-primary-text: #6d28d9;
+  --gradient-accent: linear-gradient(135deg, #7c3aed, #9333ea, #a855f7);
+  --gradient-accent-hover: linear-gradient(135deg, #6d28d9, #7c3aed, #9333ea);
+  --color-sidebar-bg: #f8f7f4;
+  --color-sidebar-text: #9e9e9e;
+  --color-sidebar-text-hover: #1a1a1a;
+  --color-sidebar-active-bg: #f3eefb;
+  --color-sidebar-active-text: #6d28d9;
+  --color-sidebar-border: rgba(0, 0, 0, 0.08);
+  --color-success: #059669;
+  --color-success-subtle: #ecfdf5;
+  --color-warning: #b45309;
+  --color-warning-subtle: #fffbeb;
+  --color-error: #dc2626;
+  --color-error-subtle: #fef2f2;
+  --color-error-text: #dc2626;
+  --color-error-border: rgba(220, 38, 38, 0.25);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 16px 32px -4px rgba(0, 0, 0, 0.1), 0 6px 12px -4px rgba(0, 0, 0, 0.06);
+  --shadow-glow: 0 0 20px rgba(124, 58, 237, 0.15), 0 0 40px rgba(124, 58, 237, 0.08);
+}
+
+[data-theme='dark'] {
+  /* ── New semantic tokens ──────────────────────────────────── */
+
+  /* Backgrounds */
+  --bg-page: #09090b;
+  --bg-surface: #111113;
+  --bg-muted: #18181b;
+  --bg-elevated: #1a1a1f;
+
+  /* Text */
+  --text-primary: #f4f4f5;
+  --text-secondary: #8b8b98;
+  --text-tertiary: #4e4e5c;
+
+  /* Borders */
+  --border-default: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+
+  /* Accent — purple */
+  --accent: #a78bfa;
+  --accent-hover: #8b5cf6;
+  --accent-soft: #1c1528;
+  --accent-text: #c4b5fd;
+  --accent-gradient: linear-gradient(135deg, #7c3aed, #8b5cf6, #a78bfa);
+
+  /* Semantic */
+  --success: #34d399;
+  --success-bg: #0d1f17;
+  --danger: #fb7185;
+  --danger-bg: #1f0d12;
+  --warning: #fbbf24;
+  --warning-bg: #1a1508;
+
+  /* Surfaces */
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+  --dropdown-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  --nav-blur: rgba(9, 9, 11, 0.85);
+
+  /* Menu */
+  --menu-bg: #1a1a1f;
+  --menu-border: rgba(255, 255, 255, 0.08);
+  --menu-hover: rgba(255, 255, 255, 0.04);
+  --menu-divider: rgba(255, 255, 255, 0.06);
+
+  /* ── Legacy variable mappings (backwards compat) ─────────── */
+  --color-bg: #09090b;
+  --color-surface: #111113;
+  --color-surface-subtle: #18181b;
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-text-primary: #f4f4f5;
+  --color-text-secondary: #8b8b98;
+  --color-text-muted: #4e4e5c;
+  --color-primary: #a78bfa;
+  --color-primary-dark: #8b5cf6;
+  --color-primary-subtle: #1c1528;
+  --color-primary-text: #c4b5fd;
+  --gradient-accent: linear-gradient(135deg, #7c3aed, #8b5cf6, #a78bfa);
+  --gradient-accent-hover: linear-gradient(135deg, #6d28d9, #7c3aed, #8b5cf6);
+  --color-sidebar-bg: #09090b;
+  --color-sidebar-text: #4e4e5c;
+  --color-sidebar-text-hover: #f4f4f5;
+  --color-sidebar-active-bg: #1c1528;
+  --color-sidebar-active-text: #c4b5fd;
+  --color-sidebar-border: rgba(255, 255, 255, 0.06);
+  --color-success: #34d399;
+  --color-success-subtle: #0d1f17;
+  --color-warning: #fbbf24;
+  --color-warning-subtle: #1a1508;
+  --color-error: #fb7185;
+  --color-error-subtle: #1f0d12;
+  --color-error-text: #fb7185;
+  --color-error-border: rgba(251, 113, 133, 0.25);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 32px -4px rgba(0, 0, 0, 0.6), 0 6px 12px -4px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px rgba(124, 58, 237, 0.15), 0 0 40px rgba(124, 58, 237, 0.08);
+}

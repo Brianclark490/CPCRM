@@ -1,0 +1,201 @@
+/* ============================================================
+   ProfileDropdown — Avatar menu with profile, admin, and settings
+   ============================================================ */
+
+.wrapper {
+  position: relative;
+}
+
+/* ── Avatar trigger ──────────────────────────────────────── */
+
+.avatarButton {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: var(--accent-gradient);
+  color: #ffffff;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  transition: box-shadow var(--transition-base);
+}
+
+.avatarButton:hover {
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* ── Dropdown menu ───────────────────────────────────────── */
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  background: var(--menu-bg);
+  border: 0.5px solid var(--menu-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--dropdown-shadow);
+  z-index: 100;
+  overflow: hidden;
+  padding: var(--space-1);
+}
+
+/* ── User identity header ────────────────────────────────── */
+
+.userHeader {
+  padding: var(--space-3) var(--space-3);
+}
+
+.userName {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.userEmail {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.adminBadge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Divider ─────────────────────────────────────────────── */
+
+.divider {
+  height: 0.5px;
+  background: var(--menu-divider);
+  margin: var(--space-1) var(--space-3);
+}
+
+/* ── Section label ───────────────────────────────────────── */
+
+.sectionLabel {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+
+/* ── Menu items ──────────────────────────────────────────── */
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base);
+  font-family: inherit;
+}
+
+.menuItem:hover {
+  background: var(--menu-hover);
+  color: var(--text-primary);
+}
+
+.menuItemIcon {
+  width: 16px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+}
+
+/* ── Theme toggle row ────────────────────────────────────── */
+
+.themeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+}
+
+.themeLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.themeLabelIcon {
+  width: 16px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+}
+
+.themeToggle {
+  width: 36px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--border-strong);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background-color var(--transition-base);
+  flex-shrink: 0;
+}
+
+.themeToggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transition: transform var(--transition-smooth);
+}
+
+.themeToggleActive {
+  background: var(--accent);
+}
+
+.themeToggleActive::after {
+  transform: translateX(16px);
+}
+
+/* ── Danger item (sign out) ──────────────────────────────── */
+
+.menuItemDanger {
+  composes: menuItem;
+  color: var(--danger);
+}
+
+.menuItemDanger:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
