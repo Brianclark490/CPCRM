@@ -16,23 +16,21 @@ const { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery } 
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
     const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
 
-    // SELECT id, object_id FROM records WHERE id = $1 AND owner_id = $2
+    // SELECT id, object_id FROM records WHERE id = $1 AND tenant_id = $2
     if (s.startsWith('SELECT ID, OBJECT_ID FROM RECORDS')) {
       const id = params![0] as string;
-      const ownerId = params![1] as string;
       const record = fakeRecords.get(id);
-      if (record && record.owner_id === ownerId) {
+      if (record) {
         return { rows: [record] };
       }
       return { rows: [] };
     }
 
-    // SELECT id FROM records WHERE id = $1 AND owner_id = $2
+    // SELECT id FROM records WHERE id = $1 AND tenant_id = $2
     if (s.startsWith('SELECT ID FROM RECORDS')) {
       const id = params![0] as string;
-      const ownerId = params![1] as string;
       const record = fakeRecords.get(id);
-      if (record && record.owner_id === ownerId) {
+      if (record) {
         return { rows: [record] };
       }
       return { rows: [] };
