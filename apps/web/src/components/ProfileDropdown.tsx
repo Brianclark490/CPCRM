@@ -50,7 +50,9 @@ export function ProfileDropdown({
           {/* ── User identity ────────────────────────────── */}
           <div className={styles.userHeader}>
             <div className={styles.userName}>{displayName}</div>
-            {email && <div className={styles.userEmail}>{email}</div>}
+            {email && email !== displayName && (
+              <div className={styles.userEmail}>{email}</div>
+            )}
             {isSuperAdmin && <span className={styles.adminBadge}>Admin</span>}
           </div>
 
