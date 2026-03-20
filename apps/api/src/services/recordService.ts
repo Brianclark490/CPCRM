@@ -146,16 +146,174 @@ function rowToFieldDef(row: Record<string, unknown>): FieldDefinitionRow {
   };
 }
 
+// ─── Formula Evaluation ──────────────────────────────────────────────────────
+
+/**
+ * Safely evaluates a formula expression by parsing it into tokens and
+ * computing the result. Only supports field references ({field_name}),
+ * numeric literals, and basic arithmetic (+, -, *, /, parentheses).
+ * No eval() is used — this is a simple recursive-descent parser.
+ */
+export function evaluateFormula(
+  expression: string,
+  fieldValues: Record<string, unknown>,
+): number | null {
+  // Replace field references with their numeric values
+  const resolved = expression.replace(
+    /\{([a-z][a-z0-9]*(?:_[a-z0-9]+)*)\}/g,
+    (_match, fieldName: string) => {
+      const val = fieldValues[fieldName];
+      if (val === null || val === undefined || val === '') return 'NaN';
+      const num = Number(val);
+      return isNaN(num) ? 'NaN' : String(num);
+    },
+  );
+
+  try {
+    const result = parseExpression(resolved);
+    if (result === null || !isFinite(result)) return null;
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+// ── Recursive-descent arithmetic parser ──────────────────────────────────────
+
+interface ParserState {
+  input: string;
+  pos: number;
+}
+
+function parseExpression(input: string): number | null {
+  const state: ParserState = { input: input.trim(), pos: 0 };
+  const result = parseAddSub(state);
+  skipWhitespace(state);
+  if (state.pos < state.input.length) return null; // unexpected trailing chars
+  return result;
+}
+
+function skipWhitespace(state: ParserState): void {
+  while (state.pos < state.input.length && state.input[state.pos] === ' ') {
+    state.pos++;
+  }
+}
+
+function parseAddSub(state: ParserState): number | null {
+  let left = parseMulDiv(state);
+  if (left === null) return null;
+
+  while (true) {
+    skipWhitespace(state);
+    const ch = state.input[state.pos];
+    if (ch === '+' || ch === '-') {
+      state.pos++;
+      const right = parseMulDiv(state);
+      if (right === null) return null;
+      left = ch === '+' ? left + right : left - right;
+    } else {
+      break;
+    }
+  }
+  return left;
+}
+
+function parseMulDiv(state: ParserState): number | null {
+  let left = parseUnary(state);
+  if (left === null) return null;
+
+  while (true) {
+    skipWhitespace(state);
+    const ch = state.input[state.pos];
+    if (ch === '*' || ch === '/') {
+      state.pos++;
+      const right = parseUnary(state);
+      if (right === null) return null;
+      if (ch === '/' && right === 0) return null; // division by zero
+      left = ch === '*' ? left * right : left / right;
+    } else {
+      break;
+    }
+  }
+  return left;
+}
+
+function parseUnary(state: ParserState): number | null {
+  skipWhitespace(state);
+  if (state.input[state.pos] === '-') {
+    state.pos++;
+    const val = parsePrimary(state);
+    if (val === null) return null;
+    return -val;
+  }
+  if (state.input[state.pos] === '+') {
+    state.pos++;
+  }
+  return parsePrimary(state);
+}
+
+function parsePrimary(state: ParserState): number | null {
+  skipWhitespace(state);
+
+  // Parenthesised sub-expression
+  if (state.input[state.pos] === '(') {
+    state.pos++;
+    const val = parseAddSub(state);
+    skipWhitespace(state);
+    if (state.input[state.pos] !== ')') return null;
+    state.pos++;
+    return val;
+  }
+
+  // Number literal (including decimals)
+  const start = state.pos;
+  while (
+    state.pos < state.input.length &&
+    (state.input[state.pos] >= '0' && state.input[state.pos] <= '9' || state.input[state.pos] === '.')
+  ) {
+    state.pos++;
+  }
+
+  if (state.pos === start) return null; // no number found
+
+  const numStr = state.input.slice(start, state.pos);
+  const num = Number(numStr);
+  return isNaN(num) ? null : num;
+}
+
+// ─── Resolve field labels with formula computation ───────────────────────────
+
 function resolveFieldLabels(
   record: RecordRow,
   fieldDefs: FieldDefinitionRow[],
 ): RecordWithLabels {
-  const fields = fieldDefs.map((fd) => ({
-    apiName: fd.apiName,
-    label: fd.label,
-    fieldType: fd.fieldType,
-    value: record.fieldValues[fd.apiName] ?? null,
-  }));
+  const fields = fieldDefs.map((fd) => {
+    if (fd.fieldType === 'formula') {
+      const expression = (fd.options.expression as string) ?? '';
+      const outputType = (fd.options.output_type as string) ?? 'number';
+      const precision = (fd.options.precision as number) ?? undefined;
+      const computed = evaluateFormula(expression, record.fieldValues);
+      let value: unknown = computed;
+      if (computed !== null && precision !== undefined) {
+        value = Number(computed.toFixed(precision));
+      }
+      if (computed !== null && outputType === 'text') {
+        value = precision !== undefined ? computed.toFixed(precision) : String(computed);
+      }
+      return {
+        apiName: fd.apiName,
+        label: fd.label,
+        fieldType: fd.fieldType,
+        value,
+      };
+    }
+    return {
+      apiName: fd.apiName,
+      label: fd.label,
+      fieldType: fd.fieldType,
+      value: record.fieldValues[fd.apiName] ?? null,
+    };
+  });
 
   return { ...record, fields };
 }
@@ -346,6 +504,10 @@ export function validateFieldValue(
       return null;
     }
 
+    case 'formula':
+      // Formula fields are computed, not user-provided — skip validation
+      return null;
+
     default:
       return null;
   }
@@ -367,9 +529,10 @@ export function validateFieldValues(
   const fieldMap = new Map(fieldDefs.map((fd) => [fd.apiName, fd]));
 
   // Check required fields (only on create, i.e. partial = false)
+  // Skip formula fields — they are computed, not user-provided
   if (!partial) {
     for (const fd of fieldDefs) {
-      if (fd.required) {
+      if (fd.required && fd.fieldType !== 'formula') {
         const val = fieldValues[fd.apiName];
         if (val === undefined || val === null || val === '') {
           throwValidationError(`Field '${fd.label}' is required`);

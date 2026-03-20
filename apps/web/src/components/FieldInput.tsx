@@ -237,6 +237,20 @@ export function FieldInput({
       );
     }
 
+    case 'formula':
+      return (
+        <input
+          className={styles.input}
+          type="text"
+          id={id}
+          name={name}
+          value={value !== null && value !== undefined ? String(value) : '—'}
+          disabled
+          readOnly
+          title="This field is calculated automatically"
+        />
+      );
+
     default:
       return (
         <input
