@@ -20,6 +20,7 @@ import { ProfilePage } from './pages/ProfilePage.js';
 import { SettingsProfilePage } from './pages/SettingsProfilePage.js';
 import { AdminUsersPage } from './pages/AdminUsersPage.js';
 import { AdminRolesPage } from './pages/AdminRolesPage.js';
+import { AdminAuditPage } from './pages/AdminAuditPage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { TenantPickerPage } from './pages/TenantPickerPage.js';
@@ -207,6 +208,18 @@ export function App() {
               <TenantGuard>
                 <AppShell>
                   <AdminRolesPage />
+                </AppShell>
+              </TenantGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/audit"
+          element={
+            <ProtectedRoute>
+              <TenantGuard>
+                <AppShell>
+                  <AdminAuditPage />
                 </AppShell>
               </TenantGuard>
             </ProtectedRoute>
