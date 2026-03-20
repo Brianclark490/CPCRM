@@ -37,17 +37,16 @@ export function TenantGuard({ children }: TenantGuardProps) {
   const { user, isUserLoading } = useUser();
   const { sessionToken } = useSession();
   const navigate = useNavigate();
-  const [tenantReady, setTenantReady] = useState(
-    () => !!sessionToken && hasDctClaim(sessionToken),
-  );
+
+  // Derived truth: if the token already has dct, we are ready (no state update needed)
+  const tokenHasTenant = !!sessionToken && hasDctClaim(sessionToken);
+
+  // State only for the "we selected tenant during this mount" path
+  const [selectedTenantReady, setSelectedTenantReady] = useState(false);
+
+  const tenantReady = tokenHasTenant || selectedTenantReady;
 
   useEffect(() => {
-    // If token already has a tenant, we are done and must not select again.
-    if (sessionToken && hasDctClaim(sessionToken)) {
-      if (!tenantReady) setTenantReady(true);
-      return;
-    }
-
     if (tenantReady) return;
     if (isUserLoading) return;
 
@@ -70,7 +69,7 @@ export function TenantGuard({ children }: TenantGuardProps) {
               (tenant as Record<string, unknown>).tenantName as string | undefined;
             setStoredTenant(tenant.tenantId, name ?? tenant.tenantId);
             sessionHistory.markAuthenticated();
-            setTenantReady(true);
+            setSelectedTenantReady(true);
           }
         } catch {
           if (!cancelled) void navigate('/select-tenant', { replace: true });
