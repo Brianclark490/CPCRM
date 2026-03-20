@@ -51,8 +51,10 @@ const mockClientQuery = vi.fn(async (sql: string, params?: unknown[]) => {
   if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') return { rows: [] };
 
   // INSERT INTO tenants ... RETURNING *
+  // Params: $1=id, $2=name, $3=slug, $4=plan, $5=created_at, $6=updated_at
+  // ('active' and '{}' are hardcoded in the SQL, not parameterised)
   if (s.startsWith('INSERT INTO TENANTS')) {
-    const [id, name, slug, , plan, , created_at, updated_at] = params as unknown[];
+    const [id, name, slug, plan, created_at, updated_at] = params as unknown[];
     const row: FakeRow = { id: id as string, name, slug, status: 'active', plan, settings: '{}', created_at, updated_at };
     fakeTenants.set(id as string, row);
     return { rows: [row] };
