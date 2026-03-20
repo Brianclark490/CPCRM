@@ -48,6 +48,17 @@ function buildJwt(payload: Record<string, unknown>): string {
   return `${header}.${body}.signature`;
 }
 
+/** Base mock user satisfying required UserResponse fields. */
+const baseMockUser = {
+  loginIds: ['user@test.com'],
+  userId: 'user1',
+  name: 'Test User',
+  email: 'user@test.com',
+  verifiedEmail: true,
+  verifiedPhone: false,
+  phone: '',
+};
+
 function renderGuard() {
   return render(
     <MemoryRouter initialEntries={['/dashboard']}>
@@ -89,7 +100,7 @@ describe('TenantGuard', () => {
       claims: {},
     });
     vi.mocked(useUser).mockReturnValue({
-      user: { userTenants: [{ tenantId: 'T_ACME' }] },
+      user: { ...baseMockUser, userTenants: [{ tenantId: 'T_ACME' }] },
       isUserLoading: false,
     } as ReturnType<typeof useUser>);
 
@@ -106,7 +117,7 @@ describe('TenantGuard', () => {
       claims: {},
     });
     vi.mocked(useUser).mockReturnValue({
-      user: undefined,
+      user: { ...baseMockUser, userTenants: [] },
       isUserLoading: true,
     } as ReturnType<typeof useUser>);
 
@@ -126,7 +137,7 @@ describe('TenantGuard', () => {
       claims: {},
     });
     vi.mocked(useUser).mockReturnValue({
-      user: { userTenants: [{ tenantId: 'T1', tenantName: 'Acme Corp' }] },
+      user: { ...baseMockUser, userTenants: [{ tenantId: 'T1', tenantName: 'Acme Corp' }] },
       isUserLoading: false,
     } as ReturnType<typeof useUser>);
 
@@ -150,7 +161,7 @@ describe('TenantGuard', () => {
       claims: {},
     });
     vi.mocked(useUser).mockReturnValue({
-      user: { userTenants: [{ tenantId: 'T1' }] },
+      user: { ...baseMockUser, userTenants: [{ tenantId: 'T1' }] },
       isUserLoading: false,
     } as ReturnType<typeof useUser>);
 
@@ -173,6 +184,7 @@ describe('TenantGuard', () => {
     });
     vi.mocked(useUser).mockReturnValue({
       user: {
+        ...baseMockUser,
         userTenants: [
           { tenantId: 'T1', tenantName: 'Acme Corp' },
           { tenantId: 'T2', tenantName: 'Globex Inc' },
@@ -198,7 +210,7 @@ describe('TenantGuard', () => {
       claims: {},
     });
     vi.mocked(useUser).mockReturnValue({
-      user: { userTenants: [] },
+      user: { ...baseMockUser, userTenants: [] },
       isUserLoading: false,
     } as ReturnType<typeof useUser>);
 
@@ -219,7 +231,7 @@ describe('TenantGuard', () => {
       claims: {},
     });
     vi.mocked(useUser).mockReturnValue({
-      user: { userTenants: [{ tenantId: 'T1' }] },
+      user: { ...baseMockUser, userTenants: [{ tenantId: 'T1' }] },
       isUserLoading: false,
     } as ReturnType<typeof useUser>);
 
@@ -242,7 +254,7 @@ describe('TenantGuard', () => {
       claims: {},
     });
     vi.mocked(useUser).mockReturnValue({
-      user: { userTenants: [{ tenantId: 'T_ACME' }] },
+      user: { ...baseMockUser, userTenants: [{ tenantId: 'T_ACME' }] },
       isUserLoading: false,
     } as ReturnType<typeof useUser>);
 
