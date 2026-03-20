@@ -26,6 +26,7 @@ import { TenantPickerPage } from './pages/TenantPickerPage.js';
 import { PlatformTenantsPage } from './pages/PlatformTenantsPage.js';
 import { PlatformTenantDetailPage } from './pages/PlatformTenantDetailPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
+import { TenantGuard } from './components/TenantGuard.js';
 import { AppShell } from './components/AppShell.js';
 
 export function App() {
@@ -46,9 +47,11 @@ export function App() {
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <DashboardPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <DashboardPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -56,9 +59,11 @@ export function App() {
           path="/opportunities"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <OpportunitiesPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <OpportunitiesPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -66,9 +71,11 @@ export function App() {
           path="/opportunities/new"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <CreateOpportunityPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <CreateOpportunityPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -76,9 +83,11 @@ export function App() {
           path="/opportunities/:id"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <OpportunityDetailPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <OpportunityDetailPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -86,9 +95,11 @@ export function App() {
           path="/accounts"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <AccountsPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <AccountsPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -96,9 +107,11 @@ export function App() {
           path="/accounts/new"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <CreateAccountPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <CreateAccountPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -106,9 +119,11 @@ export function App() {
           path="/accounts/:id"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <AccountDetailPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <AccountDetailPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -116,9 +131,11 @@ export function App() {
           path="/admin"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <AdminPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <AdminPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -126,9 +143,11 @@ export function App() {
           path="/admin/objects"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <ObjectManagerPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <ObjectManagerPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -136,9 +155,11 @@ export function App() {
           path="/admin/objects/:id"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <FieldBuilderPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <FieldBuilderPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -146,9 +167,11 @@ export function App() {
           path="/admin/pipelines"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <PipelineManagerPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <PipelineManagerPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -156,9 +179,11 @@ export function App() {
           path="/admin/pipelines/:id"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <PipelineDetailPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <PipelineDetailPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -166,9 +191,11 @@ export function App() {
           path="/admin/users"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <AdminUsersPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <AdminUsersPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -176,9 +203,11 @@ export function App() {
           path="/admin/roles"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <AdminRolesPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <AdminRolesPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -186,9 +215,11 @@ export function App() {
           path="/profile"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <ProfilePage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <ProfilePage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -196,9 +227,11 @@ export function App() {
           path="/settings/profile"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <SettingsProfilePage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <SettingsProfilePage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -206,9 +239,11 @@ export function App() {
           path="/objects/:apiName"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <RecordListPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <RecordListPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -216,9 +251,11 @@ export function App() {
           path="/objects/:apiName/pipeline"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <RecordListPage initialView="pipeline" />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <RecordListPage initialView="pipeline" />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -226,9 +263,11 @@ export function App() {
           path="/objects/:apiName/new"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <RecordCreatePage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <RecordCreatePage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -236,9 +275,11 @@ export function App() {
           path="/objects/:apiName/:id"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <RecordDetailPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <RecordDetailPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -254,9 +295,11 @@ export function App() {
           path="/platform/tenants"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <PlatformTenantsPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <PlatformTenantsPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
@@ -264,9 +307,11 @@ export function App() {
           path="/platform/tenants/:id"
           element={
             <ProtectedRoute>
-              <AppShell>
-                <PlatformTenantDetailPage />
-              </AppShell>
+              <TenantGuard>
+                <AppShell>
+                  <PlatformTenantDetailPage />
+                </AppShell>
+              </TenantGuard>
             </ProtectedRoute>
           }
         />
