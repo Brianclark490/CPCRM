@@ -25,6 +25,7 @@ function makeRecordsResponse(
     id: string;
     name: string;
     fields: Array<{ apiName: string; label: string; fieldType: string; value: unknown }>;
+    ownerName?: string;
   }> = [],
   total = 0,
 ) {
@@ -32,6 +33,8 @@ function makeRecordsResponse(
     data: records.map((r) => ({
       ...r,
       fieldValues: {},
+      ownerId: 'user-1',
+      ownerName: r.ownerName,
       createdAt: '2025-01-01T00:00:00Z',
       updatedAt: '2025-01-01T00:00:00Z',
     })),
@@ -433,5 +436,32 @@ describe('RecordListPage', () => {
     expect(headerTexts).toContain('Industry');
     // There should be no standalone "Name" column header
     expect(headerTexts).not.toContain('Name');
+  });
+
+  it('renders an Owner column with the owner name', async () => {
+    const response = makeRecordsResponse(
+      [
+        {
+          id: 'rec-1',
+          name: 'Acme Corp',
+          fields: [
+            { apiName: 'industry', label: 'Industry', fieldType: 'text', value: 'Technology' },
+          ],
+          ownerName: 'Brian Clark',
+        },
+      ],
+      1,
+    );
+
+    mockFetch(response);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Brian Clark')).toBeInTheDocument();
+    });
+
+    const columnHeaders = screen.getAllByRole('columnheader');
+    const headerTexts = columnHeaders.map((th) => th.textContent);
+    expect(headerTexts).toContain('Owner');
   });
 });

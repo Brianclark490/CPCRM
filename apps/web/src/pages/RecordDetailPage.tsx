@@ -45,6 +45,9 @@ interface RecordDetail {
   name: string;
   fieldValues: Record<string, unknown>;
   ownerId: string;
+  ownerName?: string;
+  updatedBy?: string;
+  updatedByName?: string;
   createdAt: string;
   updatedAt: string;
   fields: RecordField[];
@@ -97,6 +100,31 @@ function formatDate(iso: string | undefined): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+function formatRelativeTime(iso: string | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const now = Date.now();
+  const diffMs = now - d.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) return 'just now';
+  if (diffMin < 60) return `${String(diffMin)} minute${diffMin === 1 ? '' : 's'} ago`;
+  if (diffHr < 24) return `${String(diffHr)} hour${diffHr === 1 ? '' : 's'} ago`;
+  if (diffDay < 7) return `${String(diffDay)} day${diffDay === 1 ? '' : 's'} ago`;
+  return formatDate(iso);
+}
+
+function getInitials(name: string | undefined): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (parts[0][0] ?? '?').toUpperCase();
 }
 
 function groupFieldsBySection(
@@ -695,15 +723,32 @@ export function RecordDetailPage() {
               {sIdx === 0 && (
                 <div className={styles.metaRow}>
                   <div className={styles.metaItem}>
-                    <span className={styles.metaLabel}>Created</span>
+                    <span className={styles.metaLabel}>Owner</span>
                     <span className={styles.metaValue}>
-                      {formatDate(record.createdAt)}
+                      {record.ownerName ? (
+                        <span className={styles.avatarChip}>
+                          <span className={styles.avatarInitials}>{getInitials(record.ownerName)}</span>
+                          {record.ownerName}
+                        </span>
+                      ) : '—'}
                     </span>
                   </div>
                   <div className={styles.metaItem}>
                     <span className={styles.metaLabel}>Last modified</span>
                     <span className={styles.metaValue}>
-                      {formatDate(record.updatedAt)}
+                      {record.updatedByName ? (
+                        <span className={styles.avatarChip}>
+                          <span className={styles.avatarInitials}>{getInitials(record.updatedByName)}</span>
+                          {record.updatedByName}
+                        </span>
+                      ) : null}
+                      {record.updatedByName ? ' · ' : ''}{formatRelativeTime(record.updatedAt)}
+                    </span>
+                  </div>
+                  <div className={styles.metaItem}>
+                    <span className={styles.metaLabel}>Created</span>
+                    <span className={styles.metaValue}>
+                      {formatDate(record.createdAt)}
                     </span>
                   </div>
                 </div>

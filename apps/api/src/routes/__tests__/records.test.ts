@@ -120,7 +120,7 @@ describe('POST /objects/:apiName/records', () => {
 
     await handleCreateRecord(req, res);
 
-    expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', { name: 'Acme Corp' }, 'user-123');
+    expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', { name: 'Acme Corp' }, 'user-123', undefined);
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(expectedRecord);
   });
@@ -191,7 +191,7 @@ describe('POST /objects/:apiName/records', () => {
 
     await handleCreateRecord(req, res);
 
-    expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', {}, 'user-123');
+    expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', {}, 'user-123', undefined);
   });
 });
 
@@ -419,6 +419,7 @@ describe('PUT /objects/:apiName/records/:id', () => {
       VALID_UUID,
       { name: 'Updated Corp' },
       'user-123',
+      undefined,
     );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(updatedRecord);
