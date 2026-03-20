@@ -45,6 +45,17 @@ interface LayoutListItem {
   isDefault: boolean;
 }
 
+interface FieldDefinition {
+  id: string;
+  objectId: string;
+  apiName: string;
+  label: string;
+  fieldType: string;
+  required: boolean;
+  options: Record<string, unknown>;
+  sortOrder: number;
+}
+
 interface LayoutSection {
   label: string;
   fields: LayoutFieldWithMetadata[];
@@ -74,6 +85,33 @@ interface RelationshipSelection {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+
+function fieldDefsToLayoutFields(
+  fieldDefs: FieldDefinition[],
+  objectLabel: string,
+): LayoutSection[] {
+  const fields: LayoutFieldWithMetadata[] = fieldDefs.map((fd, idx) => ({
+    fieldId: fd.id,
+    fieldApiName: fd.apiName,
+    fieldLabel: fd.label,
+    fieldType: fd.fieldType,
+    fieldRequired: fd.required,
+    fieldOptions: fd.options,
+    sortOrder: fd.sortOrder ?? idx,
+    section: 0,
+    sectionLabel: `${objectLabel} details`,
+    width: 'full',
+  }));
+
+  if (fields.length === 0) return [];
+
+  return [
+    {
+      label: `${objectLabel} details`,
+      fields: [...fields].sort((a, b) => a.sortOrder - b.sortOrder),
+    },
+  ];
+}
 
 function groupFieldsBySection(
   layoutFields: LayoutFieldWithMetadata[],
@@ -245,6 +283,7 @@ export function RecordCreatePage() {
         if (cancelled) return;
 
         // Process layouts
+        let layoutResolved = false;
         if (layoutsResponse.ok) {
           const layouts = (await layoutsResponse.json()) as LayoutListItem[];
           const formLayout =
@@ -264,7 +303,27 @@ export function RecordCreatePage() {
                 (await layoutDetailResponse.json()) as LayoutDefinition;
               if (layoutDetail.fields.length > 0) {
                 setLayoutSections(groupFieldsBySection(layoutDetail.fields));
+                layoutResolved = true;
               }
+            }
+          }
+        }
+
+        // Fallback: if no form layout with fields was found, fetch all field
+        // definitions and render them in a single section so the user can
+        // still create a record.
+        if (!layoutResolved && !cancelled) {
+          const fieldsResponse = await fetch(
+            `/api/admin/objects/${obj.id}/fields`,
+            { headers: { Authorization: `Bearer ${sessionToken}` } },
+          );
+
+          if (cancelled) return;
+
+          if (fieldsResponse.ok) {
+            const fieldDefs = (await fieldsResponse.json()) as FieldDefinition[];
+            if (fieldDefs.length > 0) {
+              setLayoutSections(fieldDefsToLayoutFields(fieldDefs, obj.label));
             }
           }
         }
