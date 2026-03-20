@@ -161,6 +161,17 @@
   border-color: var(--color-text-muted);
 }
 
+.profileLink {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  transition: color var(--transition-base);
+}
+
+.profileLink:hover {
+  color: var(--color-text-primary);
+}
+
 /* ── Tab bar ──────────────────────────────────────────────── */
 
 .tabBar {

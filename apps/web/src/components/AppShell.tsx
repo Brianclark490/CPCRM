@@ -271,6 +271,10 @@ export function AppShell({ children }: AppShellProps) {
             )}
           </div>
 
+          <NavLink to="/settings/profile" className={styles.profileLink}>
+            My profile
+          </NavLink>
+
           <button
             type="button"
             className={styles.signOutButton}

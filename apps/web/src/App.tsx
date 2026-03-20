@@ -17,6 +17,9 @@ import { RecordListPage } from './pages/RecordListPage.js';
 import { RecordCreatePage } from './pages/RecordCreatePage.js';
 import { RecordDetailPage } from './pages/RecordDetailPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
+import { SettingsProfilePage } from './pages/SettingsProfilePage.js';
+import { AdminUsersPage } from './pages/AdminUsersPage.js';
+import { AdminRolesPage } from './pages/AdminRolesPage.js';
 import { UnauthorizedPage } from './pages/UnauthorizedPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { TenantPickerPage } from './pages/TenantPickerPage.js';
@@ -160,11 +163,41 @@ export function App() {
           }
         />
         <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <AdminUsersPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/roles"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <AdminRolesPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/profile"
           element={
             <ProtectedRoute>
               <AppShell>
                 <ProfilePage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/profile"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <SettingsProfilePage />
               </AppShell>
             </ProtectedRoute>
           }

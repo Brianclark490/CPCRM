@@ -97,6 +97,20 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: /Admin/ })).toBeInTheDocument();
   });
 
+  it('renders a My profile link in the header', () => {
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const profileLink = screen.getByRole('link', { name: 'My profile' });
+    expect(profileLink).toBeInTheDocument();
+    expect(profileLink).toHaveAttribute('href', '/settings/profile');
+  });
+
   it('renders dynamic object tabs when API returns objects', async () => {
     mockFetchObjects([
       { apiName: 'account', pluralLabel: 'Accounts', icon: '🏢' },

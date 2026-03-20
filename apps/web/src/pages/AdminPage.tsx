@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom';
+import { useSuperAdmin } from '../store/superAdmin.js';
 import styles from './PlaceholderPage.module.css';
 
 export function AdminPage() {
+  const { isSuperAdmin } = useSuperAdmin();
+
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
@@ -29,6 +32,14 @@ export function AdminPage() {
           <Link to="/admin/pipelines">Pipeline Manager</Link> — manage pipelines, stages, and
           qualification gates.
         </p>
+        <p className={styles.emptyText}>
+          <Link to="/admin/users">User Management</Link> — invite, manage, and remove users.
+        </p>
+        {isSuperAdmin && (
+          <p className={styles.emptyText}>
+            <Link to="/admin/roles">Roles</Link> — manage roles and permissions.
+          </p>
+        )}
       </div>
     </div>
   );
