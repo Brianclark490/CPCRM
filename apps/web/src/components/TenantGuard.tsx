@@ -47,6 +47,9 @@ export function TenantGuard({ children }: TenantGuardProps) {
   const tenantReady = tokenHasTenant || selectedTenantReady;
 
   useEffect(() => {
+    // Hard stop: if the token already has a selected tenant (dct), never call selectTenant.
+    if (tokenHasTenant) return;
+
     if (tenantReady) return;
     if (isUserLoading) return;
 
@@ -88,7 +91,7 @@ export function TenantGuard({ children }: TenantGuardProps) {
     return () => {
       cancelled = true;
     };
-  }, [tenantReady, user, isUserLoading, sessionToken, sdk, navigate]);
+  }, [tokenHasTenant, tenantReady, user, isUserLoading, sessionToken, sdk, navigate]);
 
   if (!tenantReady) {
     return <div>Loading...</div>;
