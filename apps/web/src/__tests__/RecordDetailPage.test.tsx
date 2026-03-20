@@ -34,6 +34,9 @@ function makeRecordResponse(overrides: Partial<{
     records: Array<{ id: string; name: string; fieldValues: Record<string, unknown> }>;
   }>;
   fieldValues: Record<string, unknown>;
+  ownerName: string;
+  updatedBy: string;
+  updatedByName: string;
 }> = {}) {
   return {
     id: overrides.id ?? 'rec-1',
@@ -41,6 +44,9 @@ function makeRecordResponse(overrides: Partial<{
     name: overrides.name ?? 'Test Record',
     fieldValues: overrides.fieldValues ?? { industry: 'Technology', email: 'test@example.com' },
     ownerId: 'user-1',
+    ownerName: overrides.ownerName,
+    updatedBy: overrides.updatedBy,
+    updatedByName: overrides.updatedByName,
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-02T00:00:00Z',
     fields: overrides.fields ?? [
@@ -331,6 +337,21 @@ describe('RecordDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Created')).toBeInTheDocument();
       expect(screen.getByText('Last modified')).toBeInTheDocument();
+      expect(screen.getByText('Owner')).toBeInTheDocument();
+    });
+  });
+
+  it('renders owner and last modified by names when provided', async () => {
+    mockFetch(makeRecordResponse({
+      ownerName: 'Brian Clark',
+      updatedBy: 'user-2',
+      updatedByName: 'Lewis Walls',
+    }));
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Brian Clark')).toBeInTheDocument();
+      expect(screen.getByText('Lewis Walls')).toBeInTheDocument();
     });
   });
 

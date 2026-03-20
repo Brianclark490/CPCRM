@@ -116,10 +116,10 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
 
     // INSERT INTO records
     if (s.startsWith('INSERT INTO RECORDS')) {
-      const [id, _tenant_id, object_id, name, field_values, owner_id, created_at, updated_at] =
+      const [id, _tenant_id, object_id, name, field_values, owner_id, owner_name, updated_by, updated_by_name, created_at, updated_at] =
         params as unknown[];
       const row: Record<string, unknown> = {
-        id, object_id, name, field_values: JSON.parse(field_values as string), owner_id, created_at, updated_at,
+        id, object_id, name, field_values: JSON.parse(field_values as string), owner_id, owner_name, updated_by, updated_by_name, created_at, updated_at,
       };
       fakeRecords.set(id as string, row);
       return { rows: [row] };
@@ -158,7 +158,7 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
 
     // UPDATE records
     if (s.startsWith('UPDATE RECORDS')) {
-      const recordId = params![3] as string;
+      const recordId = params![5] as string;
       const existing = fakeRecords.get(recordId);
       if (existing) {
         const updated = {
@@ -166,6 +166,8 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
           name: params![0],
           field_values: JSON.parse(params![1] as string),
           updated_at: params![2],
+          updated_by: params![3],
+          updated_by_name: params![4],
         };
         fakeRecords.set(recordId, updated);
         return { rows: [updated] };

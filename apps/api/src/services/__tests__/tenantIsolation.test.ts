@@ -142,10 +142,10 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
 
     // INSERT INTO records
     if (s.startsWith('INSERT INTO RECORDS')) {
-      const [id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at] = params as unknown[];
+      const [id, tenant_id, object_id, name, field_values, owner_id, owner_name, updated_by, updated_by_name, created_at, updated_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, tenant_id, object_id, name, field_values: typeof field_values === 'string' ? JSON.parse(field_values as string) : field_values,
-        owner_id, created_at, updated_at, pipeline_id: null, current_stage_id: null, stage_entered_at: null,
+        owner_id, owner_name, updated_by, updated_by_name, created_at, updated_at, pipeline_id: null, current_stage_id: null, stage_entered_at: null,
       };
       fakeRecords.set(id as string, row);
       return { rows: [row] };
@@ -183,18 +183,20 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
       return { rowCount: 0, rows: [] };
     }
 
-    // UPDATE records SET ... WHERE id = $4 AND object_id = $5 AND tenant_id = $6
+    // UPDATE records SET ... WHERE id = $6 AND object_id = $7 AND tenant_id = $8
     if (s.startsWith('UPDATE RECORDS')) {
       // Extract last 3 params: id, object_id, tenant_id
       const pArr = params as unknown[];
-      const recordId = pArr[3] as string;
-      const objectId = pArr[4] as string;
-      const tenantId = pArr[5] as string;
+      const recordId = pArr[5] as string;
+      const objectId = pArr[6] as string;
+      const tenantId = pArr[7] as string;
       const match = fakeRecords.get(recordId);
       if (match && match.object_id === objectId && match.tenant_id === tenantId) {
         match.name = pArr[0];
         match.field_values = typeof pArr[1] === 'string' ? JSON.parse(pArr[1] as string) : pArr[1];
         match.updated_at = pArr[2];
+        match.updated_by = pArr[3];
+        match.updated_by_name = pArr[4];
         return { rows: [match] };
       }
       return { rows: [] };

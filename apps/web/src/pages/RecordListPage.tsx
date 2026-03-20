@@ -29,6 +29,8 @@ interface RecordItem {
   name: string;
   fieldValues: Record<string, unknown>;
   fields: RecordField[];
+  ownerId: string;
+  ownerName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -95,6 +97,13 @@ const SortIcon = ({ direction }: { direction: 'asc' | 'desc' | null }) => (
     )}
   </svg>
 );
+
+function getInitials(name: string | undefined): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (parts[0][0] ?? '?').toUpperCase();
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -480,6 +489,9 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
                     </button>
                   </th>
                 ))}
+                <th className={styles.th}>
+                  <span className={styles.sortButton}>Owner</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -531,6 +543,14 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
                         </td>
                       );
                     })}
+                    <td className={styles.td}>
+                      {record.ownerName ? (
+                        <span className={styles.ownerCell}>
+                          <span className={styles.ownerAvatar}>{getInitials(record.ownerName)}</span>
+                          {record.ownerName}
+                        </span>
+                      ) : '—'}
+                    </td>
                   </tr>
                 );
               })}

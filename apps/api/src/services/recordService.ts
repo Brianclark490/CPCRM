@@ -32,6 +32,9 @@ export interface RecordRow {
   name: string;
   fieldValues: Record<string, unknown>;
   ownerId: string;
+  ownerName?: string;
+  updatedBy?: string;
+  updatedByName?: string;
   pipelineId?: string;
   currentStageId?: string;
   stageEnteredAt?: Date;
@@ -105,6 +108,9 @@ function rowToRecord(row: Record<string, unknown>): RecordRow {
     name: row.name as string,
     fieldValues: (row.field_values as Record<string, unknown>) ?? {},
     ownerId: row.owner_id as string,
+    ownerName: (row.owner_name as string) ?? undefined,
+    updatedBy: (row.updated_by as string) ?? undefined,
+    updatedByName: (row.updated_by_name as string) ?? undefined,
     pipelineId: (row.pipeline_id as string) ?? undefined,
     currentStageId: (row.current_stage_id as string) ?? undefined,
     stageEnteredAt: row.stage_entered_at
@@ -403,6 +409,7 @@ export async function createRecord(
   apiName: string,
   fieldValues: Record<string, unknown>,
   ownerId: string,
+  ownerName?: string,
 ): Promise<RecordWithLabels> {
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
@@ -431,10 +438,10 @@ export async function createRecord(
     await client.query('BEGIN');
 
     await client.query(
-      `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, owner_name, updated_by, updated_by_name, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [recordId, tenantId, objectDef.id, name, JSON.stringify(cleanedValues), ownerId, now, now],
+      [recordId, tenantId, objectDef.id, name, JSON.stringify(cleanedValues), ownerId, ownerName ?? null, ownerId, ownerName ?? null, now, now],
     );
 
     // Auto-assign default pipeline if one exists for this object
@@ -652,6 +659,7 @@ export async function updateRecord(
   recordId: string,
   fieldValues: Record<string, unknown>,
   ownerId: string,
+  updatedByName?: string,
 ): Promise<RecordWithLabels> {
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
@@ -689,10 +697,10 @@ export async function updateRecord(
 
   const result = await pool.query(
     `UPDATE records
-     SET name = $1, field_values = $2, updated_at = $3
-     WHERE id = $4 AND object_id = $5 AND tenant_id = $6
+     SET name = $1, field_values = $2, updated_at = $3, updated_by = $4, updated_by_name = $5
+     WHERE id = $6 AND object_id = $7 AND tenant_id = $8
      RETURNING *`,
-    [name, JSON.stringify(mergedValues), now, recordId, objectDef.id, tenantId],
+    [name, JSON.stringify(mergedValues), now, ownerId, updatedByName ?? null, recordId, objectDef.id, tenantId],
   );
 
   logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record updated');

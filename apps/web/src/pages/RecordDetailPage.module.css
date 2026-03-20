@@ -314,6 +314,32 @@
 .metaValue {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* ── Avatar chip ──────────────────────────────────────────── */
+
+.avatarChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.avatarInitials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, rgba(217, 70, 239, 0.2), rgba(99, 102, 241, 0.2));
+  color: var(--color-primary-text);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 
 /* ── Related records ──────────────────────────────────────── */

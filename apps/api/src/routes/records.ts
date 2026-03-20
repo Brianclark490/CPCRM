@@ -41,13 +41,13 @@ export async function handleCreateRecord(
   res: Response,
 ): Promise<void> {
   const { apiName } = req.params as { apiName: string };
-  const { userId: ownerId } = req.user!;
+  const { userId: ownerId, name: ownerName } = req.user!;
 
   const body = req.body as { fieldValues?: Record<string, unknown> };
   const fieldValues = body.fieldValues ?? {};
 
   try {
-    const record = await createRecord(req.user!.tenantId!, apiName, fieldValues, ownerId);
+    const record = await createRecord(req.user!.tenantId!, apiName, fieldValues, ownerId, ownerName);
     res.status(201).json(record);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
@@ -192,7 +192,7 @@ export async function handleUpdateRecord(
   res: Response,
 ): Promise<void> {
   const { apiName, id } = req.params as { apiName: string; id: string };
-  const { userId: ownerId } = req.user!;
+  const { userId: ownerId, name: userName } = req.user!;
 
   if (!UUID_RE.test(id)) {
     res.status(400).json({ error: 'Invalid record ID format', code: 'VALIDATION_ERROR' });
@@ -203,7 +203,7 @@ export async function handleUpdateRecord(
   const fieldValues = body.fieldValues ?? {};
 
   try {
-    const record = await updateRecord(req.user!.tenantId!, apiName, id, fieldValues, ownerId);
+    const record = await updateRecord(req.user!.tenantId!, apiName, id, fieldValues, ownerId, userName);
     res.status(200).json(record);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
