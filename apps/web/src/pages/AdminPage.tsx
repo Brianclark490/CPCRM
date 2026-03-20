@@ -138,7 +138,6 @@ const trailingCards: AdminCard[] = [
     description: 'Company name, branding, defaults',
     to: '/admin/settings',
     icon: <SettingsIcon />,
-    comingSoon: true,
   },
 ];
 

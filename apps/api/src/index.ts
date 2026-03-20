@@ -23,6 +23,7 @@ import { adminStageGatesRouter } from './routes/adminStageGates.js';
 import { pipelineAnalyticsRouter } from './routes/pipelineAnalytics.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
 import { platformTenantsRouter } from './routes/platformTenants.js';
+import { adminTenantSettingsRouter } from './routes/adminTenantSettings.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -63,6 +64,7 @@ app.use('/api/admin/stages/:stageId/gates', adminStageGatesRouter);
 app.use('/api/pipelines', pipelineAnalyticsRouter);
 app.use('/api/admin/users', adminUsersRouter);
 app.use('/api/platform/tenants', platformTenantsRouter);
+app.use('/api/admin/tenant-settings', adminTenantSettingsRouter);
 
 if (config.env === 'production') {
   // In production the CI pipeline copies the built frontend to public/ alongside
