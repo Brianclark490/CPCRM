@@ -84,6 +84,7 @@ describe('TenantGuard', () => {
       selectTenant: mockSelectTenant,
       logout: vi.fn(),
     } as unknown as ReturnType<typeof useDescope>);
+    mockSelectTenant.mockReset();
     mockSelectTenant.mockResolvedValue({ ok: true });
     mockNavigate.mockReset();
     vi.mocked(setStoredTenant).mockReset();
