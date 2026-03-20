@@ -39,10 +39,15 @@ vi.mock('../store/superAdmin.js', () => ({
   useSuperAdmin: vi.fn(),
 }));
 
+vi.mock('../store/useTheme.js', () => ({
+  useTheme: vi.fn(),
+}));
+
 const { useUser, useDescope, useSession } = await import('@descope/react-sdk');
 const { sessionHistory } = await import('../store/sessionHistory.js');
 const { useTenant, clearStoredTenant } = await import('../store/tenant.js');
 const { useSuperAdmin } = await import('../store/superAdmin.js');
+const { useTheme } = await import('../store/useTheme.js');
 
 function mockFetchObjects(objects: Array<{ id?: string; apiName: string; pluralLabel: string; icon?: string }> = []) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -54,7 +59,7 @@ function mockFetchObjects(objects: Array<{ id?: string; apiName: string; pluralL
 describe('AppShell', () => {
   beforeEach(() => {
     vi.mocked(useUser).mockReturnValue(
-      { user: null, isUserLoading: false } as unknown as ReturnType<typeof useUser>,
+      { user: { name: 'Test User', email: 'test@example.com' }, isUserLoading: false } as unknown as ReturnType<typeof useUser>,
     );
     vi.mocked(useDescope).mockReturnValue(
       { logout: mockLogout } as unknown as ReturnType<typeof useDescope>,
@@ -67,6 +72,7 @@ describe('AppShell', () => {
     });
     vi.mocked(useTenant).mockReturnValue({ tenantId: null, tenantName: null });
     vi.mocked(useSuperAdmin).mockReturnValue({ isSuperAdmin: false, loading: false });
+    vi.mocked(useTheme).mockReturnValue({ theme: 'dark', toggle: vi.fn() });
     mockLogout.mockResolvedValue(undefined);
     mockNavigate.mockReset();
     mockFetchObjects();
@@ -84,7 +90,7 @@ describe('AppShell', () => {
     expect(screen.getByText('CPCRM')).toBeInTheDocument();
   });
 
-  it('renders navigation links for Dashboard and Admin', () => {
+  it('renders the Dashboard navigation link in the top bar', () => {
     render(
       <MemoryRouter>
         <AppShell>
@@ -94,10 +100,9 @@ describe('AppShell', () => {
     );
 
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Admin/ })).toBeInTheDocument();
   });
 
-  it('renders a My profile link in the header', () => {
+  it('renders Admin links inside the profile dropdown', async () => {
     render(
       <MemoryRouter>
         <AppShell>
@@ -106,7 +111,30 @@ describe('AppShell', () => {
       </MemoryRouter>,
     );
 
-    const profileLink = screen.getByRole('link', { name: 'My profile' });
+    // Admin links not visible until dropdown is opened
+    expect(screen.queryByRole('menuitem', { name: /Object manager/ })).not.toBeInTheDocument();
+
+    // Open the profile dropdown
+    await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
+
+    // Admin links visible in the dropdown
+    expect(screen.getByRole('menuitem', { name: /Object manager/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Pipeline manager/ })).toBeInTheDocument();
+  });
+
+  it('renders My profile link inside the profile dropdown', async () => {
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    // Open the profile dropdown
+    await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
+
+    const profileLink = screen.getByRole('menuitem', { name: /My profile/ });
     expect(profileLink).toBeInTheDocument();
     expect(profileLink).toHaveAttribute('href', '/settings/profile');
   });
@@ -163,7 +191,7 @@ describe('AppShell', () => {
     expect(screen.getByText('Page content')).toBeInTheDocument();
   });
 
-  it('shows the authenticated user name in the header', () => {
+  it('shows the authenticated user name in the profile dropdown', async () => {
     vi.mocked(useUser).mockReturnValue({
       user: { name: 'Alice', email: 'alice@example.com' },
       isUserLoading: false,
@@ -177,10 +205,13 @@ describe('AppShell', () => {
       </MemoryRouter>,
     );
 
+    // Open the profile dropdown
+    await userEvent.click(screen.getByRole('button', { name: /User menu for Alice/ }));
+
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
-  it('falls back to email when user has no name', () => {
+  it('falls back to email when user has no name', async () => {
     vi.mocked(useUser).mockReturnValue({
       user: { name: undefined, email: 'alice@example.com' },
       isUserLoading: false,
@@ -194,6 +225,9 @@ describe('AppShell', () => {
       </MemoryRouter>,
     );
 
+    // Open the profile dropdown — the avatar label uses the email fallback
+    await userEvent.click(screen.getByRole('button', { name: /User menu for alice@example.com/ }));
+
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
   });
 
@@ -206,7 +240,9 @@ describe('AppShell', () => {
       </MemoryRouter>,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    // Open the profile dropdown and click Sign out
+    await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /Sign out/ }));
 
     expect(mockLogout).toHaveBeenCalled();
     expect(sessionHistory.clearAuthenticated).toHaveBeenCalled();
@@ -323,7 +359,7 @@ describe('AppShell', () => {
     expect(badge).toHaveAttribute('href', '/select-tenant');
   });
 
-  it('shows Platform link when user is a super-admin', () => {
+  it('shows Platform link in the profile dropdown when user is a super-admin', async () => {
     vi.mocked(useSuperAdmin).mockReturnValue({ isSuperAdmin: true, loading: false });
 
     render(
@@ -334,11 +370,14 @@ describe('AppShell', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: 'Platform' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Platform' })).toHaveAttribute('href', '/platform/tenants');
+    // Open the profile dropdown
+    await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
+
+    expect(screen.getByRole('menuitem', { name: /Tenant management/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Tenant management/ })).toHaveAttribute('href', '/platform/tenants');
   });
 
-  it('does not show Platform link for non-super-admins', () => {
+  it('does not show Platform link for non-super-admins', async () => {
     vi.mocked(useSuperAdmin).mockReturnValue({ isSuperAdmin: false, loading: false });
 
     render(
@@ -349,6 +388,9 @@ describe('AppShell', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByRole('link', { name: 'Platform' })).not.toBeInTheDocument();
+    // Open the profile dropdown
+    await userEvent.click(screen.getByRole('button', { name: /User menu/ }));
+
+    expect(screen.queryByRole('menuitem', { name: /Tenant management/ })).not.toBeInTheDocument();
   });
 });

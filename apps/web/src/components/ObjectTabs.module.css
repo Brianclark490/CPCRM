@@ -1,0 +1,65 @@
+/* ============================================================
+   ObjectTabs — Secondary tab bar for CRM object navigation
+   ============================================================ */
+
+.tabBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-5);
+  background-color: var(--bg-page);
+  border-bottom: 0.5px solid var(--border-default);
+  overflow-x: auto;
+}
+
+.tabList {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  border-bottom: 2px solid transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    color var(--transition-base),
+    border-color var(--transition-base);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tabActive {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+  font-weight: 500;
+}
+
+.tabIcon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
+.tabDragging {
+  opacity: 0.4;
+}
+
+.tabDragOver {
+  border-bottom-color: var(--accent);
+  background-color: var(--accent-soft);
+}
