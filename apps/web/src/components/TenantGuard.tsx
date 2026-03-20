@@ -42,18 +42,18 @@ export function TenantGuard({ children }: TenantGuardProps) {
   );
 
   useEffect(() => {
+    // If token already has a tenant, we are done and must not select again.
+    if (sessionToken && hasDctClaim(sessionToken)) {
+      if (!tenantReady) setTenantReady(true);
+      return;
+    }
+
     if (tenantReady) return;
     if (isUserLoading) return;
 
     let cancelled = false;
 
     async function ensureTenant() {
-      // Re-check in case the token was refreshed between renders
-      if (sessionToken && hasDctClaim(sessionToken)) {
-        if (!cancelled) setTenantReady(true);
-        return;
-      }
-
       const tenants = user?.userTenants ?? [];
 
       if (tenants.length === 0) {
