@@ -149,6 +149,9 @@ export function FieldRenderer({ fieldType, value }: FieldRendererProps) {
       );
     }
 
+    case 'formula':
+      return <span>{Number(value).toLocaleString()}</span>;
+
     default:
       return <span>{String(value)}</span>;
   }

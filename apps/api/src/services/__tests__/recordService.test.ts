@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   validateFieldValue,
   validateFieldValues,
+  evaluateFormula,
   createRecord,
   listRecords,
   getRecord,
@@ -436,6 +437,15 @@ describe('validateFieldValue', () => {
       expect(validateFieldValue(fd, ['a', 'c'])).toContain("Field 'Tags' contains invalid choice");
     });
   });
+
+  describe('formula', () => {
+    it('returns null for any value (formula fields skip validation)', () => {
+      const fd = makeFieldDef({ fieldType: 'formula', options: { expression: '{a} + {b}' } });
+      expect(validateFieldValue(fd, 42)).toBeNull();
+      expect(validateFieldValue(fd, 'anything')).toBeNull();
+      expect(validateFieldValue(fd, null)).toBeNull();
+    });
+  });
 });
 
 // ─── Tests: validateFieldValues ─────────────────────────────────────────────
@@ -474,6 +484,89 @@ describe('validateFieldValues', () => {
     expect(() =>
       validateFieldValues({ name: 'Test', email: 'not-an-email' }, fieldDefs, false),
     ).toThrow("Field 'Email' must be a valid email");
+  });
+
+  it('skips required check for formula fields', () => {
+    const defsWithFormula: FieldDefinitionRow[] = [
+      makeFieldDef({ apiName: 'name', label: 'Name', fieldType: 'text', required: true }),
+      makeFieldDef({ apiName: 'win_rate', label: 'Win Rate', fieldType: 'formula', required: true, options: { expression: '{wins} / {total}' } }),
+    ];
+    expect(() =>
+      validateFieldValues({ name: 'Test' }, defsWithFormula, false),
+    ).not.toThrow();
+  });
+});
+
+// ─── Tests: evaluateFormula ─────────────────────────────────────────────────
+
+describe('evaluateFormula', () => {
+  it('evaluates a simple addition', () => {
+    expect(evaluateFormula('{a} + {b}', { a: 10, b: 20 })).toBe(30);
+  });
+
+  it('evaluates a simple subtraction', () => {
+    expect(evaluateFormula('{a} - {b}', { a: 50, b: 20 })).toBe(30);
+  });
+
+  it('evaluates multiplication', () => {
+    expect(evaluateFormula('{price} * {quantity}', { price: 10.5, quantity: 3 })).toBeCloseTo(31.5);
+  });
+
+  it('evaluates division', () => {
+    expect(evaluateFormula('{a} / {b}', { a: 100, b: 4 })).toBe(25);
+  });
+
+  it('evaluates percentage calculation', () => {
+    const result = evaluateFormula('({won} / {total}) * 100', { won: 30, total: 100 });
+    expect(result).toBe(30);
+  });
+
+  it('handles operator precedence correctly', () => {
+    // 2 + 3 * 4 = 14 (not 20)
+    expect(evaluateFormula('{a} + {b} * {c}', { a: 2, b: 3, c: 4 })).toBe(14);
+  });
+
+  it('handles parentheses correctly', () => {
+    // (2 + 3) * 4 = 20
+    expect(evaluateFormula('({a} + {b}) * {c}', { a: 2, b: 3, c: 4 })).toBe(20);
+  });
+
+  it('handles numeric literals', () => {
+    expect(evaluateFormula('{price} * 1.15', { price: 100 })).toBeCloseTo(115);
+  });
+
+  it('returns null when a referenced field is missing', () => {
+    expect(evaluateFormula('{a} + {b}', { a: 10 })).toBeNull();
+  });
+
+  it('returns null when a referenced field is empty string', () => {
+    expect(evaluateFormula('{a} + {b}', { a: 10, b: '' })).toBeNull();
+  });
+
+  it('returns null when a referenced field is non-numeric', () => {
+    expect(evaluateFormula('{a} + {b}', { a: 10, b: 'hello' })).toBeNull();
+  });
+
+  it('returns null for division by zero', () => {
+    expect(evaluateFormula('{a} / {b}', { a: 10, b: 0 })).toBeNull();
+  });
+
+  it('handles negative numbers from fields', () => {
+    expect(evaluateFormula('{a} + {b}', { a: -5, b: 10 })).toBe(5);
+  });
+
+  it('handles unary negation', () => {
+    expect(evaluateFormula('-{a} + {b}', { a: 5, b: 10 })).toBe(5);
+  });
+
+  it('handles complex nested expression', () => {
+    // (10 + 20) / (5 * 2) = 30 / 10 = 3
+    const result = evaluateFormula('({a} + {b}) / ({c} * {d})', { a: 10, b: 20, c: 5, d: 2 });
+    expect(result).toBe(3);
+  });
+
+  it('handles string numeric values from field_values', () => {
+    expect(evaluateFormula('{a} + {b}', { a: '10', b: '20' })).toBe(30);
   });
 });
 

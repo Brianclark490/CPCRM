@@ -9,6 +9,7 @@ import {
   validateFieldLabel,
   validateFieldType,
   validateFieldOptions,
+  validateFormulaExpression,
 } from '../fieldDefinitionService.js';
 
 const TENANT_ID = 'test-tenant-001';
@@ -289,6 +290,7 @@ describe('validateFieldType', () => {
     const validTypes = [
       'text', 'textarea', 'number', 'currency', 'date', 'datetime',
       'email', 'phone', 'url', 'boolean', 'dropdown', 'multi_select',
+      'formula',
     ];
     for (const type of validTypes) {
       expect(validateFieldType(type)).toBeNull();
@@ -375,6 +377,62 @@ describe('validateFieldOptions', () => {
 
   it('returns null for date with no options', () => {
     expect(validateFieldOptions('date', undefined)).toBeNull();
+  });
+
+  it('returns null for formula with valid expression', () => {
+    expect(validateFieldOptions('formula', { expression: '({amount_won} / {total_value}) * 100' })).toBeNull();
+  });
+
+  it('returns null for formula with expression and output_type', () => {
+    expect(validateFieldOptions('formula', { expression: '{price} * {quantity}', output_type: 'currency', precision: 2 })).toBeNull();
+  });
+
+  it('returns error for formula without expression', () => {
+    expect(validateFieldOptions('formula', undefined)).toBe('options.expression is required for formula fields');
+  });
+
+  it('returns error for formula with empty options', () => {
+    expect(validateFieldOptions('formula', {})).toBe('options.expression is required for formula fields');
+  });
+
+  it('returns error for formula with invalid output_type', () => {
+    expect(validateFieldOptions('formula', { expression: '{a} + {b}', output_type: 'invalid' })).toMatch(/output_type must be one of/);
+  });
+
+  it('returns error for formula with non-number precision', () => {
+    expect(validateFieldOptions('formula', { expression: '{a} + {b}', precision: 'abc' })).toBe('options.precision must be a number');
+  });
+});
+
+// ─── validateFormulaExpression ───────────────────────────────────────────────
+
+describe('validateFormulaExpression', () => {
+  it('returns null for valid simple expression', () => {
+    expect(validateFormulaExpression('{amount_won} + {amount_lost}')).toBeNull();
+  });
+
+  it('returns null for valid percentage expression', () => {
+    expect(validateFormulaExpression('({amount_won} / {total_value}) * 100')).toBeNull();
+  });
+
+  it('returns null for expression with numbers', () => {
+    expect(validateFormulaExpression('{price} * 1.15')).toBeNull();
+  });
+
+  it('returns error for empty expression', () => {
+    expect(validateFormulaExpression('')).toBe('options.expression is required for formula fields');
+  });
+
+  it('returns error for expression with invalid characters', () => {
+    expect(validateFormulaExpression('{a} + eval("x")')).toMatch(/invalid characters/);
+  });
+
+  it('returns error for expression with unbalanced parentheses', () => {
+    expect(validateFormulaExpression('({a} + {b}')).toBe('options.expression has unbalanced parentheses');
+  });
+
+  it('returns error for expression exceeding 500 characters', () => {
+    expect(validateFormulaExpression('a'.repeat(501))).toBe('options.expression must be 500 characters or fewer');
   });
 });
 

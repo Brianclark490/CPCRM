@@ -182,4 +182,18 @@ describe('FieldRenderer', () => {
       expect(screen.getByText('Fallback value')).toBeInTheDocument();
     });
   });
+
+  // ─── formula ──────────────────────────────────────────────────────────────
+
+  describe('formula field type', () => {
+    it('renders a formatted number for formula fields', () => {
+      render(<FieldRenderer fieldType="formula" value={75} />);
+      expect(screen.getByText('75')).toBeInTheDocument();
+    });
+
+    it('renders a dash for null formula value', () => {
+      render(<FieldRenderer fieldType="formula" value={null} />);
+      expect(screen.getByText('-')).toBeInTheDocument();
+    });
+  });
 });

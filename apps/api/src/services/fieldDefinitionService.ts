@@ -54,6 +54,7 @@ const ALLOWED_FIELD_TYPES = new Set([
   'boolean',
   'dropdown',
   'multi_select',
+  'formula',
 ]);
 
 const SNAKE_CASE_RE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
@@ -140,6 +141,36 @@ export function validateFieldType(fieldType: unknown): string | null {
   return null;
 }
 
+const ALLOWED_FORMULA_OUTPUT_TYPES = new Set(['number', 'currency', 'text']);
+
+/**
+ * Validates that a formula expression only contains safe tokens:
+ * field references ({field_name}), numbers, arithmetic operators, parentheses, and whitespace.
+ */
+export function validateFormulaExpression(expression: string): string | null {
+  if (typeof expression !== 'string' || expression.trim().length === 0) {
+    return 'options.expression is required for formula fields';
+  }
+  if (expression.length > 500) {
+    return 'options.expression must be 500 characters or fewer';
+  }
+  // Remove field references and validate remaining tokens
+  const withoutFields = expression.replace(/\{[a-z][a-z0-9]*(_[a-z0-9]+)*\}/g, '0');
+  // Only allow: digits, decimal points, arithmetic operators, parentheses, whitespace
+  if (!/^[\d\s.+\-*/()]+$/.test(withoutFields)) {
+    return 'options.expression contains invalid characters. Use field references like {field_name}, numbers, and operators (+, -, *, /)';
+  }
+  // Check for balanced parentheses
+  let depth = 0;
+  for (const ch of withoutFields) {
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (depth < 0) return 'options.expression has unbalanced parentheses';
+  }
+  if (depth !== 0) return 'options.expression has unbalanced parentheses';
+  return null;
+}
+
 export function validateFieldOptions(
   fieldType: string,
   options: Record<string, unknown> | undefined,
@@ -148,12 +179,18 @@ export function validateFieldOptions(
     if (fieldType === 'dropdown' || fieldType === 'multi_select') {
       return `options.choices is required for ${fieldType} fields`;
     }
+    if (fieldType === 'formula') {
+      return 'options.expression is required for formula fields';
+    }
     return null;
   }
 
   if (Object.keys(options).length === 0) {
     if (fieldType === 'dropdown' || fieldType === 'multi_select') {
       return `options.choices must be a non-empty array of strings for ${fieldType} fields`;
+    }
+    if (fieldType === 'formula') {
+      return 'options.expression is required for formula fields';
     }
     return null;
   }
@@ -193,6 +230,22 @@ export function validateFieldOptions(
       const { max_length } = options as { max_length?: unknown };
       if (max_length !== undefined && typeof max_length !== 'number') {
         return 'options.max_length must be a number';
+      }
+      break;
+    }
+    case 'formula': {
+      const { expression, output_type, precision } = options as {
+        expression?: unknown;
+        output_type?: unknown;
+        precision?: unknown;
+      };
+      const exprError = validateFormulaExpression(expression as string);
+      if (exprError) return exprError;
+      if (output_type !== undefined && (typeof output_type !== 'string' || !ALLOWED_FORMULA_OUTPUT_TYPES.has(output_type))) {
+        return `options.output_type must be one of: ${[...ALLOWED_FORMULA_OUTPUT_TYPES].join(', ')}`;
+      }
+      if (precision !== undefined && typeof precision !== 'number') {
+        return 'options.precision must be a number';
       }
       break;
     }

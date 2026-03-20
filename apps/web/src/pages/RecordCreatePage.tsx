@@ -106,6 +106,9 @@ function validateField(
   field: LayoutFieldWithMetadata,
   value: unknown,
 ): string | null {
+  // Formula fields are computed — skip validation
+  if (field.fieldType === 'formula') return null;
+
   const isEmpty =
     value === undefined || value === null || value === '';
 
