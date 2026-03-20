@@ -4,8 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { SettingsProfilePage } from '../pages/SettingsProfilePage.js';
 
 vi.mock('@descope/react-sdk', () => ({
-  UserProfile: ({ widgetId }: { widgetId: string }) => (
-    <div data-testid="user-profile-widget" data-widget-id={widgetId} />
+  UserProfile: ({ widgetId, theme }: { widgetId: string; theme?: string }) => (
+    <div data-testid="user-profile-widget" data-widget-id={widgetId} data-theme={theme} />
   ),
 }));
 
@@ -42,5 +42,15 @@ describe('SettingsProfilePage', () => {
     const widget = screen.getByTestId('user-profile-widget');
     expect(widget).toBeInTheDocument();
     expect(widget).toHaveAttribute('data-widget-id', 'user-profile-widget');
+  });
+
+  it('passes theme="dark" to the UserProfile widget', () => {
+    render(
+      <MemoryRouter>
+        <SettingsProfilePage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('user-profile-widget')).toHaveAttribute('data-theme', 'dark');
   });
 });

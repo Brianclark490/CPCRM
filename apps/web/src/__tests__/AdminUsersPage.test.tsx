@@ -5,8 +5,8 @@ import { AdminUsersPage } from '../pages/AdminUsersPage.js';
 
 vi.mock('@descope/react-sdk', () => ({
   useSession: vi.fn(),
-  UserManagement: ({ tenant, widgetId }: { tenant: string; widgetId: string }) => (
-    <div data-testid="user-management-widget" data-tenant={tenant} data-widget-id={widgetId} />
+  UserManagement: ({ tenant, widgetId, theme }: { tenant: string; widgetId: string; theme?: string }) => (
+    <div data-testid="user-management-widget" data-tenant={tenant} data-widget-id={widgetId} data-theme={theme} />
   ),
 }));
 
@@ -54,6 +54,16 @@ describe('AdminUsersPage', () => {
     expect(widget).toBeInTheDocument();
     expect(widget).toHaveAttribute('data-tenant', 'T_ACME');
     expect(widget).toHaveAttribute('data-widget-id', 'user-management-widget');
+  });
+
+  it('passes theme="dark" to the UserManagement widget', () => {
+    render(
+      <MemoryRouter>
+        <AdminUsersPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('user-management-widget')).toHaveAttribute('data-theme', 'dark');
   });
 
   it('shows a message when no tenant is selected', () => {

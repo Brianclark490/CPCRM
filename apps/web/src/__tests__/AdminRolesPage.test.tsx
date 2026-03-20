@@ -5,8 +5,8 @@ import { AdminRolesPage } from '../pages/AdminRolesPage.js';
 
 vi.mock('@descope/react-sdk', () => ({
   useSession: vi.fn(),
-  RoleManagement: ({ tenant, widgetId }: { tenant: string; widgetId: string }) => (
-    <div data-testid="role-management-widget" data-tenant={tenant} data-widget-id={widgetId} />
+  RoleManagement: ({ tenant, widgetId, theme }: { tenant: string; widgetId: string; theme?: string }) => (
+    <div data-testid="role-management-widget" data-tenant={tenant} data-widget-id={widgetId} data-theme={theme} />
   ),
 }));
 
@@ -54,6 +54,16 @@ describe('AdminRolesPage', () => {
     expect(widget).toBeInTheDocument();
     expect(widget).toHaveAttribute('data-tenant', 'T_ACME');
     expect(widget).toHaveAttribute('data-widget-id', 'role-management-widget');
+  });
+
+  it('passes theme="dark" to the RoleManagement widget', () => {
+    render(
+      <MemoryRouter>
+        <AdminRolesPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('role-management-widget')).toHaveAttribute('data-theme', 'dark');
   });
 
   it('shows a message when no tenant is selected', () => {

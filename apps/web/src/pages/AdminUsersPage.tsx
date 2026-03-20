@@ -13,7 +13,7 @@ export function AdminUsersPage() {
       </div>
       <div className={styles.widgetContainer}>
         {tenantId ? (
-          <UserManagement tenant={tenantId} widgetId="user-management-widget" />
+          <UserManagement tenant={tenantId} widgetId="user-management-widget" theme="dark" />
         ) : (
           <p>No organisation selected. Please select an organisation first.</p>
         )}
