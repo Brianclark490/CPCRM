@@ -100,8 +100,8 @@ export async function handleCreateAccount(
 /**
  * GET /accounts
  *
- * Returns a paginated list of accounts within the authenticated user's tenant.
- * Supports searching by name and email.
+ * Returns a paginated list of accounts owned by the authenticated user within
+ * their tenant. Supports searching by name and email.
  *
  * Requires: valid Bearer token (requireAuth) + resolved tenantId (requireTenant).
  *
@@ -146,7 +146,7 @@ export async function handleListAccounts(
  * GET /accounts/:id
  *
  * Returns a single account by ID with linked opportunities.
- * Scoped to the authenticated user's tenant.
+ * Scoped to the authenticated user's tenant and ownership.
  *
  * Requires: valid Bearer token (requireAuth) + resolved tenantId (requireTenant).
  *
@@ -154,7 +154,7 @@ export async function handleListAccounts(
  *   200  – Account object with opportunities array
  *   401  – missing or invalid Bearer token
  *   403  – authenticated but no active tenant context
- *   404  – account not found within the tenant
+ *   404  – account not found or not owned by the authenticated user
  *   500  – unexpected server error
  */
 export async function handleGetAccount(
@@ -278,7 +278,7 @@ export async function handleUpdateAccount(
 /**
  * DELETE /accounts/:id
  *
- * Deletes an account by ID, scoped to the authenticated user's tenant.
+ * Deletes an account by ID, scoped to the authenticated user's tenant and ownership.
  *
  * Requires: valid Bearer token (requireAuth) + resolved tenantId (requireTenant).
  *
@@ -286,7 +286,7 @@ export async function handleUpdateAccount(
  *   204  – account deleted successfully
  *   401  – missing or invalid Bearer token
  *   403  – authenticated but no active tenant context
- *   404  – account not found within the tenant
+ *   404  – account not found or not owned by the authenticated user
  *   500  – unexpected server error
  */
 export async function handleDeleteAccount(

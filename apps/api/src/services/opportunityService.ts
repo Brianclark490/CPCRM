@@ -136,7 +136,8 @@ export function validateAccountId(accountId: unknown): string | null {
 }
 
 /**
- * Checks that the given account exists within the specified tenant.
+ * Checks that the given account exists within the specified tenant and
+ * is owned by the specified user.
  *
  * Returns an error message string, or null if the account is valid.
  */
@@ -146,11 +147,11 @@ export async function validateAccountExists(
   ownerId: string,
 ): Promise<string | null> {
   const result = await pool.query(
-    'SELECT 1 FROM accounts WHERE id = $1 AND tenant_id = $2',
-    [accountId, tenantId],
+    'SELECT 1 FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3',
+    [accountId, tenantId, ownerId],
   );
   if (result.rows.length === 0) {
-    return 'Account not found';
+    return 'Account not found or does not belong to you';
   }
   return null;
 }

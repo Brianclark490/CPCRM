@@ -37,14 +37,14 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
     }
 
     if (s.startsWith('SELECT COUNT(*)')) {
-      const [tenant_id] = params as string[];
+      const [tenant_id, owner_id] = params as string[];
       const matching = [...fakeRows.values()].filter(
-        (r) => r.tenant_id === tenant_id,
+        (r) => r.tenant_id === tenant_id && r.owner_id === owner_id,
       );
 
       // Handle search filter if present
-      if (params && params.length > 1 && typeof params[1] === 'string' && (params[1] as string).startsWith('%')) {
-        const searchTerm = (params[1] as string).replace(/%/g, '').toLowerCase();
+      if (params && params.length > 2) {
+        const searchTerm = (params[2] as string).replace(/%/g, '').toLowerCase();
         const filtered = matching.filter(
           (r) =>
             (r.name as string).toLowerCase().includes(searchTerm) ||
@@ -57,34 +57,34 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
     }
 
     if (s.includes('FROM ACCOUNTS') && s.includes('LIMIT') && s.includes('OFFSET')) {
-      const [tenant_id] = params as string[];
+      const [tenant_id, owner_id] = params as string[];
       let matching = [...fakeRows.values()].filter(
-        (r) => r.tenant_id === tenant_id,
+        (r) => r.tenant_id === tenant_id && r.owner_id === owner_id,
       );
 
       // Handle search filter
-      if (params && params.length > 1 && typeof params[1] === 'string' && (params[1] as string).startsWith('%')) {
-        const searchTerm = (params[1] as string).replace(/%/g, '').toLowerCase();
+      if (params && params.length > 2 && typeof params[2] === 'string' && (params[2] as string).startsWith('%')) {
+        const searchTerm = (params[2] as string).replace(/%/g, '').toLowerCase();
         matching = matching.filter(
           (r) =>
             (r.name as string).toLowerCase().includes(searchTerm) ||
             ((r.email as string | null) ?? '').toLowerCase().includes(searchTerm),
         );
-        const limit = params[2] as number;
-        const offset = params[3] as number;
+        const limit = params[3] as number;
+        const offset = params[4] as number;
         return { rows: matching.slice(offset, offset + limit).map((r) => ({ ...r, opportunity_count: '0' })) };
       }
 
-      // No search — params: [tenant_id, limit, offset]
-      const limit = params![1] as number;
-      const offset = params![2] as number;
+      // No search — params: [tenant_id, owner_id, limit, offset]
+      const limit = params![2] as number;
+      const offset = params![3] as number;
       return { rows: matching.slice(offset, offset + limit).map((r) => ({ ...r, opportunity_count: '0' })) };
     }
 
-    if (s.startsWith('SELECT * FROM ACCOUNTS WHERE ID = $1 AND TENANT_ID = $2')) {
-      const [id, tenant_id] = params as string[];
+    if (s.startsWith('SELECT * FROM ACCOUNTS WHERE ID = $1 AND TENANT_ID = $2 AND OWNER_ID = $3')) {
+      const [id, tenant_id, owner_id] = params as string[];
       const row = fakeRows.get(id);
-      if (row && row.tenant_id === tenant_id) return { rows: [row] };
+      if (row && row.tenant_id === tenant_id && row.owner_id === owner_id) return { rows: [row] };
       return { rows: [] };
     }
 
@@ -95,7 +95,7 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
 
     if (s.startsWith('UPDATE ACCOUNTS')) {
       // Find the account to update
-      const idIdx = params!.length - 2;
+      const idIdx = params!.length - 3;
       const id = params![idIdx] as string;
       const existing = fakeRows.get(id);
       if (!existing) return { rows: [] };
@@ -105,9 +105,9 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
     }
 
     if (s.startsWith('DELETE FROM ACCOUNTS')) {
-      const [id, tenant_id] = params as string[];
+      const [id, tenant_id, owner_id] = params as string[];
       const row = fakeRows.get(id);
-      if (row && row.tenant_id === tenant_id) {
+      if (row && row.tenant_id === tenant_id && row.owner_id === owner_id) {
         fakeRows.delete(id);
         return { rowCount: 1 };
       }
