@@ -13,7 +13,7 @@ export function AdminRolesPage() {
       </div>
       <div className={styles.widgetContainer}>
         {tenantId ? (
-          <RoleManagement tenant={tenantId} widgetId="role-management-widget" />
+          <RoleManagement tenant={tenantId} widgetId="role-management-widget" theme="dark" />
         ) : (
           <p>No organisation selected. Please select an organisation first.</p>
         )}

@@ -41,7 +41,7 @@ export function LoginPage() {
             Your session has expired. Please sign in again.
           </p>
         )}
-        <Descope flowId="sign-up-or-in" onSuccess={handleSuccess} onError={handleError} />
+        <Descope flowId="sign-up-or-in" theme="dark" onSuccess={handleSuccess} onError={handleError} />
       </div>
     </div>
   );

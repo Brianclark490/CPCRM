@@ -16,14 +16,16 @@ vi.mock('react-router-dom', async (importOriginal) => {
 vi.mock('@descope/react-sdk', () => ({
   Descope: ({
     flowId,
+    theme,
     onSuccess,
     onError,
   }: {
     flowId: string;
+    theme?: string;
     onSuccess: () => void;
     onError: (e: CustomEvent) => void;
   }) => (
-    <div>
+    <div data-testid="descope-widget" data-theme={theme}>
       <span data-testid="descope-flow-id">{flowId}</span>
       <button onClick={onSuccess}>Simulate success</button>
       <button onClick={() => onError(new CustomEvent('error', { detail: 'login failed' }))}>
@@ -65,6 +67,16 @@ describe('LoginPage', () => {
 
     expect(screen.getByText('Sign in to CPCRM')).toBeInTheDocument();
     expect(screen.getByTestId('descope-flow-id')).toHaveTextContent('sign-up-or-in');
+  });
+
+  it('passes theme="dark" to the Descope widget', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('descope-widget')).toHaveAttribute('data-theme', 'dark');
   });
 
   it('marks session as authenticated and navigates to /select-tenant on successful login', () => {

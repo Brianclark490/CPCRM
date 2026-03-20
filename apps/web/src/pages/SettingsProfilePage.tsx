@@ -9,7 +9,7 @@ export function SettingsProfilePage() {
         <p className={styles.pageSubtitle}>Manage your personal details and preferences</p>
       </div>
       <div className={styles.widgetContainer}>
-        <UserProfile widgetId="user-profile-widget" />
+        <UserProfile widgetId="user-profile-widget" theme="dark" />
       </div>
     </div>
   );
