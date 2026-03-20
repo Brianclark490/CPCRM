@@ -1,0 +1,98 @@
+/* ============================================================
+   AdminPage — Navigation card grid
+   ============================================================ */
+
+.page {
+  width: 100%;
+}
+
+/* ── Page header ──────────────────────────────────────────── */
+
+.pageHeader {
+  margin-bottom: var(--space-8);
+}
+
+.pageTitle {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.025em;
+  margin-bottom: var(--space-1);
+}
+
+.pageSubtitle {
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}
+
+/* ── Card grid ────────────────────────────────────────────── */
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+}
+
+@media (max-width: 640px) {
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Navigation card ──────────────────────────────────────── */
+
+.navCard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  background-color: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  text-decoration: none;
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.navCard:hover {
+  border-color: rgba(217, 70, 239, 0.35);
+  box-shadow: var(--shadow-glow);
+}
+
+.navCardIcon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(217, 70, 239, 0.15), rgba(99, 102, 241, 0.15));
+  color: var(--color-primary-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.navCardBody {
+  min-width: 0;
+}
+
+.navCardTitle {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.navCardDescription {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.comingSoon {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-warning);
+  margin-left: var(--space-2);
+}
