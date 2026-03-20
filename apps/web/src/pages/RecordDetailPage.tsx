@@ -321,7 +321,8 @@ export function RecordDetailPage() {
     if (layoutSections) {
       for (const section of layoutSections) {
         for (const field of section.fields) {
-          if (field.fieldRequired) {
+          // Skip formula fields — they are computed, not user-provided
+          if (field.fieldRequired && field.fieldType !== 'formula') {
             const val = formValues[field.fieldApiName];
             if (val === undefined || val === null || val === '') {
               setSaveError(`Field '${field.fieldLabel}' is required`);
@@ -487,7 +488,10 @@ export function RecordDetailPage() {
   const renderEditField = (
     field: LayoutFieldWithMetadata,
   ) => {
-    const value = formValues[field.fieldApiName] ?? null;
+    // Formula fields show the computed value from the record, not from formValues
+    const value = field.fieldType === 'formula'
+      ? (record?.fields.find((f) => f.apiName === field.fieldApiName)?.value ?? null)
+      : (formValues[field.fieldApiName] ?? null);
 
     return (
       <div
@@ -496,7 +500,7 @@ export function RecordDetailPage() {
       >
         <label className={styles.label} htmlFor={`field-${field.fieldApiName}`}>
           {field.fieldLabel}
-          {field.fieldRequired && <span className={styles.required}>*</span>}
+          {field.fieldRequired && field.fieldType !== 'formula' && <span className={styles.required}>*</span>}
         </label>
         <FieldInput
           fieldType={field.fieldType}

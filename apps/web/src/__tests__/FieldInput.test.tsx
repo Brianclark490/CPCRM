@@ -359,6 +359,30 @@ describe('FieldInput', () => {
     });
   });
 
+  // ─── formula ──────────────────────────────────────────────────────────────
+
+  describe('formula field type', () => {
+    it('renders a disabled read-only input', () => {
+      render(<FieldInput fieldType="formula" value={42} onChange={vi.fn()} />);
+      const input = screen.getByRole('textbox');
+      expect(input).toBeInTheDocument();
+      expect(input).toBeDisabled();
+      expect(input).toHaveValue('42');
+    });
+
+    it('shows a dash for null value', () => {
+      render(<FieldInput fieldType="formula" value={null} onChange={vi.fn()} />);
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveValue('—');
+    });
+
+    it('has a title attribute explaining it is calculated', () => {
+      render(<FieldInput fieldType="formula" value={10} onChange={vi.fn()} />);
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveAttribute('title', 'This field is calculated automatically');
+    });
+  });
+
   // ─── Null / undefined values ──────────────────────────────────────────────
 
   describe('null and undefined values', () => {
