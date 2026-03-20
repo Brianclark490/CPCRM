@@ -59,27 +59,27 @@ const {
     }
 
     // INSERT INTO stage_definitions (batch insert for 2 terminal stages)
-    if (s.startsWith('INSERT INTO STAGE_DEFINITIONS') && params && params.length >= 18) {
+    if (s.startsWith('INSERT INTO STAGE_DEFINITIONS') && params && params.length >= 20) {
       const row1: Record<string, unknown> = {
-        id: params[0], pipeline_id: params[1], name: params[2], api_name: params[3],
-        sort_order: params[4], stage_type: params[5], colour: params[6],
-        default_probability: params[7], created_at: params[8],
+        id: params[0], tenant_id: params[1], pipeline_id: params[2], name: params[3], api_name: params[4],
+        sort_order: params[5], stage_type: params[6], colour: params[7],
+        default_probability: params[8], created_at: params[9],
         expected_days: null, description: null,
       };
       fakeStages.set(params[0] as string, row1);
       const row2: Record<string, unknown> = {
-        id: params[9], pipeline_id: params[10], name: params[11], api_name: params[12],
-        sort_order: params[13], stage_type: params[14], colour: params[15],
-        default_probability: params[16], created_at: params[17],
+        id: params[10], tenant_id: params[11], pipeline_id: params[12], name: params[13], api_name: params[14],
+        sort_order: params[15], stage_type: params[16], colour: params[17],
+        default_probability: params[18], created_at: params[19],
         expected_days: null, description: null,
       };
-      fakeStages.set(params[9] as string, row2);
+      fakeStages.set(params[10] as string, row2);
       return { rows: [row1, row2] };
     }
 
     // INSERT INTO stage_definitions (single stage)
-    if (s.startsWith('INSERT INTO STAGE_DEFINITIONS') && params && params.length === 11) {
-      const [id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, expected_days, description, created_at] = params as unknown[];
+    if (s.startsWith('INSERT INTO STAGE_DEFINITIONS') && params && params.length === 12) {
+      const [id, _tenant_id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, expected_days, description, created_at] = params as unknown[];
       const row: Record<string, unknown> = {
         id, pipeline_id, name, api_name, sort_order, stage_type, colour,
         default_probability, expected_days, description, created_at,
@@ -88,8 +88,8 @@ const {
       return { rows: [row] };
     }
 
-    // SELECT * FROM stage_definitions WHERE pipeline_id = $1 ORDER BY sort_order
-    if (s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE PIPELINE_ID = $1 ORDER BY')) {
+    // SELECT * FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order
+    if (s.includes('FROM STAGE_DEFINITIONS WHERE PIPELINE_ID') && s.includes('ORDER BY SORT_ORDER')) {
       const pipelineId = params![0] as string;
       const rows = [...fakeStages.values()]
         .filter((r) => r.pipeline_id === pipelineId)
@@ -98,7 +98,7 @@ const {
     }
 
     // SELECT * FROM stage_definitions WHERE pipeline_id = $1 (without order — for reorder listing)
-    if (s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE PIPELINE_ID = $1') && !s.includes('ORDER BY') && !s.includes('AND')) {
+    if (s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE PIPELINE_ID = $1') && !s.includes('ORDER BY') && !s.includes('API_NAME')) {
       const pipelineId = params![0] as string;
       const rows = [...fakeStages.values()].filter((r) => r.pipeline_id === pipelineId);
       return { rows };
@@ -139,7 +139,7 @@ const {
 
     // UPDATE pipeline_definitions
     if (s.startsWith('UPDATE PIPELINE_DEFINITIONS')) {
-      const id = params![params!.length - 1] as string;
+      const id = params![params!.length - 2] as string;
       const existing = fakePipelines.get(id);
       if (!existing) return { rows: [] };
       const updated = { ...existing, updated_at: new Date() };
@@ -240,8 +240,8 @@ const {
 
     // UPDATE stage_definitions SET ... (general update for stage)
     if (s.startsWith('UPDATE STAGE_DEFINITIONS SET')) {
-      const stageId = params![params!.length - 2] as string;
-      const pipelineId = params![params!.length - 1] as string;
+      const stageId = params![params!.length - 3] as string;
+      const pipelineId = params![params!.length - 2] as string;
       const existing = fakeStages.get(stageId);
       if (!existing || existing.pipeline_id !== pipelineId) return { rows: [] };
       const updated = { ...existing };

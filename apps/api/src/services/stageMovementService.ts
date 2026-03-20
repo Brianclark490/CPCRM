@@ -218,8 +218,8 @@ export async function moveRecordStage(
 
     // 2. Fetch the record and verify ownership
     const recordResult = await client.query(
-      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3',
-      [recordId, objectId, ownerId],
+      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND owner_id = $3 AND tenant_id = $4',
+      [recordId, objectId, ownerId, tenantId],
     );
     if (recordResult.rows.length === 0) {
       throwNotFoundError('Record not found');
@@ -237,15 +237,15 @@ export async function moveRecordStage(
     let resolvedStageEnteredAt = stageEnteredAt;
 
     if (!resolvedPipelineId || !resolvedCurrentStageId) {
-      const assigned = await assignDefaultPipeline(client, recordId, objectId, ownerId);
+      const assigned = await assignDefaultPipeline(client, recordId, objectId, ownerId, tenantId);
       if (!assigned) {
         throwValidationError('Record is not assigned to a pipeline');
       }
 
       // Re-read the record to pick up the newly assigned pipeline columns
       const refreshResult = await client.query(
-        'SELECT pipeline_id, current_stage_id, stage_entered_at FROM records WHERE id = $1',
-        [recordId],
+        'SELECT pipeline_id, current_stage_id, stage_entered_at FROM records WHERE id = $1 AND tenant_id = $2',
+        [recordId, tenantId],
       );
       const refreshRow = refreshResult.rows[0] as Record<string, unknown>;
       resolvedPipelineId = refreshRow.pipeline_id as string | null;
@@ -261,8 +261,8 @@ export async function moveRecordStage(
 
     // 4. Fetch the current stage
     const currentStageResult = await client.query(
-      'SELECT * FROM stage_definitions WHERE id = $1 AND pipeline_id = $2',
-      [resolvedCurrentStageId, resolvedPipelineId],
+      'SELECT * FROM stage_definitions WHERE id = $1 AND pipeline_id = $2 AND tenant_id = $3',
+      [resolvedCurrentStageId, resolvedPipelineId, tenantId],
     );
     if (currentStageResult.rows.length === 0) {
       throwValidationError('Current stage not found in pipeline');
@@ -271,8 +271,8 @@ export async function moveRecordStage(
 
     // 5. Fetch the target stage and validate it belongs to the same pipeline
     const targetStageResult = await client.query(
-      'SELECT * FROM stage_definitions WHERE id = $1',
-      [targetStageId],
+      'SELECT * FROM stage_definitions WHERE id = $1 AND tenant_id = $2',
+      [targetStageId, tenantId],
     );
     if (targetStageResult.rows.length === 0) {
       throwNotFoundError('Target stage not found');
@@ -300,8 +300,8 @@ export async function moveRecordStage(
                 fd.options AS field_options
          FROM stage_gates sg
          JOIN field_definitions fd ON fd.id = sg.field_id
-         WHERE sg.stage_id = $1`,
-        [targetStageId],
+         WHERE sg.stage_id = $1 AND sg.tenant_id = $2`,
+        [targetStageId, tenantId],
       );
 
       const gates = gatesResult.rows.map((row: Record<string, unknown>) => rowToGate(row));
@@ -334,9 +334,9 @@ export async function moveRecordStage(
     // 7. Insert stage_history record
     const historyId = randomUUID();
     await client.query(
-      `INSERT INTO stage_history (id, record_id, pipeline_id, from_stage_id, to_stage_id, changed_by, changed_at, days_in_previous_stage)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)`,
-      [historyId, recordId, resolvedPipelineId, resolvedCurrentStageId, targetStageId, ownerId, daysInPreviousStage],
+      `INSERT INTO stage_history (id, tenant_id, record_id, pipeline_id, from_stage_id, to_stage_id, changed_by, changed_at, days_in_previous_stage)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8)`,
+      [historyId, tenantId, recordId, resolvedPipelineId, resolvedCurrentStageId, targetStageId, ownerId, daysInPreviousStage],
     );
 
     // 8. Update record: current_stage_id, stage_entered_at, and optionally probability
@@ -356,9 +356,9 @@ export async function moveRecordStage(
            stage_entered_at = NOW(),
            field_values = $2,
            updated_at = NOW()
-       WHERE id = $3 AND object_id = $4 AND owner_id = $5
+       WHERE id = $3 AND object_id = $4 AND owner_id = $5 AND tenant_id = $6
        RETURNING *`,
-      [targetStageId, JSON.stringify(updatedFieldValues), recordId, objectId, ownerId],
+      [targetStageId, JSON.stringify(updatedFieldValues), recordId, objectId, ownerId, tenantId],
     );
 
     await client.query('COMMIT');
@@ -403,12 +403,14 @@ export async function assignDefaultPipeline(
   recordId: string,
   objectId: string,
   ownerId: string,
+  tenantId?: string,
 ): Promise<boolean> {
   // Find the default pipeline for this object
-  const pipelineResult = await client.query(
-    'SELECT id FROM pipeline_definitions WHERE object_id = $1 AND is_default = true',
-    [objectId],
-  );
+  const pipelineQuery = tenantId
+    ? 'SELECT id FROM pipeline_definitions WHERE object_id = $1 AND is_default = true AND tenant_id = $2'
+    : 'SELECT id FROM pipeline_definitions WHERE object_id = $1 AND is_default = true';
+  const pipelineParams: unknown[] = tenantId ? [objectId, tenantId] : [objectId];
+  const pipelineResult = await client.query(pipelineQuery, pipelineParams);
 
   if (pipelineResult.rows.length === 0) {
     return false;
@@ -417,13 +419,17 @@ export async function assignDefaultPipeline(
   const pipelineId = (pipelineResult.rows[0] as Record<string, unknown>).id as string;
 
   // Find the first open stage (sort_order 0)
-  const stageResult = await client.query(
-    `SELECT id, default_probability FROM stage_definitions
-     WHERE pipeline_id = $1 AND stage_type = 'open'
-     ORDER BY sort_order ASC
-     LIMIT 1`,
-    [pipelineId],
-  );
+  const stageQuery = tenantId
+    ? `SELECT id, default_probability FROM stage_definitions
+       WHERE pipeline_id = $1 AND stage_type = 'open' AND tenant_id = $2
+       ORDER BY sort_order ASC
+       LIMIT 1`
+    : `SELECT id, default_probability FROM stage_definitions
+       WHERE pipeline_id = $1 AND stage_type = 'open'
+       ORDER BY sort_order ASC
+       LIMIT 1`;
+  const stageParams: unknown[] = tenantId ? [pipelineId, tenantId] : [pipelineId];
+  const stageResult = await client.query(stageQuery, stageParams);
 
   if (stageResult.rows.length === 0) {
     return false;
@@ -460,11 +466,19 @@ export async function assignDefaultPipeline(
 
   // Insert initial stage_history record (from_stage_id: NULL)
   const historyId = randomUUID();
-  await client.query(
-    `INSERT INTO stage_history (id, record_id, pipeline_id, from_stage_id, to_stage_id, changed_by, changed_at, days_in_previous_stage)
-     VALUES ($1, $2, $3, NULL, $4, $5, NOW(), NULL)`,
-    [historyId, recordId, pipelineId, firstStageId, ownerId],
-  );
+  if (tenantId) {
+    await client.query(
+      `INSERT INTO stage_history (id, tenant_id, record_id, pipeline_id, from_stage_id, to_stage_id, changed_by, changed_at, days_in_previous_stage)
+       VALUES ($1, $2, $3, $4, NULL, $5, $6, NOW(), NULL)`,
+      [historyId, tenantId, recordId, pipelineId, firstStageId, ownerId],
+    );
+  } else {
+    await client.query(
+      `INSERT INTO stage_history (id, record_id, pipeline_id, from_stage_id, to_stage_id, changed_by, changed_at, days_in_previous_stage)
+       VALUES ($1, $2, $3, NULL, $4, $5, NOW(), NULL)`,
+      [historyId, recordId, pipelineId, firstStageId, ownerId],
+    );
+  }
 
   return true;
 }
