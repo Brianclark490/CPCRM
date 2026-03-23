@@ -362,4 +362,4 @@ adminPageLayoutsRouter.get('/:id/versions', requireAuth, requireTenant, adminPag
 adminPageLayoutsRouter.delete('/:id', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleDeletePageLayout);
 
 export const componentRegistryRouter = Router();
-componentRegistryRouter.get('/', requireAuth, requireTenant, handleGetComponentRegistry);
+componentRegistryRouter.get('/', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleGetComponentRegistry);
