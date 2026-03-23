@@ -83,6 +83,39 @@ const mockRecords = {
   limit: 100,
 };
 
+const mockSummary = {
+  pipeline: { id: 'pipe-1', name: 'Sales Pipeline' },
+  stages: [],
+  totals: {
+    openDeals: 2,
+    totalOpenValue: 125000,
+    totalWeightedValue: 17500,
+    avgDealSize: 62500,
+    wonThisMonth: 1,
+    wonValueThisMonth: 50000,
+    lostThisMonth: 0,
+  },
+};
+
+const mockVelocity = {
+  period: '30d',
+  stages: [],
+  overallConversion: 50,
+  avgDaysToClose: 18,
+};
+
+const mockOverdue = [
+  {
+    id: 'rec-2',
+    name: 'Small Deal',
+    value: 25000,
+    daysInStage: 25,
+    expectedDays: 21,
+    stageName: 'Qualification',
+    ownerId: 'user-2',
+  },
+];
+
 function mockFetch() {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
     if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
@@ -103,6 +136,27 @@ function mockFetch() {
       return Promise.resolve({
         ok: true,
         json: async () => mockRecords,
+      } as Response);
+    }
+
+    if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockSummary,
+      } as Response);
+    }
+
+    if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockVelocity,
+      } as Response);
+    }
+
+    if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockOverdue,
       } as Response);
     }
 
@@ -161,18 +215,32 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Small Deal')).toBeInTheDocument();
   });
 
-  it('renders the summary bar with totals', async () => {
+  it('renders the summary bar with live API data', async () => {
     mockFetch();
     renderBoard();
 
     await waitFor(() => {
-      expect(screen.getByTestId('kanban-summary')).toBeInTheDocument();
+      expect(screen.getByTestId('pipeline-summary-bar')).toBeInTheDocument();
     });
 
-    // Check that open value total is displayed
-    expect(screen.getByText(/Open value/)).toBeInTheDocument();
-    expect(screen.getByText(/Weighted value/)).toBeInTheDocument();
-    expect(screen.getByText(/Deals/)).toBeInTheDocument();
+    // Check that stat cards from the API data are displayed
+    expect(screen.getByText('Total Open Value')).toBeInTheDocument();
+    expect(screen.getByText('Weighted Pipeline')).toBeInTheDocument();
+    expect(screen.getByText('Open Deals')).toBeInTheDocument();
+    expect(screen.getByText('Avg Deal Size')).toBeInTheDocument();
+    expect(screen.getByText('Won This Month')).toBeInTheDocument();
+    expect(screen.getByText('Avg Days to Close')).toBeInTheDocument();
+  });
+
+  it('renders the overdue deals panel', async () => {
+    mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('overdue-deals-panel')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('overdue-badge')).toHaveTextContent('1 overdue');
   });
 
   it('renders the filter bar', async () => {
@@ -287,6 +355,24 @@ describe('KanbanBoard', () => {
           return Promise.resolve({
             ok: true,
             json: async () => unassignedRecords,
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockSummary,
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockVelocity,
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [],
           } as Response);
         }
         return Promise.resolve({ ok: false, json: async () => ({}) } as Response);

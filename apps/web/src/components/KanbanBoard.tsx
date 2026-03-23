@@ -6,6 +6,10 @@ import { KanbanFilterBar, EMPTY_FILTERS } from './KanbanFilterBar.js';
 import type { KanbanFilters } from './KanbanFilterBar.js';
 import { GateFailureModal } from './GateFailureModal.js';
 import type { GateFailure } from './GateFailureModal.js';
+import { PipelineSummaryBar } from './PipelineSummaryBar.js';
+import type { PipelineSummaryData } from './PipelineSummaryBar.js';
+import { OverdueDealsPanel } from './OverdueDealsPanel.js';
+import type { OverdueRecord } from './OverdueDealsPanel.js';
 import styles from './KanbanBoard.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -191,6 +195,10 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   // Confirmation modal (won/lost)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
+  // Pipeline analytics
+  const [summaryData, setSummaryData] = useState<PipelineSummaryData | null>(null);
+  const [overdueRecords, setOverdueRecords] = useState<OverdueRecord[]>([]);
+
   // ── Fetch pipeline definition ─────────────────────────────
   useEffect(() => {
     if (!sessionToken || !objectId) return;
@@ -279,6 +287,47 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     }
   }, [pipeline, loadRecords]);
 
+  // ── Fetch pipeline analytics ──────────────────────────────
+  const loadAnalytics = useCallback(async () => {
+    if (!sessionToken || !pipeline) return;
+
+    try {
+      const [summaryResp, velocityResp, overdueResp] = await Promise.all([
+        fetch(`/api/pipelines/${pipeline.id}/summary`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }),
+        fetch(`/api/pipelines/${pipeline.id}/velocity?period=30d`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }),
+        fetch(`/api/pipelines/${pipeline.id}/overdue`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }),
+      ]);
+
+      if (summaryResp.ok && velocityResp.ok) {
+        const summary = (await summaryResp.json()) as { totals: PipelineSummaryData['totals'] };
+        const velocity = (await velocityResp.json()) as { avgDaysToClose: number };
+        setSummaryData({
+          totals: summary.totals,
+          avgDaysToClose: velocity.avgDaysToClose,
+        });
+      }
+
+      if (overdueResp.ok) {
+        const overdue = (await overdueResp.json()) as OverdueRecord[];
+        setOverdueRecords(overdue);
+      }
+    } catch {
+      // Analytics fetch is best-effort
+    }
+  }, [sessionToken, pipeline]);
+
+  useEffect(() => {
+    if (pipeline) {
+      void loadAnalytics();
+    }
+  }, [pipeline, loadAnalytics]);
+
   // ── Drag and drop handlers ────────────────────────────────
 
   const handleDragStart = (recordId: string) => {
@@ -335,6 +384,8 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
               : r,
           ),
         );
+        // Refresh analytics after stage change
+        void loadAnalytics();
         return true;
       }
 
@@ -527,21 +578,28 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
   return (
     <div className={styles.board} data-testid="kanban-board">
-      {/* Summary bar */}
-      <div className={styles.summaryBar} data-testid="kanban-summary">
-        <div className={styles.summaryItem}>
-          <span className={styles.summaryLabel}>Open value</span>
-          <span className={styles.summaryValue}>${formatCurrency(totalOpenValue)}</span>
+      {/* Summary bar — live API data */}
+      {summaryData ? (
+        <PipelineSummaryBar data={summaryData} />
+      ) : (
+        <div className={styles.summaryBar} data-testid="kanban-summary">
+          <div className={styles.summaryItem}>
+            <span className={styles.summaryLabel}>Open value</span>
+            <span className={styles.summaryValue}>${formatCurrency(totalOpenValue)}</span>
+          </div>
+          <div className={styles.summaryItem}>
+            <span className={styles.summaryLabel}>Weighted value</span>
+            <span className={styles.summaryValue}>${formatCurrency(totalWeightedValue)}</span>
+          </div>
+          <div className={styles.summaryItem}>
+            <span className={styles.summaryLabel}>Deals</span>
+            <span className={styles.summaryValue}>{dealCount}</span>
+          </div>
         </div>
-        <div className={styles.summaryItem}>
-          <span className={styles.summaryLabel}>Weighted value</span>
-          <span className={styles.summaryValue}>${formatCurrency(totalWeightedValue)}</span>
-        </div>
-        <div className={styles.summaryItem}>
-          <span className={styles.summaryLabel}>Deals</span>
-          <span className={styles.summaryValue}>{dealCount}</span>
-        </div>
-      </div>
+      )}
+
+      {/* Overdue deals panel */}
+      <OverdueDealsPanel records={overdueRecords} apiName={apiName} />
 
       {/* Filters */}
       <KanbanFilterBar

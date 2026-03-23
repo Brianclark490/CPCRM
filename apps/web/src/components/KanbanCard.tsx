@@ -49,15 +49,16 @@ function getDaysInStage(stageEnteredAt: string): number {
   return Math.floor((now.getTime() - entered.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function getDaysIndicatorClass(
+export function getDaysIndicatorClass(
   daysInStage: number,
   expectedDays: number | null,
+  styleMap: Record<string, string> = styles,
 ): string {
-  if (!expectedDays || expectedDays <= 0) return styles.daysGreen;
+  if (!expectedDays || expectedDays <= 0) return styleMap.daysDefault;
   const ratio = daysInStage / expectedDays;
-  if (ratio > 1) return styles.daysRed;
-  if (ratio > 0.75) return styles.daysAmber;
-  return styles.daysGreen;
+  if (ratio > 1) return styleMap.daysRed;
+  if (ratio > 0.75) return styleMap.daysAmber;
+  return styleMap.daysDefault;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -121,11 +122,14 @@ export function KanbanCard({
         <span className={styles.ownerAvatar} title={record.ownerId}>
           {record.ownerInitials}
         </span>
-        <span
-          className={`${styles.daysIndicator} ${getDaysIndicatorClass(daysInStage, record.expectedDays)}`}
-        >
-          {daysInStage}d
-        </span>
+        {record.expectedDays != null && record.expectedDays > 0 && (
+          <span
+            className={`${styles.daysIndicator} ${getDaysIndicatorClass(daysInStage, record.expectedDays)}`}
+            data-testid={`days-indicator-${record.id}`}
+          >
+            Day {daysInStage} of {record.expectedDays}
+          </span>
+        )}
       </div>
     </div>
   );

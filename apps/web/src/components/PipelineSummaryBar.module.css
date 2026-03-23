@@ -1,0 +1,10 @@
+/* ============================================================
+   PipelineSummaryBar — Stat cards row above the kanban board
+   ============================================================ */
+
+.bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}

@@ -63,9 +63,19 @@ describe('KanbanCard', () => {
     expect(screen.getByText('AB')).toBeInTheDocument();
   });
 
-  it('renders days in stage indicator', () => {
+  it('renders days in stage indicator with Day X of Y format', () => {
     renderCard();
-    expect(screen.getByText(/\d+d/)).toBeInTheDocument();
+    expect(screen.getByText(/Day \d+ of 30/)).toBeInTheDocument();
+  });
+
+  it('does not show days indicator when expectedDays is null', () => {
+    renderCard(makeRecord({ expectedDays: null }));
+    expect(screen.queryByTestId('days-indicator-rec-1')).not.toBeInTheDocument();
+  });
+
+  it('does not show days indicator when expectedDays is 0', () => {
+    renderCard(makeRecord({ expectedDays: 0 }));
+    expect(screen.queryByTestId('days-indicator-rec-1')).not.toBeInTheDocument();
   });
 
   it('shows overdue badge when close date is past', () => {

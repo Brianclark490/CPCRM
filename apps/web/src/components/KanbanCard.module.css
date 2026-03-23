@@ -110,7 +110,7 @@
   border-radius: var(--radius-full);
 }
 
-.daysGreen {
+.daysDefault {
   background-color: var(--color-success-subtle);
   color: var(--color-success);
 }
