@@ -5,9 +5,17 @@ import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import { pool } from '../db/client.js';
 import { logger } from '../lib/logger.js';
+import rateLimit from 'express-rate-limit';
 
 export const pageLayoutsRouter = Router({ mergeParams: true });
 
+// Rate limiter for page layout lookups to mitigate DoS via excessive DB queries
+const pageLayoutsRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs for this route
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 /**
  * GET /objects/:apiName/page-layout
  *
@@ -91,4 +99,10 @@ export async function handleGetEffectivePageLayout(
   }
 }
 
-pageLayoutsRouter.get('/', requireAuth, requireTenant, handleGetEffectivePageLayout);
+pageLayoutsRouter.get(
+  '/',
+  requireAuth,
+  requireTenant,
+  pageLayoutsRateLimiter,
+  handleGetEffectivePageLayout,
+);
