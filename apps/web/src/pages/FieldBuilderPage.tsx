@@ -839,6 +839,13 @@ export function FieldBuilderPage() {
             <p className={styles.objectDescription}>{objectDef.description}</p>
           )}
         </div>
+        <Link
+          to={`/admin/objects/${objectId}/page-builder`}
+          className={styles.pageBuilderLink}
+          data-testid="page-builder-link"
+        >
+          🎨 Page Builder
+        </Link>
       </div>
 
       {/* Tabs */}

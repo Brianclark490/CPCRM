@@ -1,0 +1,79 @@
+/* ============================================================
+   ComponentPalette — Left panel of the layout builder
+   ============================================================ */
+
+.palette {
+  width: 200px;
+  min-width: 200px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-default);
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.paletteTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-2);
+}
+
+.group {
+  margin-bottom: var(--space-4);
+}
+
+.groupLabel {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.paletteItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  transition: background var(--transition-base);
+  user-select: none;
+}
+
+.paletteItem:hover {
+  background: var(--bg-muted);
+}
+
+.paletteItem.placed {
+  opacity: 0.5;
+}
+
+.paletteItem.dragging {
+  opacity: 0.3;
+}
+
+.itemIcon {
+  font-size: var(--font-size-base);
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.itemLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placedBadge {
+  font-size: var(--font-size-xs);
+  color: var(--success);
+  flex-shrink: 0;
+}

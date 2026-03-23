@@ -1,0 +1,139 @@
+/* ============================================================
+   VisibilityRuleEditor — Condition builder for visibility rules
+   ============================================================ */
+
+.editor {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border-default);
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.toggleLabel {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-muted);
+  cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base);
+}
+
+.toggle.toggleActive {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  transition: transform var(--transition-base);
+}
+
+.toggleActive .toggleKnob {
+  transform: translateX(16px);
+}
+
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.matchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.matchLabel {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.matchSelect {
+  font-size: var(--font-size-sm);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.conditionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.condField,
+.condOp {
+  font-size: var(--font-size-xs);
+  padding: 4px var(--space-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+}
+
+.condValue {
+  font-size: var(--font-size-xs);
+  padding: 4px var(--space-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.removeBtn:hover {
+  background: var(--danger-bg);
+}
+
+.addBtn {
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) 0;
+  text-align: left;
+}
+
+.addBtn:hover {
+  text-decoration: underline;
+}
