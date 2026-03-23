@@ -902,3 +902,221 @@ export interface TeamMember {
   /** member: regular visibility; manager: can manage team membership */
   role: 'member' | 'manager';
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page layouts — JSON-based layout engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Status of a page layout. Layouts start as drafts and are published to make
+ * them visible to end-users.
+ */
+export type PageLayoutStatus = 'draft' | 'published';
+
+/**
+ * A PageLayout stores a full page layout for a CRM object as JSONB.
+ * It supports a draft/published workflow with versioning.
+ */
+export interface PageLayout {
+  /** UUID primary key */
+  id: string;
+  /** Tenant that owns this layout */
+  tenantId: string;
+  /** The object this layout belongs to */
+  objectId: string;
+  /** Human-readable name (e.g. "Default Detail Page") */
+  name: string;
+  /** Optional role scope — NULL means default for all roles */
+  role?: string | null;
+  /** Whether this is the default layout for its object/role combination */
+  isDefault: boolean;
+  /** Working draft of the layout structure */
+  layout: PageLayoutJson;
+  /** Published (live) version of the layout — null until first publish */
+  publishedLayout?: PageLayoutJson | null;
+  /** Current version number */
+  version: number;
+  /** Draft or published status */
+  status: PageLayoutStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  /** When the layout was last published */
+  publishedAt?: Date | null;
+}
+
+/**
+ * A PageLayoutVersion is an immutable snapshot of a layout saved at publish
+ * time, providing an audit trail and rollback capability.
+ */
+export interface PageLayoutVersion {
+  /** UUID primary key */
+  id: string;
+  /** The page layout this version belongs to */
+  layoutId: string;
+  /** Tenant that owns this version */
+  tenantId: string;
+  /** Version number */
+  version: number;
+  /** The layout JSONB at the time of publish */
+  layout: PageLayoutJson;
+  /** Descope user ID of the user who published */
+  publishedBy?: string | null;
+  publishedAt: Date;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page layout JSON schema
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Root structure of the layout JSONB stored in page_layouts.layout.
+ */
+export interface PageLayoutJson {
+  header: PageLayoutHeader;
+  tabs: PageLayoutTab[];
+}
+
+/**
+ * Header configuration — controls the top of the record detail page.
+ */
+export interface PageLayoutHeader {
+  /** Field api_name used as the primary display value */
+  primaryField: string;
+  /** Additional field api_names shown below the primary field */
+  secondaryFields?: string[];
+  /** Badge definitions for status-like fields */
+  badges?: PageLayoutBadge[];
+  /** Action buttons shown in the header */
+  actions?: string[];
+}
+
+/**
+ * A badge renders a coloured indicator based on a field's value.
+ */
+export interface PageLayoutBadge {
+  /** Field api_name to read the value from */
+  fieldId: string;
+  /** Map of field value → colour variant (e.g. "success", "danger") */
+  colorMap: Record<string, string>;
+}
+
+/**
+ * A tab groups related sections within the page layout.
+ */
+export interface PageLayoutTab {
+  /** Unique identifier for the tab within this layout */
+  id: string;
+  /** Display label */
+  label: string;
+  /** Icon identifier */
+  icon?: string;
+  /** Ordered sections within this tab */
+  sections: PageLayoutSection[];
+}
+
+/**
+ * A section within a tab, containing components.
+ */
+export interface PageLayoutSection {
+  /** Unique identifier for the section within this layout */
+  id: string;
+  /** Section type determines the rendering style */
+  type: 'field_section' | 'related_list' | 'widget_section';
+  /** Display label */
+  label: string;
+  /** Number of grid columns */
+  columns?: number;
+  /** Whether the section starts collapsed */
+  collapsed?: boolean;
+  /** Conditional visibility rule — evaluated client-side */
+  visibility?: VisibilityRule | null;
+  /** Ordered components within this section */
+  components: PageLayoutComponent[];
+}
+
+/**
+ * A component is a single renderable element within a section.
+ */
+export interface PageLayoutComponent {
+  /** Unique identifier for the component within this layout */
+  id: string;
+  /** Component type from the component registry */
+  type: string;
+  /** Type-specific configuration */
+  config: Record<string, unknown>;
+  /** Conditional visibility rule — evaluated client-side */
+  visibility?: VisibilityRule | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visibility conditions — evaluated client-side against record field values
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Operators for combining multiple visibility conditions.
+ */
+export type VisibilityOperator = 'AND' | 'OR';
+
+/**
+ * Comparison operators for individual visibility conditions.
+ */
+export type VisibilityOp =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_empty'
+  | 'empty'
+  | 'greater_than'
+  | 'less_than'
+  | 'in'
+  | 'not_in';
+
+/**
+ * A group of conditions combined with a logical operator.
+ */
+export interface VisibilityRule {
+  operator: VisibilityOperator;
+  conditions: VisibilityCondition[];
+}
+
+/**
+ * A single visibility condition — checks a field's value.
+ * The `value` property is omitted for `empty` and `not_empty` operators.
+ */
+export interface VisibilityCondition {
+  /** Field api_name to evaluate */
+  field: string;
+  /** Comparison operator */
+  op: VisibilityOp;
+  /** Comparison value (not needed for empty/not_empty) */
+  value?: unknown;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component registry types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Category of a component in the layout builder palette.
+ */
+export type ComponentCategory = 'fields' | 'layout' | 'related' | 'widgets';
+
+/**
+ * Defines a component type that can be placed in a page layout.
+ * The component registry on the backend and frontend both reference
+ * these definitions.
+ */
+export interface ComponentDefinition {
+  /** Unique identifier (e.g. "field", "related_list", "activity_timeline") */
+  type: string;
+  /** Display name in the builder palette */
+  label: string;
+  /** Icon name for the builder palette */
+  icon: string;
+  /** Palette category for grouping */
+  category: ComponentCategory;
+  /** JSON Schema-like description of the config object */
+  configSchema: Record<string, unknown>;
+  /** Default config values when a new component is added */
+  defaultConfig: Record<string, unknown>;
+}

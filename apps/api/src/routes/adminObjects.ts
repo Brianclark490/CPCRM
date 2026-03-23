@@ -15,6 +15,7 @@ import { requireTenant } from '../middleware/tenant.js';
 import { adminFieldsRouter } from './adminFields.js';
 import { adminObjectRelationshipsRouter } from './adminRelationships.js';
 import { adminLayoutsRouter } from './adminLayouts.js';
+import { adminPageLayoutsRouter } from './adminPageLayouts.js';
 import { logger } from '../lib/logger.js';
 
 export const adminObjectsRouter = Router();
@@ -314,3 +315,6 @@ adminObjectsRouter.use('/:objectId/relationships', adminObjectRelationshipsRoute
 
 // Nested layout definition routes: /admin/objects/:objectId/layouts
 adminObjectsRouter.use('/:objectId/layouts', adminLayoutsRouter);
+
+// Nested page layout routes: /admin/objects/:objectId/page-layouts
+adminObjectsRouter.use('/:objectId/page-layouts', adminPageLayoutsRouter);
