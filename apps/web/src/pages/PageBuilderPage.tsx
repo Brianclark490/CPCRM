@@ -1,0 +1,810 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import { useSession } from '@descope/react-sdk';
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import type {
+  ComponentDefinition,
+  FieldRef,
+  RelationshipRef,
+  BuilderLayout,
+  BuilderSection,
+  BuilderComponent,
+  BuilderTab,
+  PageLayoutListItem,
+  PaletteDragData,
+  CanvasComponentDragData,
+  CanvasSectionDragData,
+} from '../components/builderTypes.js';
+import type { HeaderConfig, VisibilityRule } from '../components/layoutTypes.js';
+import { BuilderToolbar } from '../components/BuilderToolbar.js';
+import { ComponentPalette } from '../components/ComponentPalette.js';
+import { BuilderCanvas } from '../components/BuilderCanvas.js';
+import { PropertiesPanel } from '../components/PropertiesPanel.js';
+import type { SelectedItem } from '../components/PropertiesPanel.js';
+import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
+import styles from './PageBuilderPage.module.css';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ObjectDefinitionDetail {
+  id: string;
+  apiName: string;
+  label: string;
+  pluralLabel: string;
+  description?: string;
+  icon?: string;
+  isSystem: boolean;
+  fields: FieldRef[];
+}
+
+interface RelationshipApiItem {
+  id: string;
+  sourceObjectId: string;
+  targetObjectId: string;
+  relationshipType: string;
+  apiName: string;
+  label: string;
+  reverseLabel?: string;
+  required: boolean;
+  targetObjectLabel: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+let _idCounter = 0;
+function uid(): string {
+  _idCounter += 1;
+  return `builder-${Date.now()}-${_idCounter}`;
+}
+
+function createDefaultLayout(objectId: string, name: string): BuilderLayout {
+  return {
+    id: '',
+    objectId,
+    name,
+    header: { primaryField: 'name', secondaryFields: [] },
+    tabs: [
+      {
+        id: uid(),
+        label: 'Details',
+        sections: [
+          {
+            id: uid(),
+            label: 'General',
+            columns: 2,
+            components: [],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function findSection(
+  layout: BuilderLayout,
+  sectionId: string,
+): { tabIndex: number; sectionIndex: number } | null {
+  for (let ti = 0; ti < layout.tabs.length; ti++) {
+    for (let si = 0; si < layout.tabs[ti].sections.length; si++) {
+      if (layout.tabs[ti].sections[si].id === sectionId) {
+        return { tabIndex: ti, sectionIndex: si };
+      }
+    }
+  }
+  return null;
+}
+
+function findComponentSection(
+  layout: BuilderLayout,
+  componentId: string,
+): { tabIndex: number; sectionIndex: number; componentIndex: number } | null {
+  for (let ti = 0; ti < layout.tabs.length; ti++) {
+    for (let si = 0; si < layout.tabs[ti].sections.length; si++) {
+      const ci = layout.tabs[ti].sections[si].components.findIndex(
+        (c) => c.id === componentId,
+      );
+      if (ci >= 0) {
+        return { tabIndex: ti, sectionIndex: si, componentIndex: ci };
+      }
+    }
+  }
+  return null;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function PageBuilderPage() {
+  const { objectId } = useParams<{ objectId: string }>();
+  const { sessionToken } = useSession();
+
+  // Data state
+  const [objectDef, setObjectDef] = useState<ObjectDefinitionDetail | null>(null);
+  const [fields, setFields] = useState<FieldRef[]>([]);
+  const [relationships, setRelationships] = useState<RelationshipRef[]>([]);
+  const [registry, setRegistry] = useState<ComponentDefinition[]>([]);
+  const [pageLayouts, setPageLayouts] = useState<PageLayoutListItem[]>([]);
+
+  // Builder state
+  const [layout, setLayout] = useState<BuilderLayout | null>(null);
+  const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Active drag state
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  // ── Fetch data ──────────────────────────────────────────────
+
+  const fetchData = useCallback(async () => {
+    if (!sessionToken || !objectId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [objRes, relRes, regRes, layoutsRes] = await Promise.all([
+        fetch(`/api/admin/objects/${objectId}`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }),
+        fetch(`/api/admin/objects/${objectId}/relationships`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }),
+        fetch('/api/admin/component-registry', {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }),
+        fetch(`/api/admin/objects/${objectId}/page-layouts`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }),
+      ]);
+
+      if (!objRes.ok) {
+        setError('Failed to load object definition.');
+        return;
+      }
+
+      const objData = (await objRes.json()) as ObjectDefinitionDetail;
+      setObjectDef(objData);
+      setFields(objData.fields ?? []);
+
+      if (relRes.ok) {
+        const relData = (await relRes.json()) as RelationshipApiItem[];
+        setRelationships(
+          relData.map((r) => ({
+            id: r.id,
+            label: r.label,
+            apiName: r.apiName,
+            relationshipType: r.relationshipType,
+            targetObjectLabel: r.targetObjectLabel,
+          })),
+        );
+      }
+
+      if (regRes.ok) {
+        const regData = (await regRes.json()) as ComponentDefinition[];
+        setRegistry(regData);
+      }
+
+      if (layoutsRes.ok) {
+        const layoutsData = (await layoutsRes.json()) as PageLayoutListItem[];
+        setPageLayouts(layoutsData);
+
+        // Auto-select the default layout or first one
+        if (layoutsData.length > 0) {
+          const defaultLayout = layoutsData.find((l) => l.isDefault) ?? layoutsData[0];
+          setSelectedLayoutId(defaultLayout.id);
+          await loadLayoutDetail(defaultLayout.id);
+        } else {
+          // No layouts yet — create a default
+          setLayout(createDefaultLayout(objectId, `${objData.label} - Default`));
+          setDirty(true);
+        }
+      }
+    } catch {
+      setError('Failed to connect to the server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionToken, objectId]);
+
+  const loadLayoutDetail = async (layoutId: string) => {
+    if (!sessionToken || !objectId) return;
+
+    try {
+      const res = await fetch(
+        `/api/admin/objects/${objectId}/page-layouts/${layoutId}`,
+        { headers: { Authorization: `Bearer ${sessionToken}` } },
+      );
+
+      if (res.ok) {
+        const data = (await res.json()) as {
+          id: string;
+          name: string;
+          layout: BuilderLayout | null;
+        };
+        if (data.layout) {
+          setLayout(data.layout);
+        } else {
+          setLayout(createDefaultLayout(objectId!, data.name ?? 'Default'));
+        }
+        setDirty(false);
+      }
+    } catch {
+      // keep current layout
+    }
+  };
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  // ── Layout mutation helpers ─────────────────────────────────
+
+  const updateLayout = (mutator: (draft: BuilderLayout) => BuilderLayout) => {
+    setLayout((prev) => {
+      if (!prev) return prev;
+      const next = mutator(structuredClone(prev));
+      return next;
+    });
+    setDirty(true);
+  };
+
+  // Header
+  const handleHeaderChange = (header: HeaderConfig) => {
+    updateLayout((draft) => ({ ...draft, header }));
+  };
+
+  // Tabs
+  const handleAddTab = () => {
+    updateLayout((draft) => {
+      draft.tabs.push({
+        id: uid(),
+        label: `Tab ${draft.tabs.length + 1}`,
+        sections: [{ id: uid(), label: 'General', columns: 2, components: [] }],
+      });
+      return draft;
+    });
+  };
+
+  const handleRenameTab = (tabId: string, label: string) => {
+    updateLayout((draft) => {
+      const tab = draft.tabs.find((t: BuilderTab) => t.id === tabId);
+      if (tab) tab.label = label;
+      return draft;
+    });
+  };
+
+  const handleRemoveTab = (tabId: string) => {
+    updateLayout((draft) => {
+      draft.tabs = draft.tabs.filter((t: BuilderTab) => t.id !== tabId);
+      return draft;
+    });
+  };
+
+  // Sections
+  const handleAddSection = (tabId: string, columns: number) => {
+    updateLayout((draft) => {
+      const tab = draft.tabs.find((t: BuilderTab) => t.id === tabId);
+      if (tab) {
+        tab.sections.push({
+          id: uid(),
+          label: `Section ${tab.sections.length + 1}`,
+          columns,
+          components: [],
+        });
+      }
+      return draft;
+    });
+  };
+
+  const handleRemoveSection = (sectionId: string) => {
+    updateLayout((draft) => {
+      for (const tab of draft.tabs) {
+        tab.sections = tab.sections.filter((s: BuilderSection) => s.id !== sectionId);
+      }
+      return draft;
+    });
+    if (selectedId === sectionId) setSelectedId(null);
+  };
+
+  const handleRenameSection = (sectionId: string, label: string) => {
+    updateLayout((draft) => {
+      for (const tab of draft.tabs) {
+        const section = tab.sections.find((s: BuilderSection) => s.id === sectionId);
+        if (section) section.label = label;
+      }
+      return draft;
+    });
+  };
+
+  // Components
+  const handleRemoveComponent = (sectionId: string, componentId: string) => {
+    updateLayout((draft) => {
+      const loc = findSection(draft, sectionId);
+      if (loc) {
+        draft.tabs[loc.tabIndex].sections[loc.sectionIndex].components =
+          draft.tabs[loc.tabIndex].sections[loc.sectionIndex].components.filter(
+            (c: BuilderComponent) => c.id !== componentId,
+          );
+      }
+      return draft;
+    });
+    if (selectedId === componentId) setSelectedId(null);
+  };
+
+  const handleSelectComponent = (componentId: string) => {
+    setSelectedId(componentId);
+  };
+
+  const handleSelectSection = (sectionId: string) => {
+    setSelectedId(sectionId);
+  };
+
+  // Properties panel
+  const handleComponentChange = (
+    sectionId: string,
+    componentId: string,
+    config: Record<string, unknown>,
+  ) => {
+    updateLayout((draft) => {
+      const loc = findSection(draft, sectionId);
+      if (loc) {
+        const comp = draft.tabs[loc.tabIndex].sections[loc.sectionIndex].components.find(
+          (c: BuilderComponent) => c.id === componentId,
+        );
+        if (comp) comp.config = config;
+      }
+      return draft;
+    });
+  };
+
+  const handleComponentVisibilityChange = (
+    sectionId: string,
+    componentId: string,
+    rule: VisibilityRule | null,
+  ) => {
+    updateLayout((draft) => {
+      const loc = findSection(draft, sectionId);
+      if (loc) {
+        const comp = draft.tabs[loc.tabIndex].sections[loc.sectionIndex].components.find(
+          (c: BuilderComponent) => c.id === componentId,
+        );
+        if (comp) comp.visibility = rule;
+      }
+      return draft;
+    });
+  };
+
+  const handleSectionChange = (
+    sectionId: string,
+    patch: { label?: string; columns?: number },
+  ) => {
+    updateLayout((draft) => {
+      for (const tab of draft.tabs) {
+        const section = tab.sections.find((s: BuilderSection) => s.id === sectionId);
+        if (section) {
+          if (patch.label !== undefined) section.label = patch.label;
+          if (patch.columns !== undefined) section.columns = patch.columns;
+        }
+      }
+      return draft;
+    });
+  };
+
+  const handleSectionVisibilityChange = (sectionId: string, rule: VisibilityRule | null) => {
+    updateLayout((draft) => {
+      for (const tab of draft.tabs) {
+        const section = tab.sections.find((s: BuilderSection) => s.id === sectionId);
+        if (section) section.visibility = rule;
+      }
+      return draft;
+    });
+  };
+
+  // ── DnD handlers ────────────────────────────────────────────
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over || !layout) return;
+
+    const activeData = active.data.current;
+    if (!activeData) return;
+
+    // Palette → section drop
+    if (activeData.origin === 'palette') {
+      const paletteData = activeData as unknown as PaletteDragData;
+      const overData = over.data.current;
+
+      // Find target section
+      let targetSectionId: string | null = null;
+      if (overData && 'sectionId' in overData) {
+        targetSectionId = overData.sectionId as string;
+      }
+
+      if (!targetSectionId) return;
+
+      const newComp: BuilderComponent = {
+        id: uid(),
+        type: paletteData.componentType,
+        config: { ...paletteData.defaultConfig },
+      };
+
+      updateLayout((draft) => {
+        const loc = findSection(draft, targetSectionId!);
+        if (loc) {
+          draft.tabs[loc.tabIndex].sections[loc.sectionIndex].components.push(newComp);
+        }
+        return draft;
+      });
+
+      return;
+    }
+
+    // Canvas component reorder (within or between sections)
+    if (activeData.origin === 'canvas') {
+      const canvasData = activeData as unknown as CanvasComponentDragData;
+      const overData = over.data.current;
+
+      // Determine target section and position
+      let targetSectionId: string | null = null;
+      let targetComponentId: string | null = null;
+
+      if (overData && 'sectionId' in overData && 'componentId' in overData) {
+        // Dropped on another component
+        targetSectionId = overData.sectionId as string;
+        targetComponentId = overData.componentId as string;
+      } else if (overData && 'sectionId' in overData) {
+        // Dropped on a section drop zone
+        targetSectionId = overData.sectionId as string;
+      }
+
+      if (!targetSectionId) return;
+
+      updateLayout((draft) => {
+        // Remove from source section
+        const sourceLoc = findSection(draft, canvasData.sectionId);
+        if (!sourceLoc) return draft;
+
+        const sourceSection = draft.tabs[sourceLoc.tabIndex].sections[sourceLoc.sectionIndex];
+        const compIdx = sourceSection.components.findIndex(
+          (c: BuilderComponent) => c.id === canvasData.componentId,
+        );
+        if (compIdx < 0) return draft;
+
+        const [movedComp] = sourceSection.components.splice(compIdx, 1);
+
+        // Insert into target section
+        const targetLoc = findSection(draft, targetSectionId!);
+        if (!targetLoc) return draft;
+
+        const targetSection = draft.tabs[targetLoc.tabIndex].sections[targetLoc.sectionIndex];
+
+        if (targetComponentId) {
+          const targetIdx = targetSection.components.findIndex(
+            (c: BuilderComponent) => c.id === targetComponentId,
+          );
+          if (targetIdx >= 0) {
+            targetSection.components.splice(targetIdx, 0, movedComp);
+          } else {
+            targetSection.components.push(movedComp);
+          }
+        } else {
+          targetSection.components.push(movedComp);
+        }
+
+        return draft;
+      });
+
+      return;
+    }
+
+    // Section reorder
+    if (activeData.origin === 'canvas-section') {
+      const sectionData = activeData as unknown as CanvasSectionDragData;
+      const overData = over.data.current;
+
+      if (!overData || overData.origin !== 'canvas-section') return;
+      const overSectionData = overData as unknown as CanvasSectionDragData;
+      if (sectionData.sectionId === overSectionData.sectionId) return;
+
+      updateLayout((draft) => {
+        // Find both sections (must be in the same tab)
+        for (const tab of draft.tabs) {
+          const fromIdx = tab.sections.findIndex(
+            (s: BuilderSection) => s.id === sectionData.sectionId,
+          );
+          const toIdx = tab.sections.findIndex(
+            (s: BuilderSection) => s.id === overSectionData.sectionId,
+          );
+          if (fromIdx >= 0 && toIdx >= 0) {
+            const [moved] = tab.sections.splice(fromIdx, 1);
+            tab.sections.splice(toIdx, 0, moved);
+            break;
+          }
+        }
+        return draft;
+      });
+    }
+  };
+
+  // ── Save / publish ──────────────────────────────────────────
+
+  const handleSaveDraft = async () => {
+    if (!sessionToken || !objectId || !layout) return;
+
+    setSaving(true);
+    try {
+      if (selectedLayoutId) {
+        // Update existing
+        const res = await fetch(
+          `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessionToken}`,
+            },
+            body: JSON.stringify({ layout }),
+          },
+        );
+        if (res.ok) {
+          setDirty(false);
+        }
+      } else {
+        // Create new
+        const res = await fetch(
+          `/api/admin/objects/${objectId}/page-layouts`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessionToken}`,
+            },
+            body: JSON.stringify({
+              name: layout.name,
+              is_default: true,
+              layout,
+            }),
+          },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as PageLayoutListItem;
+          setSelectedLayoutId(data.id);
+          setDirty(false);
+        }
+      }
+    } catch {
+      // silently fail — user can try again
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!sessionToken || !objectId || !selectedLayoutId) return;
+
+    // Save first if dirty
+    if (dirty) {
+      await handleSaveDraft();
+    }
+
+    setPublishing(true);
+    try {
+      await fetch(
+        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/publish`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        },
+      );
+    } catch {
+      // silently fail
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  // ── Derive selected item for properties panel ──────────────
+
+  const getSelectedItem = (): SelectedItem | null => {
+    if (!selectedId || !layout) return null;
+
+    // Check if it's a section
+    for (const tab of layout.tabs) {
+      const section = tab.sections.find((s) => s.id === selectedId);
+      if (section) return { kind: 'section', section };
+    }
+
+    // Check if it's a component
+    for (const tab of layout.tabs) {
+      for (const section of tab.sections) {
+        const component = section.components.find((c) => c.id === selectedId);
+        if (component) return { kind: 'component', component, sectionId: section.id };
+      }
+    }
+
+    return null;
+  };
+
+  // ── Render ──────────────────────────────────────────────────
+
+  if (loading) {
+    return <div className={styles.page} data-testid="page-builder-loading">Loading…</div>;
+  }
+
+  if (error || !objectDef) {
+    return (
+      <div className={styles.page}>
+        <p role="alert" className={styles.errorAlert}>
+          {error ?? 'Object not found.'}
+        </p>
+      </div>
+    );
+  }
+
+  if (!layout) {
+    return (
+      <div className={styles.page}>
+        <p>No layout data available.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.page} data-testid="page-builder">
+      <BuilderToolbar
+        objectId={objectId!}
+        layoutName={layout.name}
+        dirty={dirty}
+        saving={saving}
+        publishing={publishing}
+        onSaveDraft={() => void handleSaveDraft()}
+        onPublish={() => void handlePublish()}
+        onPreview={() => setShowPreview(true)}
+      />
+
+      <div className={styles.builderBody}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <ComponentPalette
+            registry={registry}
+            fields={fields}
+            relationships={relationships}
+            tabs={layout.tabs}
+          />
+
+          <BuilderCanvas
+            layout={layout}
+            fields={fields}
+            registry={registry}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onHeaderChange={handleHeaderChange}
+            onAddTab={handleAddTab}
+            onRenameTab={handleRenameTab}
+            onRemoveTab={handleRemoveTab}
+            onAddSection={handleAddSection}
+            onRemoveSection={handleRemoveSection}
+            onRenameSection={handleRenameSection}
+            onRemoveComponent={handleRemoveComponent}
+            onSelectComponent={handleSelectComponent}
+            onSelectSection={handleSelectSection}
+          />
+
+          <DragOverlay>
+            {activeDragId ? (
+              <div className={styles.dragOverlay}>Dragging…</div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+
+        <PropertiesPanel
+          selectedItem={getSelectedItem()}
+          registry={registry}
+          fields={fields}
+          onComponentChange={handleComponentChange}
+          onComponentVisibilityChange={handleComponentVisibilityChange}
+          onSectionChange={handleSectionChange}
+          onSectionVisibilityChange={handleSectionVisibilityChange}
+        />
+      </div>
+
+      {/* Preview modal */}
+      {showPreview && (
+        <div
+          className={styles.overlay}
+          onClick={() => setShowPreview(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Layout preview"
+          data-testid="preview-modal"
+        >
+          <div className={styles.previewModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.previewHeader}>
+              <h2 className={styles.previewTitle}>Layout Preview</h2>
+              <button
+                type="button"
+                className={styles.previewClose}
+                onClick={() => setShowPreview(false)}
+                aria-label="Close preview"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.previewBody}>
+              <PageLayoutRenderer
+                layout={{
+                  id: layout.id || 'preview',
+                  objectId: layout.objectId,
+                  name: layout.name,
+                  header: layout.header,
+                  tabs: layout.tabs,
+                }}
+                record={{
+                  id: 'preview-record',
+                  objectId: layout.objectId,
+                  name: 'Sample Record',
+                  fieldValues: Object.fromEntries(
+                    fields.map((f) => [f.apiName, `Sample ${f.label}`]),
+                  ),
+                  ownerId: 'preview-user',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  fields: fields.map((f) => ({
+                    apiName: f.apiName,
+                    label: f.label,
+                    fieldType: f.fieldType,
+                  })),
+                  relationships: [],
+                }}
+                fields={fields.map((f) => ({
+                  apiName: f.apiName,
+                  label: f.label,
+                  fieldType: f.fieldType,
+                }))}
+                objectDef={objectDef ? {
+                  id: objectDef.id,
+                  apiName: objectDef.apiName,
+                  label: objectDef.label,
+                  pluralLabel: objectDef.pluralLabel,
+                  isSystem: objectDef.isSystem,
+                } : null}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

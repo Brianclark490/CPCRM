@@ -1,0 +1,83 @@
+/* ============================================================
+   DraggableComponent — Draggable component card on the canvas
+   ============================================================ */
+
+.component {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.component:hover {
+  border-color: var(--border-strong);
+}
+
+.component.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.dragHandle {
+  cursor: grab;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.gripIcon {
+  font-size: var(--font-size-base);
+  line-height: 1;
+}
+
+.icon {
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+}
+
+.label {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.typeBadge {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 1px 4px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color var(--transition-base), background var(--transition-base);
+}
+
+.removeBtn:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}

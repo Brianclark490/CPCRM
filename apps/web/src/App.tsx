@@ -7,6 +7,7 @@ import { AccountDetailPage } from './pages/AccountDetailPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { ObjectManagerPage } from './pages/ObjectManagerPage.js';
 import { FieldBuilderPage } from './pages/FieldBuilderPage.js';
+import { PageBuilderPage } from './pages/PageBuilderPage.js';
 import { PipelineManagerPage } from './pages/PipelineManagerPage.js';
 import { PipelineDetailPage } from './pages/PipelineDetailPage.js';
 import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
@@ -160,6 +161,18 @@ export function App() {
               <TenantGuard>
                 <AppShell>
                   <FieldBuilderPage />
+                </AppShell>
+              </TenantGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/objects/:objectId/page-builder"
+          element={
+            <ProtectedRoute>
+              <TenantGuard>
+                <AppShell>
+                  <PageBuilderPage />
                 </AppShell>
               </TenantGuard>
             </ProtectedRoute>

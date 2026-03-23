@@ -1,0 +1,120 @@
+/* ============================================================
+   BuilderCanvas — Centre panel of the layout builder
+   ============================================================ */
+
+.canvas {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  background: var(--bg-page);
+}
+
+/* ── Tab bar ─────────────────────────────────────────────── */
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  position: relative;
+  bottom: -1px;
+}
+
+.tabButton {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base);
+}
+
+.tabButton:hover {
+  color: var(--text-primary);
+}
+
+.tabActive .tabButton {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+}
+
+.tabInput {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  width: 120px;
+}
+
+.tabRemove {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  padding: 0 4px;
+  line-height: 1;
+  transition: color var(--transition-base);
+}
+
+.tabRemove:hover {
+  color: var(--danger);
+}
+
+.addTab {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition-base);
+}
+
+.addTab:hover {
+  color: var(--accent-text);
+}
+
+/* ── Sections area ───────────────────────────────────────── */
+
+.sections {
+  display: flex;
+  flex-direction: column;
+}
+
+.addSectionRow {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.addSectionBtn {
+  flex: 1;
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  background: none;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base),
+    background var(--transition-base);
+}
+
+.addSectionBtn:hover {
+  color: var(--accent-text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
