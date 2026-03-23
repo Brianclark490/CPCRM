@@ -1,12 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
 import type {
   PageLayout,
   RecordData,
-  FieldDefinitionRef,
   ObjectDefinitionRef,
 } from '../components/layoutTypes.js';
 

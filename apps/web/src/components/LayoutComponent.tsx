@@ -1,23 +1,9 @@
 import type { ComponentType } from 'react';
-import type {
-  LayoutComponentDef,
-  RecordData,
-  FieldDefinitionRef,
-  ObjectDefinitionRef,
-} from './layoutTypes.js';
+import type { ComponentRendererProps } from './layoutTypes.js';
 import { evaluateVisibility } from './evaluateVisibility.js';
 import { LayoutFieldRenderer } from './LayoutFieldRenderer.js';
 import { RelatedListRenderer } from './RelatedListRenderer.js';
 import { PlaceholderWidget } from './PlaceholderWidget.js';
-
-// ─── Component renderer props ─────────────────────────────────────────────────
-
-export interface ComponentRendererProps {
-  component: LayoutComponentDef;
-  record: RecordData;
-  fields: FieldDefinitionRef[];
-  objectDef: ObjectDefinitionRef | null;
-}
 
 // ─── Component registry (map, not switch) ─────────────────────────────────────
 
@@ -32,13 +18,6 @@ const COMPONENT_RENDERERS: Record<string, ComponentType<ComponentRendererProps>>
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface LayoutComponentProps {
-  component: LayoutComponentDef;
-  record: RecordData;
-  fields: FieldDefinitionRef[];
-  objectDef: ObjectDefinitionRef | null;
-}
-
 /**
  * Dispatches a layout component to the correct renderer using the registry map.
  * Unknown component types log a warning but don't crash.
@@ -49,7 +28,7 @@ export function LayoutComponent({
   record,
   fields,
   objectDef,
-}: LayoutComponentProps) {
+}: ComponentRendererProps) {
   if (!evaluateVisibility(component.visibility, record.fieldValues)) {
     return null;
   }

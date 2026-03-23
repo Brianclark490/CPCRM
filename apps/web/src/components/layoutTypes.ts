@@ -112,3 +112,10 @@ export interface RecordData {
   fields: FieldDefinitionRef[];
   relationships: RelationshipRef[];
 }
+
+export interface ComponentRendererProps {
+  component: LayoutComponentDef;
+  record: RecordData;
+  fields: FieldDefinitionRef[];
+  objectDef: ObjectDefinitionRef | null;
+}

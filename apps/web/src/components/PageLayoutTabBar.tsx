@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { LayoutTab } from './layoutTypes.js';
 import styles from './PageLayoutTabBar.module.css';
 

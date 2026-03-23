@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { ComponentRendererProps } from './LayoutComponent.js';
+import type { ComponentRendererProps } from './layoutTypes.js';
 import styles from './RelatedListRenderer.module.css';
 
 /**

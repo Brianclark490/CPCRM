@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type {
   PageLayout,
   RecordData,
@@ -14,7 +15,7 @@ interface RecordHeaderProps {
   record: RecordData;
   objectDef: ObjectDefinitionRef | null;
   fields: FieldDefinitionRef[];
-  actions?: React.ReactNode;
+  actions?: ReactNode;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

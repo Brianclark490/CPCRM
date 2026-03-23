@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type {
   PageLayout,
   RecordData,
@@ -17,7 +17,7 @@ interface PageLayoutRendererProps {
   record: RecordData;
   fields: FieldDefinitionRef[];
   objectDef: ObjectDefinitionRef | null;
-  actions?: React.ReactNode;
+  actions?: ReactNode;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────

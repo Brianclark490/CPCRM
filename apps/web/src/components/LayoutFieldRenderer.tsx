@@ -1,4 +1,4 @@
-import type { ComponentRendererProps } from './LayoutComponent.js';
+import type { ComponentRendererProps } from './layoutTypes.js';
 import { FieldRenderer } from './FieldRenderer.js';
 import styles from './LayoutFieldRenderer.module.css';
 

@@ -1,4 +1,4 @@
-import type { ComponentRendererProps } from './LayoutComponent.js';
+import type { ComponentRendererProps } from './layoutTypes.js';
 import styles from './PlaceholderWidget.module.css';
 
 const WIDGET_LABELS: Record<string, string> = {
