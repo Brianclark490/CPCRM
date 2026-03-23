@@ -191,6 +191,16 @@ describe('FieldBuilderPage', () => {
     });
   });
 
+  it('resolves text icon names to emoji icons', async () => {
+    mockFetchObject({ ...sampleObject, icon: 'building' });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('🏢')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('building')).not.toBeInTheDocument();
+  });
+
   it('renders the breadcrumb with a link to Object Manager', async () => {
     mockFetchObject();
     renderPage();

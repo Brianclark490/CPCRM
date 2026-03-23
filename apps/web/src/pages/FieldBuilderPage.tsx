@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { LayoutBuilderTab } from '../components/LayoutBuilderTab.js';
-import { slugify } from '../utils.js';
+import { slugify, resolveIcon } from '../utils.js';
 import styles from './FieldBuilderPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -831,7 +831,7 @@ export function FieldBuilderPage() {
 
       {/* Object header */}
       <div className={styles.objectHeader}>
-        <span className={styles.objectIcon}>{objectDef.icon ?? '📦'}</span>
+        <span className={styles.objectIcon}>{resolveIcon(objectDef.icon ?? 'package')}</span>
         <div className={styles.objectMeta}>
           <h1 className={styles.objectLabel}>{objectDef.label}</h1>
           <code className={styles.objectApiName}>{objectDef.apiName}</code>
