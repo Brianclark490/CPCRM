@@ -24,6 +24,7 @@ import { pipelineAnalyticsRouter } from './routes/pipelineAnalytics.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
 import { platformTenantsRouter } from './routes/platformTenants.js';
 import { adminTenantSettingsRouter } from './routes/adminTenantSettings.js';
+import { componentRegistryRouter } from './routes/adminPageLayouts.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -65,6 +66,7 @@ app.use('/api/pipelines', pipelineAnalyticsRouter);
 app.use('/api/admin/users', adminUsersRouter);
 app.use('/api/platform/tenants', platformTenantsRouter);
 app.use('/api/admin/tenant-settings', adminTenantSettingsRouter);
+app.use('/api/admin/component-registry', componentRegistryRouter);
 
 if (config.env === 'production') {
   // In production the CI pipeline copies the built frontend to public/ alongside
