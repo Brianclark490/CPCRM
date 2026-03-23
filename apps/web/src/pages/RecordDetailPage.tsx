@@ -4,6 +4,8 @@ import { useSession } from '@descope/react-sdk';
 import { FieldRenderer } from '../components/FieldRenderer.js';
 import { FieldInput } from '../components/FieldInput.js';
 import { ConvertLeadModal } from '../components/ConvertLeadModal.js';
+import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
+import { usePageLayout } from '../usePageLayout.js';
 import styles from './RecordDetailPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -186,6 +188,9 @@ export function RecordDetailPage() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
+
+  // Page layout (new metadata-driven renderer; null = use legacy form)
+  const { layout: pageLayout } = usePageLayout(apiName);
 
   // ── Load record ─────────────────────────────────────────────────────────────
 
@@ -564,6 +569,141 @@ export function RecordDetailPage() {
       })),
     },
   ];
+
+  // ── Page Layout Renderer (metadata-driven) ──────────────────────────────────
+  // When a page layout exists and we're not editing, use the new renderer.
+  // Falls back to the legacy form below when no page layout is configured.
+
+  if (pageLayout && !editing) {
+    const layoutActions = (
+      <>
+        {isLead && !isConverted && (
+          <button
+            className={styles.btnConvert}
+            type="button"
+            onClick={() => {
+              setConvertError(null);
+              setShowConvertModal(true);
+            }}
+          >
+            Convert Lead
+          </button>
+        )}
+        {!isConverted && (
+          <>
+            <button
+              className={styles.btnPrimary}
+              type="button"
+              onClick={handleEditClick}
+            >
+              Edit
+            </button>
+            <button
+              className={styles.btnDanger}
+              type="button"
+              onClick={handleDeleteClick}
+            >
+              Delete
+            </button>
+          </>
+        )}
+      </>
+    );
+
+    return (
+      <div className={styles.page}>
+        {isConverted && (
+          <div className={styles.convertedBanner}>
+            <span className={styles.convertedBadge}>Converted</span>
+            <div className={styles.convertedLinks}>
+              {typeof record.fieldValues['converted_account_id'] === 'string' && (
+                <Link
+                  to={`/objects/account/${record.fieldValues['converted_account_id']}`}
+                  className={styles.convertedLink}
+                >
+                  View Account
+                </Link>
+              )}
+              {typeof record.fieldValues['converted_contact_id'] === 'string' && (
+                <Link
+                  to={`/objects/contact/${record.fieldValues['converted_contact_id']}`}
+                  className={styles.convertedLink}
+                >
+                  View Contact
+                </Link>
+              )}
+              {typeof record.fieldValues['converted_opportunity_id'] === 'string' && (
+                <Link
+                  to={`/objects/opportunity/${record.fieldValues['converted_opportunity_id']}`}
+                  className={styles.convertedLink}
+                >
+                  View Opportunity
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+
+        {saveSuccess && (
+          <p role="status" className={styles.successAlert}>
+            {singularLabel} updated successfully.
+          </p>
+        )}
+
+        <PageLayoutRenderer
+          layout={pageLayout}
+          record={record}
+          fields={record.fields}
+          objectDef={objectDef}
+          actions={layoutActions}
+        />
+
+        {showDeleteConfirm && (
+          <div className={styles.deleteOverlay}>
+            <div className={styles.deleteModal} role="dialog" aria-label="Confirm deletion">
+              <h2 className={styles.deleteModalTitle}>Delete {singularLabel}?</h2>
+              <p className={styles.deleteModalText}>
+                Are you sure you want to delete &ldquo;{record.name}&rdquo;? This
+                action cannot be undone.
+              </p>
+              <div className={styles.deleteModalActions}>
+                <button
+                  className={styles.btnSecondary}
+                  type="button"
+                  onClick={handleDeleteCancel}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={styles.btnDanger}
+                  type="button"
+                  onClick={() => void handleDeleteConfirm()}
+                  disabled={deleting}
+                >
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showConvertModal && sessionToken && (
+          <ConvertLeadModal
+            leadName={record.name}
+            fieldValues={record.fieldValues}
+            sessionToken={sessionToken}
+            onConvert={handleConvert}
+            onClose={() => setShowConvertModal(false)}
+            converting={converting}
+            error={convertError}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ── Legacy form (fallback when no page layout exists) ───────────────────────
 
   return (
     <div className={styles.page}>

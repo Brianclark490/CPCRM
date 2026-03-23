@@ -1,0 +1,12 @@
+/* ============================================================
+   PageLayoutRenderer — Main layout orchestrator
+   ============================================================ */
+
+.layoutRenderer {
+  width: 100%;
+}
+
+.tabContent {
+  display: flex;
+  flex-direction: column;
+}
