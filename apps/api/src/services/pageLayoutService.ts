@@ -654,3 +654,99 @@ export async function deletePageLayout(
 
   logger.info({ layoutId, objectId }, 'Page layout deleted');
 }
+
+/**
+ * Copies the layout JSON from a source page layout into the target layout's draft.
+ *
+ * @throws {Error} NOT_FOUND — target layout, source layout, or parent object does not exist
+ */
+export async function copyLayout(
+  tenantId: string,
+  objectId: string,
+  targetLayoutId: string,
+  sourceLayoutId: string,
+): Promise<PageLayout> {
+  await assertObjectExists(tenantId, objectId);
+
+  // Fetch source layout
+  const sourceResult = await pool.query(
+    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
+    [sourceLayoutId, tenantId, objectId],
+  );
+  if (sourceResult.rows.length === 0) {
+    throwNotFoundError('Source page layout not found');
+  }
+
+  // Fetch target layout
+  const targetResult = await pool.query(
+    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
+    [targetLayoutId, tenantId, objectId],
+  );
+  if (targetResult.rows.length === 0) {
+    throwNotFoundError('Target page layout not found');
+  }
+
+  const sourceRow = sourceResult.rows[0] as Record<string, unknown>;
+  const now = new Date();
+
+  // Copy the source layout JSON into the target's draft
+  const result = await pool.query(
+    `UPDATE page_layouts
+     SET layout = $1, updated_at = $2
+     WHERE id = $3 AND tenant_id = $4
+     RETURNING *`,
+    [sourceRow.layout, now, targetLayoutId, tenantId],
+  );
+
+  logger.info({ targetLayoutId, sourceLayoutId, objectId }, 'Page layout copied');
+
+  return rowToPageLayout(result.rows[0]);
+}
+
+/**
+ * Reverts a page layout's draft to a specific version from page_layout_versions.
+ *
+ * @throws {Error} NOT_FOUND — layout, version snapshot, or parent object does not exist
+ */
+export async function revertLayout(
+  tenantId: string,
+  objectId: string,
+  layoutId: string,
+  version: number,
+): Promise<PageLayout> {
+  await assertObjectExists(tenantId, objectId);
+
+  // Verify the layout exists
+  const layoutResult = await pool.query(
+    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
+    [layoutId, tenantId, objectId],
+  );
+  if (layoutResult.rows.length === 0) {
+    throwNotFoundError('Page layout not found');
+  }
+
+  // Find the version snapshot
+  const versionResult = await pool.query(
+    'SELECT * FROM page_layout_versions WHERE layout_id = $1 AND tenant_id = $2 AND version = $3',
+    [layoutId, tenantId, version],
+  );
+  if (versionResult.rows.length === 0) {
+    throwNotFoundError(`Version ${version} not found for this layout`);
+  }
+
+  const versionRow = versionResult.rows[0] as Record<string, unknown>;
+  const now = new Date();
+
+  // Restore the version's layout JSON into the draft
+  const result = await pool.query(
+    `UPDATE page_layouts
+     SET layout = $1, updated_at = $2
+     WHERE id = $3 AND tenant_id = $4
+     RETURNING *`,
+    [versionRow.layout, now, layoutId, tenantId],
+  );
+
+  logger.info({ layoutId, objectId, version }, 'Page layout reverted');
+
+  return rowToPageLayout(result.rows[0]);
+}

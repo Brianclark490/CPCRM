@@ -2,6 +2,12 @@ import { Link } from 'react-router-dom';
 import { PrimaryButton } from './PrimaryButton.js';
 import styles from './BuilderToolbar.module.css';
 
+export interface RoleLayout {
+  id: string;
+  name: string;
+  role: string | null;
+}
+
 interface BuilderToolbarProps {
   objectId: string;
   layoutName: string;
@@ -11,6 +17,14 @@ interface BuilderToolbarProps {
   onSaveDraft: () => void;
   onPublish: () => void;
   onPreview: () => void;
+  /** Role-based layout support */
+  allLayouts?: RoleLayout[];
+  selectedLayoutId?: string | null;
+  onRoleChange?: (layoutId: string | null, role: string | null) => void;
+  onCopyFrom?: () => void;
+  onResetToDefault?: () => void;
+  onShowHistory?: () => void;
+  usingDefault?: boolean;
 }
 
 export function BuilderToolbar({
@@ -22,7 +36,33 @@ export function BuilderToolbar({
   onSaveDraft,
   onPublish,
   onPreview,
+  allLayouts,
+  selectedLayoutId,
+  onRoleChange,
+  onCopyFrom,
+  onResetToDefault,
+  onShowHistory,
+  usingDefault,
 }: BuilderToolbarProps) {
+  const roles = ['Admin', 'Manager', 'User', 'Read Only'];
+
+  const handleRoleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    if (!onRoleChange) return;
+
+    if (value === '__default__') {
+      // Select the default layout (role = null)
+      const defaultLayout = allLayouts?.find((l) => l.role === null);
+      onRoleChange(defaultLayout?.id ?? null, null);
+    } else {
+      // Select or create a role-specific layout
+      const roleLayout = allLayouts?.find((l) => l.role === value);
+      onRoleChange(roleLayout?.id ?? null, value);
+    }
+  };
+
+  const currentRole = allLayouts?.find((l) => l.id === selectedLayoutId)?.role ?? null;
+
   return (
     <div className={styles.toolbar} data-testid="builder-toolbar">
       <div className={styles.left}>
@@ -35,9 +75,64 @@ export function BuilderToolbar({
         </Link>
         <span className={styles.layoutName}>{layoutName}</span>
         {dirty && <span className={styles.dirtyBadge}>Unsaved</span>}
+        {usingDefault && (
+          <span className={styles.defaultFallbackBadge} data-testid="using-default-badge">
+            (no layout — using default)
+          </span>
+        )}
+      </div>
+
+      <div className={styles.center}>
+        {allLayouts && onRoleChange && (
+          <div className={styles.roleSelector} data-testid="role-selector">
+            <label className={styles.roleSelectorLabel} htmlFor="role-select">Layout for:</label>
+            <select
+              id="role-select"
+              className={styles.roleSelectorSelect}
+              value={currentRole ?? '__default__'}
+              onChange={handleRoleSelect}
+              data-testid="role-select"
+            >
+              <option value="__default__">Default (all roles)</option>
+              {roles.map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className={styles.right}>
+        {onShowHistory && (
+          <PrimaryButton
+            variant="ghost"
+            size="sm"
+            onClick={onShowHistory}
+            data-testid="history-button"
+          >
+            History
+          </PrimaryButton>
+        )}
+        {onCopyFrom && allLayouts && allLayouts.length > 1 && (
+          <PrimaryButton
+            variant="ghost"
+            size="sm"
+            onClick={onCopyFrom}
+            data-testid="copy-from-button"
+          >
+            Copy from…
+          </PrimaryButton>
+        )}
+        {onResetToDefault && currentRole !== null && (
+          <PrimaryButton
+            variant="ghost"
+            size="sm"
+            onClick={onResetToDefault}
+            data-testid="reset-to-default-button"
+          >
+            Reset to default
+          </PrimaryButton>
+        )}
         <PrimaryButton
           variant="ghost"
           size="sm"

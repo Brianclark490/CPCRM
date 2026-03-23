@@ -21,6 +21,8 @@ const mockUpdatePageLayout = vi.fn();
 const mockPublishPageLayout = vi.fn();
 const mockListPageLayoutVersions = vi.fn();
 const mockDeletePageLayout = vi.fn();
+const mockCopyLayout = vi.fn();
+const mockRevertLayout = vi.fn();
 
 vi.mock('../../services/pageLayoutService.js', () => ({
   createPageLayout: mockCreatePageLayout,
@@ -30,6 +32,8 @@ vi.mock('../../services/pageLayoutService.js', () => ({
   publishPageLayout: mockPublishPageLayout,
   listPageLayoutVersions: mockListPageLayoutVersions,
   deletePageLayout: mockDeletePageLayout,
+  copyLayout: mockCopyLayout,
+  revertLayout: mockRevertLayout,
 }));
 
 // ─── Mock component registry ─────────────────────────────────────────────────
@@ -55,6 +59,8 @@ const {
   handleListPageLayoutVersions,
   handleDeletePageLayout,
   handleGetComponentRegistry,
+  handleCopyLayout,
+  handleRevertLayout,
 } = await import('../adminPageLayouts.js');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -603,5 +609,173 @@ describe('GET /admin/component-registry', () => {
         expect.objectContaining({ type: 'field' }),
       ]),
     );
+  });
+});
+
+// ─── Tests: POST /admin/objects/:objectId/page-layouts/:id/copy ──────────────
+
+describe('POST /admin/objects/:objectId/page-layouts/:id/copy', () => {
+  beforeEach(() => {
+    mockCopyLayout.mockReset();
+  });
+
+  it('returns 200 with the copied layout', async () => {
+    const copied = { id: 'pl1', name: 'Manager Layout', layout: VALID_LAYOUT };
+    mockCopyLayout.mockResolvedValue(copied);
+
+    const req = mockReq(
+      { sourceLayoutId: 'pl2' },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleCopyLayout(req, res);
+
+    expect(mockCopyLayout).toHaveBeenCalledWith('tenant-abc', 'obj-1', 'pl1', 'pl2');
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(copied);
+  });
+
+  it('returns 400 when sourceLayoutId is missing', async () => {
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleCopyLayout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'sourceLayoutId is required', code: 'VALIDATION_ERROR' });
+  });
+
+  it('returns 404 when source layout not found', async () => {
+    const err = Object.assign(new Error('Source page layout not found'), { code: 'NOT_FOUND' });
+    mockCopyLayout.mockRejectedValue(err);
+
+    const req = mockReq(
+      { sourceLayoutId: 'missing' },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleCopyLayout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('returns 500 on unexpected error', async () => {
+    mockCopyLayout.mockRejectedValue(new Error('Database error'));
+
+    const req = mockReq(
+      { sourceLayoutId: 'pl2' },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleCopyLayout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+});
+
+// ─── Tests: POST /admin/objects/:objectId/page-layouts/:id/revert ────────────
+
+describe('POST /admin/objects/:objectId/page-layouts/:id/revert', () => {
+  beforeEach(() => {
+    mockRevertLayout.mockReset();
+  });
+
+  it('returns 200 with the reverted layout', async () => {
+    const reverted = { id: 'pl1', name: 'Default', version: 2 };
+    mockRevertLayout.mockResolvedValue(reverted);
+
+    const req = mockReq(
+      { version: 2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleRevertLayout(req, res);
+
+    expect(mockRevertLayout).toHaveBeenCalledWith('tenant-abc', 'obj-1', 'pl1', 2);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(reverted);
+  });
+
+  it('returns 400 when version is missing', async () => {
+    const req = mockReq(
+      {},
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleRevertLayout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'version must be a positive integer', code: 'VALIDATION_ERROR' });
+  });
+
+  it('returns 400 when version is not a number', async () => {
+    const req = mockReq(
+      { version: 'abc' },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleRevertLayout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('returns 400 when version is less than 1', async () => {
+    const req = mockReq(
+      { version: 0 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleRevertLayout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('returns 404 when version not found', async () => {
+    const err = Object.assign(new Error('Version 99 not found for this layout'), { code: 'NOT_FOUND' });
+    mockRevertLayout.mockRejectedValue(err);
+
+    const req = mockReq(
+      { version: 99 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleRevertLayout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('returns 500 on unexpected error', async () => {
+    mockRevertLayout.mockRejectedValue(new Error('Database error'));
+
+    const req = mockReq(
+      { version: 2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { objectId: 'obj-1', id: 'pl1' },
+    );
+    const res = mockRes();
+
+    await handleRevertLayout(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
   });
 });

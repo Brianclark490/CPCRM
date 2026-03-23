@@ -27,11 +27,15 @@ import type {
 } from '../components/builderTypes.js';
 import type { HeaderConfig, VisibilityRule } from '../components/layoutTypes.js';
 import { BuilderToolbar } from '../components/BuilderToolbar.js';
+import type { RoleLayout } from '../components/BuilderToolbar.js';
 import { ComponentPalette } from '../components/ComponentPalette.js';
 import { BuilderCanvas } from '../components/BuilderCanvas.js';
 import { PropertiesPanel } from '../components/PropertiesPanel.js';
 import type { SelectedItem } from '../components/PropertiesPanel.js';
 import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
+import { VersionHistoryPanel } from '../components/VersionHistoryPanel.js';
+import type { VersionEntry } from '../components/VersionHistoryPanel.js';
+import { CopyLayoutModal } from '../components/CopyLayoutModal.js';
 import styles from './PageBuilderPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -129,6 +133,14 @@ export function PageBuilderPage() {
   const [publishing, setPublishing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
+  // Role-based layout state
+  const [allLayouts, setAllLayouts] = useState<PageLayoutListItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [versions, setVersions] = useState<VersionEntry[]>([]);
+  const [reverting, setReverting] = useState(false);
+  const [usingDefault, setUsingDefault] = useState(false);
+
   // Active drag state
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
@@ -191,11 +203,13 @@ export function PageBuilderPage() {
 
       if (layoutsRes.ok) {
         const layoutsData = (await layoutsRes.json()) as PageLayoutListItem[];
+        setAllLayouts(layoutsData);
 
         // Auto-select the default layout or first one
         if (layoutsData.length > 0) {
           const defaultLayout = layoutsData.find((l) => l.isDefault) ?? layoutsData[0];
           setSelectedLayoutId(defaultLayout.id);
+          setUsingDefault(false);
           await loadLayoutDetail(defaultLayout.id);
         } else {
           // No layouts yet — create a default
@@ -612,6 +626,167 @@ export function PageBuilderPage() {
     }
   };
 
+  // ── Role-based layout handlers ──────────────────────────────
+
+  const handleRoleChange = async (layoutId: string | null, role: string | null) => {
+    if (!sessionToken || !objectId) return;
+
+    if (layoutId) {
+      // Layout exists for this role — load it
+      setSelectedLayoutId(layoutId);
+      setUsingDefault(false);
+      await loadLayoutDetail(layoutId);
+    } else if (role !== null) {
+      // No layout for this role — create one
+      try {
+        const res = await fetch(
+          `/api/admin/objects/${objectId}/page-layouts`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessionToken}`,
+            },
+            body: JSON.stringify({
+              name: `${objectDef?.label ?? 'Object'} - ${role}`,
+              role,
+              is_default: false,
+              layout: layout ?? createDefaultLayout(objectId, `${objectDef?.label ?? 'Object'} - ${role}`),
+            }),
+          },
+        );
+
+        if (res.ok) {
+          const data = (await res.json()) as PageLayoutListItem;
+          setSelectedLayoutId(data.id);
+          setAllLayouts((prev) => [...prev, data]);
+          setUsingDefault(true);
+          await loadLayoutDetail(data.id);
+        }
+      } catch {
+        // silently fail
+      }
+    } else {
+      // Switched to default (null role)
+      const defaultLayout = allLayouts.find((l) => l.role === null);
+      if (defaultLayout) {
+        setSelectedLayoutId(defaultLayout.id);
+        setUsingDefault(false);
+        await loadLayoutDetail(defaultLayout.id);
+      }
+    }
+  };
+
+  const handleCopyFrom = async (sourceLayoutId: string) => {
+    if (!sessionToken || !objectId || !selectedLayoutId) return;
+
+    try {
+      const res = await fetch(
+        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/copy`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          body: JSON.stringify({ sourceLayoutId }),
+        },
+      );
+
+      if (res.ok) {
+        await loadLayoutDetail(selectedLayoutId);
+        setUsingDefault(false);
+      }
+    } catch {
+      // silently fail
+    }
+
+    setShowCopyModal(false);
+  };
+
+  const handleResetToDefault = async () => {
+    if (!sessionToken || !objectId || !selectedLayoutId) return;
+
+    const currentLayout = allLayouts.find((l) => l.id === selectedLayoutId);
+    if (!currentLayout || currentLayout.role === null) return;
+
+    const confirmed = window.confirm(
+      `Reset the "${currentLayout.role}" layout? This will delete the role-specific layout and fall back to the default.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(
+        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        },
+      );
+
+      if (res.ok || res.status === 204) {
+        // Remove from allLayouts and switch to default
+        setAllLayouts((prev) => prev.filter((l) => l.id !== selectedLayoutId));
+        const defaultLayout = allLayouts.find((l) => l.role === null);
+        if (defaultLayout) {
+          setSelectedLayoutId(defaultLayout.id);
+          setUsingDefault(false);
+          await loadLayoutDetail(defaultLayout.id);
+        }
+      }
+    } catch {
+      // silently fail
+    }
+  };
+
+  const handleShowHistory = async () => {
+    if (!sessionToken || !objectId || !selectedLayoutId) return;
+
+    try {
+      const res = await fetch(
+        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/versions`,
+        { headers: { Authorization: `Bearer ${sessionToken}` } },
+      );
+
+      if (res.ok) {
+        const data = (await res.json()) as VersionEntry[];
+        setVersions(data);
+      }
+    } catch {
+      // silently fail
+    }
+
+    setShowHistory(true);
+  };
+
+  const handleRevert = async (version: number) => {
+    if (!sessionToken || !objectId || !selectedLayoutId) return;
+
+    setReverting(true);
+    try {
+      const res = await fetch(
+        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/revert`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          body: JSON.stringify({ version }),
+        },
+      );
+
+      if (res.ok) {
+        await loadLayoutDetail(selectedLayoutId);
+        setShowHistory(false);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setReverting(false);
+    }
+  };
+
   // ── Derive selected item for properties panel ──────────────
 
   const getSelectedItem = (): SelectedItem | null => {
@@ -658,6 +833,14 @@ export function PageBuilderPage() {
     );
   }
 
+  const allLayoutsForToolbar: RoleLayout[] = allLayouts.map((l) => ({
+    id: l.id,
+    name: l.name,
+    role: l.role,
+  }));
+
+  const currentLayoutVersion = allLayouts.find((l) => l.id === selectedLayoutId)?.version ?? 1;
+
   return (
     <div className={styles.page} data-testid="page-builder">
       <BuilderToolbar
@@ -669,6 +852,13 @@ export function PageBuilderPage() {
         onSaveDraft={() => void handleSaveDraft()}
         onPublish={() => void handlePublish()}
         onPreview={() => setShowPreview(true)}
+        allLayouts={allLayoutsForToolbar}
+        selectedLayoutId={selectedLayoutId}
+        onRoleChange={(layoutId, role) => void handleRoleChange(layoutId, role)}
+        onCopyFrom={() => setShowCopyModal(true)}
+        onResetToDefault={() => void handleResetToDefault()}
+        onShowHistory={() => void handleShowHistory()}
+        usingDefault={usingDefault}
       />
 
       <div className={styles.builderBody}>
@@ -785,6 +975,34 @@ export function PageBuilderPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Version history panel */}
+      {showHistory && (
+        <VersionHistoryPanel
+          versions={versions}
+          currentVersion={currentLayoutVersion}
+          reverting={reverting}
+          onRevert={(version) => void handleRevert(version)}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {/* Copy layout modal */}
+      {showCopyModal && (
+        <CopyLayoutModal
+          layouts={allLayoutsForToolbar.map((l) => ({
+            id: l.id,
+            name: l.name,
+            role: l.role,
+          }))}
+          currentLayoutId={selectedLayoutId ?? ''}
+          currentRoleLabel={
+            allLayouts.find((l) => l.id === selectedLayoutId)?.role ?? 'Default'
+          }
+          onCopy={(sourceId) => void handleCopyFrom(sourceId)}
+          onClose={() => setShowCopyModal(false)}
+        />
       )}
     </div>
   );
