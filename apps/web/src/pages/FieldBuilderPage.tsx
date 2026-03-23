@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
-import { LayoutBuilderTab } from '../components/LayoutBuilderTab.js';
 import { slugify, resolveIcon } from '../utils.js';
 import styles from './FieldBuilderPage.module.css';
 
@@ -87,7 +86,7 @@ interface ApiError {
   error: string;
 }
 
-type TabName = 'fields' | 'relationships' | 'layouts';
+type TabName = 'fields' | 'relationships';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -866,14 +865,6 @@ export function FieldBuilderPage() {
         >
           Relationships
         </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === 'layouts'}
-          className={`${styles.tab} ${activeTab === 'layouts' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('layouts')}
-        >
-          Layouts
-        </button>
       </div>
 
       {/* Fields tab */}
@@ -1081,15 +1072,6 @@ export function FieldBuilderPage() {
             </div>
           )}
         </>
-      )}
-
-      {/* Layouts tab */}
-      {activeTab === 'layouts' && sessionToken && objectId && (
-        <LayoutBuilderTab
-          objectId={objectId}
-          sessionToken={sessionToken}
-          fields={fields}
-        />
       )}
 
       {/* ── Add/Edit Field Modal ─────────────────────────────── */}
