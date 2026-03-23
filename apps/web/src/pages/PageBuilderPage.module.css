@@ -100,3 +100,31 @@
   overflow-y: auto;
   padding: var(--space-4);
 }
+
+/* ── Save error banner ───────────────────────────────────── */
+
+.saveErrorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: var(--font-size-sm);
+  border-bottom: 1px solid var(--danger);
+}
+
+.saveErrorDismiss {
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: var(--font-size-lg);
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: var(--radius-md);
+}
+
+.saveErrorDismiss:hover {
+  opacity: 0.7;
+}

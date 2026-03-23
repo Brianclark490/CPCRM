@@ -38,6 +38,7 @@ export interface BuilderComponent {
 
 export interface BuilderSection {
   id: string;
+  type: string;
   label: string;
   columns: number;
   collapsed?: boolean;
