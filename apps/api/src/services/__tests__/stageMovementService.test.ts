@@ -491,6 +491,137 @@ describe('moveRecordStage', () => {
       expect(error.failures[0].gate).toBe('min_value');
     }
   });
+
+  it('evaluates specific_value gate correctly', async () => {
+    seedPipelineAndStages();
+    seedRecord();
+
+    // Set status to wrong value
+    fakeRecords.get('rec-1')!.field_values = { name: 'Test', value: 50000, status: 'draft' };
+
+    fakeGates.set('gate-specific', {
+      stage_id: 'stage-qualification',
+      field_id: 'field-status-id',
+      field_api_name: 'status',
+      field_label: 'Status',
+      field_type: 'dropdown',
+      gate_type: 'specific_value',
+      gate_value: 'qualified',
+      error_message: null,
+      field_options: { choices: ['draft', 'qualified', 'disqualified'] },
+    });
+
+    try {
+      await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
+      expect.fail('Should have thrown');
+    } catch (err: unknown) {
+      const error = err as Error & { code: string; failures: Array<{ field: string; gate: string; message: string }> };
+      expect(error.code).toBe('GATE_VALIDATION_FAILED');
+      expect(error.failures).toHaveLength(1);
+      expect(error.failures[0].field).toBe('status');
+      expect(error.failures[0].gate).toBe('specific_value');
+      expect(error.failures[0].message).toContain('must be "qualified"');
+    }
+  });
+
+  it('passes specific_value gate when value matches', async () => {
+    seedPipelineAndStages();
+    seedRecord();
+
+    fakeRecords.get('rec-1')!.field_values = { name: 'Test', value: 50000, status: 'qualified' };
+
+    fakeGates.set('gate-specific', {
+      stage_id: 'stage-qualification',
+      field_id: 'field-status-id',
+      field_api_name: 'status',
+      field_label: 'Status',
+      field_type: 'dropdown',
+      gate_type: 'specific_value',
+      gate_value: 'qualified',
+      error_message: null,
+      field_options: { choices: ['draft', 'qualified', 'disqualified'] },
+    });
+
+    const result = await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
+    expect(result.currentStageId).toBe('stage-qualification');
+  });
+
+  it('tracks stage_history when moving between stages', async () => {
+    seedPipelineAndStages();
+    seedRecord();
+
+    await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
+
+    // Verify INSERT INTO stage_history was called
+    const historyCalls = mockQuery.mock.calls.filter((call: unknown[]) => {
+      const sql = (call[0] as string).replace(/\s+/g, ' ').trim().toUpperCase();
+      return sql.startsWith('INSERT INTO STAGE_HISTORY');
+    });
+
+    expect(historyCalls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('evaluates multiple gates on the same stage', async () => {
+    seedPipelineAndStages();
+    seedRecord();
+
+    // Remove both required field values
+    fakeRecords.get('rec-1')!.field_values = { name: 'Test' };
+
+    fakeGates.set('gate-req-value', {
+      stage_id: 'stage-qualification',
+      field_id: 'field-value-id',
+      field_api_name: 'value',
+      field_label: 'Deal Value',
+      field_type: 'currency',
+      gate_type: 'required',
+      gate_value: null,
+      error_message: 'Deal value is required',
+    });
+
+    fakeGates.set('gate-req-date', {
+      stage_id: 'stage-qualification',
+      field_id: 'field-date-id',
+      field_api_name: 'close_date',
+      field_label: 'Close Date',
+      field_type: 'date',
+      gate_type: 'required',
+      gate_value: null,
+      error_message: 'Close date is required',
+    });
+
+    try {
+      await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
+      expect.fail('Should have thrown');
+    } catch (err: unknown) {
+      const error = err as Error & { code: string; failures: Array<{ field: string; gate: string }> };
+      expect(error.code).toBe('GATE_VALIDATION_FAILED');
+      expect(error.failures).toHaveLength(2);
+      expect(error.failures.map((f: { field: string }) => f.field)).toContain('value');
+      expect(error.failures.map((f: { field: string }) => f.field)).toContain('close_date');
+    }
+  });
+
+  it('passes min_value gate when value meets minimum', async () => {
+    seedPipelineAndStages();
+    seedRecord();
+
+    fakeRecords.get('rec-1')!.field_values = { name: 'Test', value: 1000 };
+
+    fakeGates.set('gate-min', {
+      stage_id: 'stage-qualification',
+      field_id: 'field-value-id',
+      field_api_name: 'value',
+      field_label: 'Deal Value',
+      field_type: 'currency',
+      gate_type: 'min_value',
+      gate_value: '500',
+      error_message: null,
+    });
+
+    const result = await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
+    expect(result.currentStageId).toBe('stage-qualification');
+  });
 });
 
 // ─── Tests: assignDefaultPipeline ───────────────────────────────────────────

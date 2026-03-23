@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { KanbanBoard } from '../components/KanbanBoard.js';
 
@@ -392,5 +392,195 @@ describe('KanbanBoard', () => {
     expect(prospectingColumn).toHaveTextContent('Another Unassigned');
     // Column count should show 2
     expect(prospectingColumn).toHaveTextContent('2');
+  });
+
+  it('calls move-stage API on successful drag and drop', async () => {
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+
+    // Simulate drag start on the card
+    fireEvent.dragStart(card, {
+      dataTransfer: {
+        effectAllowed: 'move',
+        setData: vi.fn(),
+        getData: () => 'rec-1',
+      },
+    });
+
+    // Simulate dragover on the target column
+    fireEvent.dragOver(qualColumn, {
+      dataTransfer: { dropEffect: 'move' },
+    });
+
+    // Mock the move-stage response
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'rec-1',
+            pipelineId: 'pipe-1',
+            currentStageId: 'stage-2',
+            stageEnteredAt: new Date().toISOString(),
+            fieldValues: { value: 100000, close_date: '2026-06-15', probability: 30 },
+          }),
+        } as Response);
+      }
+      // Fall back to existing mock responses
+      if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockPipeline,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockSummary,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockVelocity,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockOverdue,
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+
+    // Simulate drop on the target column
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
+    });
+
+    await waitFor(() => {
+      const moveCalls = fetchMock.mock.calls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && (call[0] as string).includes('/move-stage'),
+      );
+      expect(moveCalls.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows gate failure modal when move-stage returns 422', async () => {
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    // Override fetch to return gate validation failure for move-stage
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          json: async () => ({
+            error: 'Cannot move to Qualification — missing required fields',
+            code: 'GATE_VALIDATION_FAILED',
+            failures: [
+              {
+                field: 'value',
+                label: 'Deal Value',
+                gate: 'required',
+                message: 'Deal Value is required',
+                fieldType: 'currency',
+                currentValue: null,
+                options: {},
+              },
+            ],
+          }),
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockPipeline,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockSummary,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockVelocity,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockOverdue,
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+
+    // Simulate drag and drop
+    fireEvent.dragStart(card, {
+      dataTransfer: {
+        effectAllowed: 'move',
+        setData: vi.fn(),
+        getData: () => 'rec-1',
+      },
+    });
+
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Deal Value')).toBeInTheDocument();
+    expect(screen.getByText('Deal Value is required')).toBeInTheDocument();
   });
 });

@@ -426,6 +426,38 @@ describe('getPipelineSummary', () => {
     expect(prospecting.recordCount).toBe(1);
     expect(prospecting.totalValue).toBe(10000);
   });
+
+  it('counts wonThisMonth and lostThisMonth from stage history', async () => {
+    seedPipeline();
+    seedStages();
+
+    // Record that was moved to won this month
+    seedRecord('rec-won', 'stage-won', 50000, 2);
+    seedHistory('h-won', 'rec-won', 'stage-prospecting', 'stage-won', 1, 5);
+
+    // Record that was moved to lost this month
+    seedRecord('rec-lost', 'stage-lost', 10000, 3);
+    seedHistory('h-lost', 'rec-lost', 'stage-prospecting', 'stage-lost', 2, 3);
+
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
+
+    expect(result.totals.wonThisMonth).toBe(1);
+    expect(result.totals.wonValueThisMonth).toBe(50000);
+    expect(result.totals.lostThisMonth).toBe(1);
+  });
+
+  it('excludes won/lost records from open deal totals', async () => {
+    seedPipeline();
+    seedStages();
+
+    seedRecord('rec-open', 'stage-prospecting', 30000, 5);
+    seedRecord('rec-won', 'stage-won', 80000, 2);
+
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
+
+    expect(result.totals.openDeals).toBe(1);
+    expect(result.totals.totalOpenValue).toBe(30000);
+  });
 });
 
 describe('getPipelineVelocity', () => {
