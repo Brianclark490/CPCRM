@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { KanbanBoard } from '../components/KanbanBoard.js';
 
@@ -409,24 +409,19 @@ describe('KanbanBoard', () => {
     const card = screen.getByTestId('kanban-card-rec-1');
     const qualColumn = screen.getByTestId('kanban-column-qualification');
 
-    // Simulate drag start
-    const dragStartEvent = new Event('dragstart', { bubbles: true });
-    Object.defineProperty(dragStartEvent, 'dataTransfer', {
-      value: {
+    // Simulate drag start on the card
+    fireEvent.dragStart(card, {
+      dataTransfer: {
         effectAllowed: 'move',
         setData: vi.fn(),
         getData: () => 'rec-1',
       },
     });
-    card.dispatchEvent(dragStartEvent);
 
-    // Simulate dragover
-    const dragOverEvent = new Event('dragover', { bubbles: true, cancelable: true });
-    Object.defineProperty(dragOverEvent, 'dataTransfer', {
-      value: { dropEffect: 'move' },
+    // Simulate dragover on the target column
+    fireEvent.dragOver(qualColumn, {
+      dataTransfer: { dropEffect: 'move' },
     });
-    Object.defineProperty(dragOverEvent, 'preventDefault', { value: vi.fn() });
-    qualColumn.dispatchEvent(dragOverEvent);
 
     // Mock the move-stage response
     fetchMock.mockImplementation((url: string, options?: RequestInit) => {
@@ -480,13 +475,10 @@ describe('KanbanBoard', () => {
       return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
     });
 
-    // Simulate drop
-    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
-    Object.defineProperty(dropEvent, 'dataTransfer', {
-      value: { getData: () => 'rec-1' },
+    // Simulate drop on the target column
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
     });
-    Object.defineProperty(dropEvent, 'preventDefault', { value: vi.fn() });
-    qualColumn.dispatchEvent(dropEvent);
 
     await waitFor(() => {
       const moveCalls = fetchMock.mock.calls.filter(
@@ -573,22 +565,17 @@ describe('KanbanBoard', () => {
     const qualColumn = screen.getByTestId('kanban-column-qualification');
 
     // Simulate drag and drop
-    const dragStartEvent = new Event('dragstart', { bubbles: true });
-    Object.defineProperty(dragStartEvent, 'dataTransfer', {
-      value: {
+    fireEvent.dragStart(card, {
+      dataTransfer: {
         effectAllowed: 'move',
         setData: vi.fn(),
         getData: () => 'rec-1',
       },
     });
-    card.dispatchEvent(dragStartEvent);
 
-    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
-    Object.defineProperty(dropEvent, 'dataTransfer', {
-      value: { getData: () => 'rec-1' },
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
     });
-    Object.defineProperty(dropEvent, 'preventDefault', { value: vi.fn() });
-    qualColumn.dispatchEvent(dropEvent);
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
