@@ -19,7 +19,7 @@ vi.mock('../../lib/logger.js', () => ({
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
 
-const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery } = vi.hoisted(() => {
+const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockConnect } = vi.hoisted(() => {
   const fakeObjects = new Map<string, Record<string, unknown>>();
   const fakePageLayouts = new Map<string, Record<string, unknown>>();
   const fakePageLayoutVersions = new Map<string, Record<string, unknown>>();
@@ -154,21 +154,34 @@ const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery } = vi.h
       return { rows };
     }
 
-    // DELETE FROM page_layouts WHERE id = $1
+    // DELETE FROM page_layouts WHERE id = $1 AND tenant_id = $2
     if (s.startsWith('DELETE FROM PAGE_LAYOUTS WHERE ID')) {
       const id = params![0] as string;
       fakePageLayouts.delete(id);
       return { rows: [] };
     }
 
+    // Transaction control statements (no-op in tests)
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+
     return { rows: [] };
   });
 
-  return { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery };
+  // The publish flow uses pool.connect() for transactions.  Return a fake
+  // client whose .query() delegates to the same mockQuery so the in-memory
+  // data stores stay consistent.
+  const mockConnect = vi.fn(async () => ({
+    query: mockQuery,
+    release: vi.fn(),
+  }));
+
+  return { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────

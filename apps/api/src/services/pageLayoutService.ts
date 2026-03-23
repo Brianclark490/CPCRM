@@ -92,7 +92,6 @@ export interface UpdatePageLayoutParams {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const VALID_STATUSES = new Set(['draft', 'published']);
 const VALID_SECTION_TYPES = new Set(['field_section', 'related_list', 'widget_section']);
 const VALID_VISIBILITY_OPS = new Set([
   'equals', 'not_equals', 'contains', 'not_empty', 'empty',
@@ -545,38 +544,53 @@ export async function publishPageLayout(
   const newVersion = currentVersion + 1;
   const now = new Date();
 
-  // Update the page layout: copy layout → published_layout
-  const result = await pool.query(
-    `UPDATE page_layouts
-     SET published_layout = layout,
-         version = $1,
-         status = 'published',
-         published_at = $2,
-         updated_at = $2
-     WHERE id = $3 AND tenant_id = $4
-     RETURNING *`,
-    [newVersion, now, layoutId, tenantId],
-  );
+  // Wrap the layout update and version snapshot in a transaction so both
+  // succeed or neither does — prevents a partial state where the layout is
+  // marked as published but no version record exists.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  // Create version snapshot
-  await pool.query(
-    `INSERT INTO page_layout_versions
-       (id, layout_id, tenant_id, version, layout, published_by, published_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      randomUUID(),
-      layoutId,
-      tenantId,
-      newVersion,
-      row.layout,
-      publishedBy,
-      now,
-    ],
-  );
+    // Update the page layout: copy layout → published_layout
+    const result = await client.query(
+      `UPDATE page_layouts
+       SET published_layout = layout,
+           version = $1,
+           status = 'published',
+           published_at = $2,
+           updated_at = $2
+       WHERE id = $3 AND tenant_id = $4
+       RETURNING *`,
+      [newVersion, now, layoutId, tenantId],
+    );
 
-  logger.info({ layoutId, objectId, version: newVersion, publishedBy }, 'Page layout published');
+    // Create version snapshot
+    await client.query(
+      `INSERT INTO page_layout_versions
+         (id, layout_id, tenant_id, version, layout, published_by, published_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        randomUUID(),
+        layoutId,
+        tenantId,
+        newVersion,
+        row.layout,
+        publishedBy,
+        now,
+      ],
+    );
 
-  return rowToPageLayout(result.rows[0]);
+    await client.query('COMMIT');
+
+    logger.info({ layoutId, objectId, version: newVersion, publishedBy }, 'Page layout published');
+
+    return rowToPageLayout(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**
@@ -636,7 +650,7 @@ export async function deletePageLayout(
     throwDeleteBlockedError('Cannot delete default page layouts');
   }
 
-  await pool.query('DELETE FROM page_layouts WHERE id = $1', [layoutId]);
+  await pool.query('DELETE FROM page_layouts WHERE id = $1 AND tenant_id = $2', [layoutId, tenantId]);
 
   logger.info({ layoutId, objectId }, 'Page layout deleted');
 }
