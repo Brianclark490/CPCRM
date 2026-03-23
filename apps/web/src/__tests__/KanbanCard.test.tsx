@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { KanbanCard } from '../components/KanbanCard.js';
+import { KanbanCard, getDaysIndicatorClass } from '../components/KanbanCard.js';
 import type { KanbanCardRecord } from '../components/KanbanCard.js';
 
 function makeRecord(overrides: Partial<KanbanCardRecord> = {}): KanbanCardRecord {
@@ -102,5 +102,54 @@ describe('KanbanCard', () => {
     renderCard();
     const card = screen.getByTestId('kanban-card-rec-1');
     expect(card).toHaveAttribute('draggable', 'true');
+  });
+});
+
+// ─── getDaysIndicatorClass unit tests (timeline colours) ───────────────────
+
+describe('getDaysIndicatorClass', () => {
+  const mockStyles = { daysDefault: 'default', daysAmber: 'amber', daysRed: 'red' };
+
+  it('returns default class when expectedDays is null', () => {
+    expect(getDaysIndicatorClass(5, null, mockStyles)).toBe('default');
+  });
+
+  it('returns default class when expectedDays is 0', () => {
+    expect(getDaysIndicatorClass(5, 0, mockStyles)).toBe('default');
+  });
+
+  it('returns default class when days in stage is well under expected', () => {
+    // 5 out of 30 = 17% — should be default (green)
+    expect(getDaysIndicatorClass(5, 30, mockStyles)).toBe('default');
+  });
+
+  it('returns amber class when days in stage is 76-100% of expected', () => {
+    // 24 out of 30 = 80% — should be amber
+    expect(getDaysIndicatorClass(24, 30, mockStyles)).toBe('amber');
+  });
+
+  it('returns red class when days exceed expected', () => {
+    // 35 out of 30 = 117% — should be red (overdue)
+    expect(getDaysIndicatorClass(35, 30, mockStyles)).toBe('red');
+  });
+
+  it('returns default class at exactly 75% threshold', () => {
+    // Exactly 75% — not > 0.75 so should be default
+    expect(getDaysIndicatorClass(75, 100, mockStyles)).toBe('default');
+  });
+
+  it('returns amber class just above 75% threshold', () => {
+    // 76% — > 0.75 so should be amber
+    expect(getDaysIndicatorClass(76, 100, mockStyles)).toBe('amber');
+  });
+
+  it('returns amber class at exactly 100% threshold', () => {
+    // Exactly 100% — not > 1 so should be amber
+    expect(getDaysIndicatorClass(100, 100, mockStyles)).toBe('amber');
+  });
+
+  it('returns red class just above 100% threshold', () => {
+    // 101% — > 1 so should be red
+    expect(getDaysIndicatorClass(101, 100, mockStyles)).toBe('red');
   });
 });

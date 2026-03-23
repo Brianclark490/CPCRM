@@ -393,4 +393,207 @@ describe('KanbanBoard', () => {
     // Column count should show 2
     expect(prospectingColumn).toHaveTextContent('2');
   });
+
+  it('calls move-stage API on successful drag and drop', async () => {
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+
+    // Simulate drag start
+    const dragStartEvent = new Event('dragstart', { bubbles: true });
+    Object.defineProperty(dragStartEvent, 'dataTransfer', {
+      value: {
+        effectAllowed: 'move',
+        setData: vi.fn(),
+        getData: () => 'rec-1',
+      },
+    });
+    card.dispatchEvent(dragStartEvent);
+
+    // Simulate dragover
+    const dragOverEvent = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOverEvent, 'dataTransfer', {
+      value: { dropEffect: 'move' },
+    });
+    Object.defineProperty(dragOverEvent, 'preventDefault', { value: vi.fn() });
+    qualColumn.dispatchEvent(dragOverEvent);
+
+    // Mock the move-stage response
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'rec-1',
+            pipelineId: 'pipe-1',
+            currentStageId: 'stage-2',
+            stageEnteredAt: new Date().toISOString(),
+            fieldValues: { value: 100000, close_date: '2026-06-15', probability: 30 },
+          }),
+        } as Response);
+      }
+      // Fall back to existing mock responses
+      if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockPipeline,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockSummary,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockVelocity,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockOverdue,
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+
+    // Simulate drop
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: { getData: () => 'rec-1' },
+    });
+    Object.defineProperty(dropEvent, 'preventDefault', { value: vi.fn() });
+    qualColumn.dispatchEvent(dropEvent);
+
+    await waitFor(() => {
+      const moveCalls = fetchMock.mock.calls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && (call[0] as string).includes('/move-stage'),
+      );
+      expect(moveCalls.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows gate failure modal when move-stage returns 422', async () => {
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    // Override fetch to return gate validation failure for move-stage
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          json: async () => ({
+            error: 'Cannot move to Qualification — missing required fields',
+            code: 'GATE_VALIDATION_FAILED',
+            failures: [
+              {
+                field: 'value',
+                label: 'Deal Value',
+                gate: 'required',
+                message: 'Deal Value is required',
+                fieldType: 'currency',
+                currentValue: null,
+                options: {},
+              },
+            ],
+          }),
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockPipeline,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockSummary,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockVelocity,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockOverdue,
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+
+    // Simulate drag and drop
+    const dragStartEvent = new Event('dragstart', { bubbles: true });
+    Object.defineProperty(dragStartEvent, 'dataTransfer', {
+      value: {
+        effectAllowed: 'move',
+        setData: vi.fn(),
+        getData: () => 'rec-1',
+      },
+    });
+    card.dispatchEvent(dragStartEvent);
+
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: { getData: () => 'rec-1' },
+    });
+    Object.defineProperty(dropEvent, 'preventDefault', { value: vi.fn() });
+    qualColumn.dispatchEvent(dropEvent);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Deal Value')).toBeInTheDocument();
+    expect(screen.getByText('Deal Value is required')).toBeInTheDocument();
+  });
 });
