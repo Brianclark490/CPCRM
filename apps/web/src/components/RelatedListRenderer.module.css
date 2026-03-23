@@ -1,0 +1,77 @@
+/* ============================================================
+   RelatedListRenderer — Related records table in page layout
+   ============================================================ */
+
+.relatedCard {
+  background-color: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.relatedHeader {
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.relatedTitle {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.relatedTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.relatedTh {
+  padding: var(--space-3) var(--space-5);
+  text-align: left;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--color-border);
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.relatedTr {
+  border-bottom: 1px solid var(--color-border-subtle);
+  transition: background-color var(--transition-base);
+}
+
+.relatedTr:last-child {
+  border-bottom: none;
+}
+
+.relatedTr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.relatedTd {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  vertical-align: middle;
+}
+
+.relatedLink {
+  font-weight: 500;
+  color: var(--color-text-primary);
+  transition: color var(--transition-base);
+}
+
+.relatedLink:hover {
+  color: var(--color-primary-text);
+}
+
+.relatedEmpty {
+  padding: var(--space-6);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}

@@ -1,0 +1,43 @@
+/* ============================================================
+   PageLayoutTabBar — Tab navigation for record layout
+   ============================================================ */
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-6);
+}
+
+.tabList {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--transition-base),
+    border-color var(--transition-base);
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tabActive {
+  color: var(--color-primary-text);
+  border-bottom-color: var(--color-primary);
+}
