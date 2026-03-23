@@ -392,7 +392,7 @@ describe('PageBuilderPage', () => {
 
     // Should now have 2 sections
     await waitFor(() => {
-      const sections = screen.getAllByText(/Section/);
+      const sections = screen.getAllByTestId(/builder-section-/);
       expect(sections.length).toBeGreaterThanOrEqual(2);
     });
   });
