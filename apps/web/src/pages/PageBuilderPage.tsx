@@ -104,23 +104,6 @@ function findSection(
   return null;
 }
 
-function findComponentSection(
-  layout: BuilderLayout,
-  componentId: string,
-): { tabIndex: number; sectionIndex: number; componentIndex: number } | null {
-  for (let ti = 0; ti < layout.tabs.length; ti++) {
-    for (let si = 0; si < layout.tabs[ti].sections.length; si++) {
-      const ci = layout.tabs[ti].sections[si].components.findIndex(
-        (c) => c.id === componentId,
-      );
-      if (ci >= 0) {
-        return { tabIndex: ti, sectionIndex: si, componentIndex: ci };
-      }
-    }
-  }
-  return null;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PageBuilderPage() {
@@ -132,7 +115,6 @@ export function PageBuilderPage() {
   const [fields, setFields] = useState<FieldRef[]>([]);
   const [relationships, setRelationships] = useState<RelationshipRef[]>([]);
   const [registry, setRegistry] = useState<ComponentDefinition[]>([]);
-  const [pageLayouts, setPageLayouts] = useState<PageLayoutListItem[]>([]);
 
   // Builder state
   const [layout, setLayout] = useState<BuilderLayout | null>(null);
@@ -209,7 +191,6 @@ export function PageBuilderPage() {
 
       if (layoutsRes.ok) {
         const layoutsData = (await layoutsRes.json()) as PageLayoutListItem[];
-        setPageLayouts(layoutsData);
 
         // Auto-select the default layout or first one
         if (layoutsData.length > 0) {
