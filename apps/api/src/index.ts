@@ -25,6 +25,7 @@ import { adminUsersRouter } from './routes/adminUsers.js';
 import { platformTenantsRouter } from './routes/platformTenants.js';
 import { adminTenantSettingsRouter } from './routes/adminTenantSettings.js';
 import { componentRegistryRouter } from './routes/adminPageLayouts.js';
+import { pageLayoutsRouter } from './routes/pageLayouts.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -60,6 +61,7 @@ app.use('/api/admin/objects', adminObjectsRouter);
 app.use('/api/admin/relationships', adminRelationshipsRouter);
 app.use('/api/admin/pipelines', adminPipelinesRouter);
 app.use('/api/objects/:apiName/records', recordsRouter);
+app.use('/api/objects/:apiName/page-layout', pageLayoutsRouter);
 app.use('/api/records', recordRelationshipsRouter);
 app.use('/api/admin/stages/:stageId/gates', adminStageGatesRouter);
 app.use('/api/pipelines', pipelineAnalyticsRouter);

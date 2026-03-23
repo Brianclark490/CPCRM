@@ -31,7 +31,9 @@ export function usePageLayout(objectApiName: string | undefined) {
 
         if (cancelled) return;
 
-        if (response.ok) {
+        if (response.status === 204) {
+          if (!cancelled) setLayout(null);
+        } else if (response.ok) {
           const data = (await response.json()) as PageLayout;
           if (!cancelled) setLayout(data);
         } else {
