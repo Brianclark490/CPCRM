@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import type { Response } from 'express';
-import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
@@ -16,11 +15,6 @@ import {
 import type { CreatePageLayoutParams, UpdatePageLayoutParams } from '../services/pageLayoutService.js';
 import { COMPONENT_REGISTRY } from '../lib/componentRegistry.js';
 import { logger } from '../lib/logger.js';
-
-const adminPageLayoutsRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs for these admin endpoints
-});
 
 export const adminPageLayoutsRouter = Router({ mergeParams: true });
 
@@ -353,13 +347,13 @@ export async function handleGetComponentRegistry(
   res.status(200).json(COMPONENT_REGISTRY);
 }
 
-adminPageLayoutsRouter.post('/', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleCreatePageLayout);
-adminPageLayoutsRouter.get('/', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleListPageLayouts);
-adminPageLayoutsRouter.get('/:id', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleGetPageLayout);
-adminPageLayoutsRouter.put('/:id', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleUpdatePageLayout);
-adminPageLayoutsRouter.post('/:id/publish', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handlePublishPageLayout);
-adminPageLayoutsRouter.get('/:id/versions', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleListPageLayoutVersions);
-adminPageLayoutsRouter.delete('/:id', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleDeletePageLayout);
+adminPageLayoutsRouter.post('/', requireAuth, requireTenant, handleCreatePageLayout);
+adminPageLayoutsRouter.get('/', requireAuth, requireTenant, handleListPageLayouts);
+adminPageLayoutsRouter.get('/:id', requireAuth, requireTenant, handleGetPageLayout);
+adminPageLayoutsRouter.put('/:id', requireAuth, requireTenant, handleUpdatePageLayout);
+adminPageLayoutsRouter.post('/:id/publish', requireAuth, requireTenant, handlePublishPageLayout);
+adminPageLayoutsRouter.get('/:id/versions', requireAuth, requireTenant, handleListPageLayoutVersions);
+adminPageLayoutsRouter.delete('/:id', requireAuth, requireTenant, handleDeletePageLayout);
 
 export const componentRegistryRouter = Router();
-componentRegistryRouter.get('/', requireAuth, requireTenant, adminPageLayoutsRateLimiter, handleGetComponentRegistry);
+componentRegistryRouter.get('/', requireAuth, requireTenant, handleGetComponentRegistry);

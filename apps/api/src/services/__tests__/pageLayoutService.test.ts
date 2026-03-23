@@ -565,3 +565,215 @@ describe('publishPageLayout', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
+
+// ─── Tests: updatePageLayout ─────────────────────────────────────────────────
+
+describe('updatePageLayout', () => {
+  beforeEach(() => {
+    fakeObjects.clear();
+    fakePageLayouts.clear();
+    mockQuery.mockClear();
+    fakeObjects.set('obj-1', { id: 'obj-1', tenant_id: TENANT_ID });
+  });
+
+  it('updates a page layout name', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Original', role: null, is_default: false,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    const result = await updatePageLayout(TENANT_ID, 'obj-1', 'pl1', { name: 'Updated' });
+    expect(result.name).toBe('Updated');
+  });
+
+  it('updates a page layout draft', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: false,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    const newLayout = {
+      ...VALID_LAYOUT_JSON,
+      header: { ...VALID_LAYOUT_JSON.header, primaryField: 'title' },
+    };
+
+    const result = await updatePageLayout(TENANT_ID, 'obj-1', 'pl1', { layout: newLayout });
+    expect(result.layout.header.primaryField).toBe('title');
+  });
+
+  it('returns the existing layout when no fields are changed', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: false,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    const result = await updatePageLayout(TENANT_ID, 'obj-1', 'pl1', {});
+    expect(result.name).toBe('Default');
+  });
+
+  it('throws NOT_FOUND when layout does not exist', async () => {
+    await expect(
+      updatePageLayout(TENANT_ID, 'obj-1', 'nonexistent', { name: 'New' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('throws VALIDATION_ERROR for empty name', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Original', role: null, is_default: false,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    await expect(
+      updatePageLayout(TENANT_ID, 'obj-1', 'pl1', { name: '' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('throws VALIDATION_ERROR for invalid layout', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Original', role: null, is_default: false,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    await expect(
+      updatePageLayout(TENANT_ID, 'obj-1', 'pl1', {
+        layout: { header: {} } as unknown as typeof VALID_LAYOUT_JSON,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+});
+
+// ─── Tests: listPageLayoutVersions ───────────────────────────────────────────
+
+describe('listPageLayoutVersions', () => {
+  beforeEach(() => {
+    fakeObjects.clear();
+    fakePageLayouts.clear();
+    fakePageLayoutVersions.clear();
+    mockQuery.mockClear();
+    fakeObjects.set('obj-1', { id: 'obj-1', tenant_id: TENANT_ID });
+  });
+
+  it('returns version history newest first', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: true,
+      layout: VALID_LAYOUT_JSON, published_layout: VALID_LAYOUT_JSON,
+      version: 3, status: 'published',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: new Date().toISOString(),
+    });
+
+    fakePageLayoutVersions.set('v1', {
+      id: 'v1', layout_id: 'pl1', tenant_id: TENANT_ID,
+      version: 1, layout: VALID_LAYOUT_JSON,
+      published_by: 'user-1', published_at: new Date().toISOString(),
+    });
+    fakePageLayoutVersions.set('v2', {
+      id: 'v2', layout_id: 'pl1', tenant_id: TENANT_ID,
+      version: 2, layout: VALID_LAYOUT_JSON,
+      published_by: 'user-2', published_at: new Date().toISOString(),
+    });
+
+    const result = await listPageLayoutVersions(TENANT_ID, 'obj-1', 'pl1');
+    expect(result).toHaveLength(2);
+    expect(result[0].version).toBe(2);
+    expect(result[1].version).toBe(1);
+  });
+
+  it('returns empty array when no versions exist', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: true,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    const result = await listPageLayoutVersions(TENANT_ID, 'obj-1', 'pl1');
+    expect(result).toHaveLength(0);
+  });
+
+  it('throws NOT_FOUND when layout does not exist', async () => {
+    await expect(
+      listPageLayoutVersions(TENANT_ID, 'obj-1', 'nonexistent'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+// ─── Tests: createPageLayout (CONFLICT) ──────────────────────────────────────
+
+describe('createPageLayout — CONFLICT', () => {
+  beforeEach(() => {
+    fakeObjects.clear();
+    fakePageLayouts.clear();
+    mockQuery.mockClear();
+    fakeObjects.set('obj-1', { id: 'obj-1', tenant_id: TENANT_ID });
+  });
+
+  it('throws CONFLICT when a layout already exists for the same object/role', async () => {
+    fakePageLayouts.set('existing', {
+      id: 'existing', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Existing', role: null, is_default: true,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    await expect(
+      createPageLayout(TENANT_ID, 'obj-1', {
+        name: 'Duplicate',
+        layout: VALID_LAYOUT_JSON,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('throws CONFLICT when a layout exists for the same named role', async () => {
+    fakePageLayouts.set('existing', {
+      id: 'existing', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Admin Layout', role: 'admin', is_default: false,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    await expect(
+      createPageLayout(TENANT_ID, 'obj-1', {
+        name: 'Another Admin Layout',
+        role: 'admin',
+        layout: VALID_LAYOUT_JSON,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});
