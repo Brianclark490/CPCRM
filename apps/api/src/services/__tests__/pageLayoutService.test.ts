@@ -36,7 +36,7 @@ const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockCon
     }
 
     // SELECT id FROM page_layouts WHERE tenant_id = ... (conflict check)
-    if (s.startsWith('SELECT ID FROM PAGE_LAYOUTS') && s.includes('TENANT_ID')) {
+    if (s.startsWith('SELECT ID FROM PAGE_LAYOUTS WHERE TENANT_ID')) {
       const tenantId = params![0] as string;
       const objectId = params![1] as string;
       const role = params!.length > 2 ? (params![2] as string) : null;
