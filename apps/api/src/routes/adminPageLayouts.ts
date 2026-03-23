@@ -354,3 +354,6 @@ adminPageLayoutsRouter.put('/:id', requireAuth, requireTenant, handleUpdatePageL
 adminPageLayoutsRouter.post('/:id/publish', requireAuth, requireTenant, handlePublishPageLayout);
 adminPageLayoutsRouter.get('/:id/versions', requireAuth, requireTenant, handleListPageLayoutVersions);
 adminPageLayoutsRouter.delete('/:id', requireAuth, requireTenant, handleDeletePageLayout);
+
+export const componentRegistryRouter = Router();
+componentRegistryRouter.get('/', requireAuth, requireTenant, handleGetComponentRegistry);
