@@ -11,6 +11,8 @@ import {
   publishPageLayout,
   listPageLayoutVersions,
   deletePageLayout,
+  copyLayout,
+  revertLayout,
 } from '../services/pageLayoutService.js';
 import type { CreatePageLayoutParams, UpdatePageLayoutParams } from '../services/pageLayoutService.js';
 import { COMPONENT_REGISTRY } from '../lib/componentRegistry.js';
@@ -355,12 +357,110 @@ export async function handleGetComponentRegistry(
   res.status(200).json(COMPONENT_REGISTRY);
 }
 
+/**
+ * POST /admin/objects/:objectId/page-layouts/:id/copy
+ *
+ * Copies layout JSON from a source layout into this layout's draft.
+ *
+ * Request body (JSON):
+ *   { "sourceLayoutId": "uuid" }
+ *
+ * Responses:
+ *   200  – updated page layout with copied JSON
+ *   400  – missing sourceLayoutId
+ *   401  – missing or invalid Bearer token
+ *   404  – layout, source layout, or parent object not found
+ *   500  – unexpected server error
+ */
+export async function handleCopyLayout(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const { objectId, id } = req.params as { objectId: string; id: string };
+  const body = req.body as { sourceLayoutId?: string };
+
+  if (!body.sourceLayoutId || typeof body.sourceLayoutId !== 'string') {
+    res.status(400).json({ error: 'sourceLayoutId is required', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  try {
+    const result = await copyLayout(
+      req.user!.tenantId!,
+      objectId,
+      id,
+      body.sourceLayoutId,
+    );
+    res.status(200).json(result);
+  } catch (err: unknown) {
+    const code = (err as Error & { code?: string }).code;
+
+    if (code === 'NOT_FOUND') {
+      res.status(404).json({ error: (err as Error).message, code: 'NOT_FOUND' });
+      return;
+    }
+
+    logger.error({ err, objectId, layoutId: id }, 'Unexpected error copying page layout');
+    res.status(500).json({ error: 'An unexpected error occurred' });
+  }
+}
+
+/**
+ * POST /admin/objects/:objectId/page-layouts/:id/revert
+ *
+ * Restores a page layout's draft from a specific version snapshot.
+ *
+ * Request body (JSON):
+ *   { "version": number }
+ *
+ * Responses:
+ *   200  – updated page layout with reverted JSON
+ *   400  – missing or invalid version
+ *   401  – missing or invalid Bearer token
+ *   404  – layout, version, or parent object not found
+ *   500  – unexpected server error
+ */
+export async function handleRevertLayout(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const { objectId, id } = req.params as { objectId: string; id: string };
+  const body = req.body as { version?: number };
+
+  if (body.version === undefined || typeof body.version !== 'number' || body.version < 1) {
+    res.status(400).json({ error: 'version must be a positive integer', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  try {
+    const result = await revertLayout(
+      req.user!.tenantId!,
+      objectId,
+      id,
+      body.version,
+    );
+    res.status(200).json(result);
+  } catch (err: unknown) {
+    const code = (err as Error & { code?: string }).code;
+
+    if (code === 'NOT_FOUND') {
+      res.status(404).json({ error: (err as Error).message, code: 'NOT_FOUND' });
+      return;
+    }
+
+    logger.error({ err, objectId, layoutId: id }, 'Unexpected error reverting page layout');
+    res.status(500).json({ error: 'An unexpected error occurred' });
+  }
+}
+
 adminPageLayoutsRouter.post('/', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handleCreatePageLayout);
 adminPageLayoutsRouter.get('/', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handleListPageLayouts);
 adminPageLayoutsRouter.get('/:id', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handleGetPageLayout);
 adminPageLayoutsRouter.put('/:id', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handleUpdatePageLayout);
 adminPageLayoutsRouter.post('/:id/publish', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handlePublishPageLayout);
 adminPageLayoutsRouter.get('/:id/versions', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handleListPageLayoutVersions);
+adminPageLayoutsRouter.post('/:id/copy', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handleCopyLayout);
+adminPageLayoutsRouter.post('/:id/revert', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handleRevertLayout);
 adminPageLayoutsRouter.delete('/:id', requireAuth, adminPageLayoutsRateLimiter, requireTenant, handleDeletePageLayout);
 
 export const componentRegistryRouter = Router();

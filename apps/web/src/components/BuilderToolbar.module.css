@@ -16,12 +16,21 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
 }
 
 .right {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-shrink: 0;
 }
 
 .backLink {
@@ -48,4 +57,34 @@
   background: var(--warning-bg);
   color: var(--warning);
   font-weight: 500;
+}
+
+.defaultFallbackBadge {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* ── Role selector ───────────────────────────────────────── */
+
+.roleSelector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.roleSelectorLabel {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.roleSelectorSelect {
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-page);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
 }

@@ -7,6 +7,8 @@ import {
   publishPageLayout,
   listPageLayoutVersions,
   deletePageLayout,
+  copyLayout,
+  revertLayout,
   validatePageLayoutName,
   validateLayoutJson,
 } from '../pageLayoutService.js';
@@ -145,11 +147,17 @@ const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockCon
       return { rows: [row] };
     }
 
-    // SELECT * FROM page_layout_versions WHERE layout_id = ... ORDER BY version DESC
-    if (s.startsWith('SELECT * FROM PAGE_LAYOUT_VERSIONS WHERE LAYOUT_ID')) {
+    // SELECT * FROM page_layout_versions WHERE layout_id = ... AND tenant_id = ... AND version = ...
+    if (s.startsWith('SELECT * FROM PAGE_LAYOUT_VERSIONS WHERE LAYOUT_ID') && s.includes('VERSION')) {
       const layoutId = params![0] as string;
+      const tenantId = params![1] as string;
+      const version = params!.length > 2 ? (params![2] as number) : undefined;
       const rows = [...fakePageLayoutVersions.values()]
-        .filter((v) => v.layout_id === layoutId && v.tenant_id === params![1])
+        .filter((v) => {
+          if (v.layout_id !== layoutId || v.tenant_id !== tenantId) return false;
+          if (version !== undefined) return v.version === version;
+          return true;
+        })
         .sort((a, b) => (b.version as number) - (a.version as number));
       return { rows };
     }
@@ -775,5 +783,150 @@ describe('createPageLayout — CONFLICT', () => {
         layout: VALID_LAYOUT_JSON,
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});
+
+// ─── Tests: copyLayout ──────────────────────────────────────────────────────
+
+describe('copyLayout', () => {
+  beforeEach(() => {
+    fakeObjects.clear();
+    fakePageLayouts.clear();
+    mockQuery.mockClear();
+    fakeObjects.set('obj-1', { id: 'obj-1', tenant_id: TENANT_ID });
+  });
+
+  it('copies layout JSON from source to target', async () => {
+    const sourceLayout = {
+      ...VALID_LAYOUT_JSON,
+      header: { ...VALID_LAYOUT_JSON.header, primaryField: 'source_field' },
+    };
+
+    fakePageLayouts.set('source-pl', {
+      id: 'source-pl', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: true,
+      layout: sourceLayout, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    fakePageLayouts.set('target-pl', {
+      id: 'target-pl', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Manager', role: 'manager', is_default: false,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    const result = await copyLayout(TENANT_ID, 'obj-1', 'target-pl', 'source-pl');
+    expect(result.layout.header.primaryField).toBe('source_field');
+  });
+
+  it('throws NOT_FOUND when source layout does not exist', async () => {
+    fakePageLayouts.set('target-pl', {
+      id: 'target-pl', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Manager', role: 'manager', is_default: false,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    await expect(
+      copyLayout(TENANT_ID, 'obj-1', 'target-pl', 'nonexistent'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('throws NOT_FOUND when target layout does not exist', async () => {
+    fakePageLayouts.set('source-pl', {
+      id: 'source-pl', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: true,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    await expect(
+      copyLayout(TENANT_ID, 'obj-1', 'nonexistent', 'source-pl'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('throws NOT_FOUND when object does not exist', async () => {
+    await expect(
+      copyLayout(TENANT_ID, 'nonexistent', 'target-pl', 'source-pl'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+// ─── Tests: revertLayout ────────────────────────────────────────────────────
+
+describe('revertLayout', () => {
+  beforeEach(() => {
+    fakeObjects.clear();
+    fakePageLayouts.clear();
+    fakePageLayoutVersions.clear();
+    mockQuery.mockClear();
+    fakeObjects.set('obj-1', { id: 'obj-1', tenant_id: TENANT_ID });
+  });
+
+  it('restores layout from a version snapshot', async () => {
+    const oldLayout = {
+      ...VALID_LAYOUT_JSON,
+      header: { ...VALID_LAYOUT_JSON.header, primaryField: 'old_field' },
+    };
+
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: true,
+      layout: VALID_LAYOUT_JSON, published_layout: VALID_LAYOUT_JSON,
+      version: 3, status: 'published',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: new Date().toISOString(),
+    });
+
+    fakePageLayoutVersions.set('v1', {
+      id: 'v1', layout_id: 'pl1', tenant_id: TENANT_ID,
+      version: 1, layout: oldLayout,
+      published_by: 'user-1', published_at: new Date().toISOString(),
+    });
+
+    const result = await revertLayout(TENANT_ID, 'obj-1', 'pl1', 1);
+    expect(result.layout.header.primaryField).toBe('old_field');
+  });
+
+  it('throws NOT_FOUND when layout does not exist', async () => {
+    await expect(
+      revertLayout(TENANT_ID, 'obj-1', 'nonexistent', 1),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('throws NOT_FOUND when version does not exist', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: true,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+
+    await expect(
+      revertLayout(TENANT_ID, 'obj-1', 'pl1', 99),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('throws NOT_FOUND when object does not exist', async () => {
+    await expect(
+      revertLayout(TENANT_ID, 'nonexistent', 'pl1', 1),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
