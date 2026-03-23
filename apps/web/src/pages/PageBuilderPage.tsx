@@ -84,6 +84,7 @@ function createDefaultLayout(objectId: string, name: string): BuilderLayout {
         sections: [
           {
             id: uid(),
+            type: 'field_section',
             label: 'General',
             columns: 2,
             components: [],
@@ -131,6 +132,7 @@ export function PageBuilderPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
   // Role-based layout state
@@ -277,7 +279,7 @@ export function PageBuilderPage() {
       draft.tabs.push({
         id: uid(),
         label: `Tab ${draft.tabs.length + 1}`,
-        sections: [{ id: uid(), label: 'General', columns: 2, components: [] }],
+        sections: [{ id: uid(), type: 'field_section', label: 'General', columns: 2, components: [] }],
       });
       return draft;
     });
@@ -305,6 +307,7 @@ export function PageBuilderPage() {
       if (tab) {
         tab.sections.push({
           id: uid(),
+          type: 'field_section',
           label: `Section ${tab.sections.length + 1}`,
           columns,
           components: [],
@@ -555,6 +558,7 @@ export function PageBuilderPage() {
     if (!sessionToken || !objectId || !layout) return;
 
     setSaving(true);
+    setSaveError(null);
     try {
       if (selectedLayoutId) {
         // Update existing
@@ -571,6 +575,9 @@ export function PageBuilderPage() {
         );
         if (res.ok) {
           setDirty(false);
+        } else {
+          const body = await res.json().catch(() => null) as { error?: string } | null;
+          setSaveError(body?.error ?? 'Failed to save layout.');
         }
       } else {
         // Create new
@@ -593,10 +600,13 @@ export function PageBuilderPage() {
           const data = (await res.json()) as PageLayoutListItem;
           setSelectedLayoutId(data.id);
           setDirty(false);
+        } else {
+          const body = await res.json().catch(() => null) as { error?: string } | null;
+          setSaveError(body?.error ?? 'Failed to create layout.');
         }
       }
     } catch {
-      // silently fail — user can try again
+      setSaveError('Failed to connect to the server. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -611,16 +621,21 @@ export function PageBuilderPage() {
     }
 
     setPublishing(true);
+    setSaveError(null);
     try {
-      await fetch(
+      const res = await fetch(
         `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/publish`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${sessionToken}` },
         },
       );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null;
+        setSaveError(body?.error ?? 'Failed to publish layout.');
+      }
     } catch {
-      // silently fail
+      setSaveError('Failed to connect to the server. Please try again.');
     } finally {
       setPublishing(false);
     }
@@ -860,6 +875,20 @@ export function PageBuilderPage() {
         onShowHistory={() => void handleShowHistory()}
         usingDefault={usingDefault}
       />
+
+      {saveError && (
+        <div className={styles.saveErrorBanner} role="alert" data-testid="save-error-banner">
+          <span>{saveError}</span>
+          <button
+            type="button"
+            className={styles.saveErrorDismiss}
+            onClick={() => setSaveError(null)}
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className={styles.builderBody}>
         <DndContext

@@ -39,6 +39,7 @@ export interface LayoutComponentDef {
 
 export interface LayoutSectionDef {
   id: string;
+  type?: string;
   label: string;
   columns: number;
   collapsed?: boolean;

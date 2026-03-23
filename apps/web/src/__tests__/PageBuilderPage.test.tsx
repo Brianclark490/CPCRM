@@ -128,6 +128,7 @@ const samplePageLayoutDetail = {
         sections: [
           {
             id: 'sec-1',
+            type: 'field_section',
             label: 'General',
             columns: 2,
             components: [
