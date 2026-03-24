@@ -168,6 +168,18 @@ const LockIcon = () => (
   </svg>
 );
 
+const EditIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <path
+      d="M10.5 1.5l2 2-7 7H3.5v-2l7-7z"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const ChevronUpIcon = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
     <path d="M3 8l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -960,6 +972,16 @@ export function FieldBuilderPage() {
                               <ChevronDownIcon />
                             </button>
                           </div>
+                          {field.isSystem && (
+                            <button
+                              type="button"
+                              className={styles.editButton}
+                              aria-label={`Edit ${field.label}`}
+                              onClick={() => openEditFieldModal(field)}
+                            >
+                              <EditIcon />
+                            </button>
+                          )}
                           {!field.isSystem && (
                             <button
                               type="button"

@@ -22,6 +22,7 @@ interface FieldSeed {
   required: boolean;
   options: Record<string, unknown>;
   sortOrder: number;
+  isSystem?: boolean;
 }
 
 interface RelationshipSeed {
@@ -130,7 +131,7 @@ const OBJECT_SEEDS: ObjectSeed[] = [
 // ─── Field definitions ────────────────────────────────────────────────────────
 
 const ACCOUNT_FIELDS: FieldSeed[] = [
-  { objectApiName: 'account', apiName: 'name',          label: 'Account Name',   fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 1 },
+  { objectApiName: 'account', apiName: 'name',          label: 'Account Name',   fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 1, isSystem: true },
   { objectApiName: 'account', apiName: 'type',          label: 'Type',           fieldType: 'dropdown', required: false, options: { choices: ['Prospect', 'Customer', 'Partner', 'Vendor', 'Other'] }, sortOrder: 2 },
   { objectApiName: 'account', apiName: 'industry',      label: 'Industry',       fieldType: 'dropdown', required: false, options: { choices: ['Technology', 'Healthcare', 'Finance', 'Manufacturing', 'Retail', 'Education', 'Real Estate', 'Professional Services', 'Non-Profit', 'Government', 'Other'] }, sortOrder: 3 },
   { objectApiName: 'account', apiName: 'status',        label: 'Status',         fieldType: 'dropdown', required: false, options: { choices: ['Active', 'Inactive', 'Churned'] }, sortOrder: 4 },
@@ -149,8 +150,8 @@ const ACCOUNT_FIELDS: FieldSeed[] = [
 ];
 
 const CONTACT_FIELDS: FieldSeed[] = [
-  { objectApiName: 'contact', apiName: 'first_name',      label: 'First Name',      fieldType: 'text',     required: true,  options: { max_length: 100 }, sortOrder: 1 },
-  { objectApiName: 'contact', apiName: 'last_name',       label: 'Last Name',       fieldType: 'text',     required: true,  options: { max_length: 100 }, sortOrder: 2 },
+  { objectApiName: 'contact', apiName: 'first_name',      label: 'First Name',      fieldType: 'text',     required: true,  options: { max_length: 100 }, sortOrder: 1, isSystem: true },
+  { objectApiName: 'contact', apiName: 'last_name',       label: 'Last Name',       fieldType: 'text',     required: true,  options: { max_length: 100 }, sortOrder: 2, isSystem: true },
   { objectApiName: 'contact', apiName: 'email',           label: 'Email',           fieldType: 'email',    required: false, options: {}, sortOrder: 3 },
   { objectApiName: 'contact', apiName: 'phone',           label: 'Phone',           fieldType: 'phone',    required: false, options: {}, sortOrder: 4 },
   { objectApiName: 'contact', apiName: 'mobile',          label: 'Mobile',          fieldType: 'phone',    required: false, options: {}, sortOrder: 5 },
@@ -164,14 +165,14 @@ const CONTACT_FIELDS: FieldSeed[] = [
 ];
 
 const LEAD_FIELDS: FieldSeed[] = [
-  { objectApiName: 'lead', apiName: 'first_name',      label: 'First Name',      fieldType: 'text',     required: true,  options: { max_length: 100 }, sortOrder: 1 },
-  { objectApiName: 'lead', apiName: 'last_name',       label: 'Last Name',       fieldType: 'text',     required: true,  options: { max_length: 100 }, sortOrder: 2 },
+  { objectApiName: 'lead', apiName: 'first_name',      label: 'First Name',      fieldType: 'text',     required: true,  options: { max_length: 100 }, sortOrder: 1, isSystem: true },
+  { objectApiName: 'lead', apiName: 'last_name',       label: 'Last Name',       fieldType: 'text',     required: true,  options: { max_length: 100 }, sortOrder: 2, isSystem: true },
   { objectApiName: 'lead', apiName: 'company',         label: 'Company',         fieldType: 'text',     required: false, options: { max_length: 255 }, sortOrder: 3 },
   { objectApiName: 'lead', apiName: 'email',           label: 'Email',           fieldType: 'email',    required: false, options: {}, sortOrder: 4 },
   { objectApiName: 'lead', apiName: 'phone',           label: 'Phone',           fieldType: 'phone',    required: false, options: {}, sortOrder: 5 },
   { objectApiName: 'lead', apiName: 'job_title',       label: 'Job Title',       fieldType: 'text',     required: false, options: { max_length: 200 }, sortOrder: 6 },
   { objectApiName: 'lead', apiName: 'source',          label: 'Lead Source',     fieldType: 'dropdown', required: false, options: { choices: ['Website', 'Referral', 'Cold Call', 'Email Campaign', 'Social Media', 'Event', 'Advertisement', 'Partner', 'Other'] }, sortOrder: 7 },
-  { objectApiName: 'lead', apiName: 'status',          label: 'Status',          fieldType: 'dropdown', required: true,  options: { choices: ['New', 'Contacted', 'Qualified', 'Unqualified', 'Converted'] }, sortOrder: 8 },
+  { objectApiName: 'lead', apiName: 'status',          label: 'Status',          fieldType: 'dropdown', required: true,  options: { choices: ['New', 'Contacted', 'Qualified', 'Unqualified', 'Converted'] }, sortOrder: 8, isSystem: true },
   { objectApiName: 'lead', apiName: 'rating',          label: 'Rating',          fieldType: 'dropdown', required: false, options: { choices: ['Hot', 'Warm', 'Cold'] }, sortOrder: 9 },
   { objectApiName: 'lead', apiName: 'estimated_value', label: 'Estimated Value', fieldType: 'currency', required: false, options: { min: 0, precision: 2 }, sortOrder: 10 },
   { objectApiName: 'lead', apiName: 'industry',        label: 'Industry',        fieldType: 'dropdown', required: false, options: { choices: ['Technology', 'Healthcare', 'Finance', 'Manufacturing', 'Retail', 'Education', 'Real Estate', 'Professional Services', 'Non-Profit', 'Government', 'Other'] }, sortOrder: 11 },
@@ -181,8 +182,8 @@ const LEAD_FIELDS: FieldSeed[] = [
 ];
 
 const OPPORTUNITY_FIELDS: FieldSeed[] = [
-  { objectApiName: 'opportunity', apiName: 'name',        label: 'Opportunity Name', fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 1 },
-  { objectApiName: 'opportunity', apiName: 'stage',       label: 'Stage',            fieldType: 'dropdown', required: true,  options: { choices: ['Prospecting', 'Qualification', 'Needs Analysis', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'] }, sortOrder: 2 },
+  { objectApiName: 'opportunity', apiName: 'name',        label: 'Opportunity Name', fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 1, isSystem: true },
+  { objectApiName: 'opportunity', apiName: 'stage',       label: 'Stage',            fieldType: 'dropdown', required: true,  options: { choices: ['Prospecting', 'Qualification', 'Needs Analysis', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'] }, sortOrder: 2, isSystem: true },
   { objectApiName: 'opportunity', apiName: 'value',       label: 'Value',            fieldType: 'currency', required: false, options: { min: 0, precision: 2 }, sortOrder: 3 },
   { objectApiName: 'opportunity', apiName: 'close_date',  label: 'Close Date',       fieldType: 'date',     required: false, options: {}, sortOrder: 4 },
   { objectApiName: 'opportunity', apiName: 'probability', label: 'Probability (%)',  fieldType: 'number',   required: false, options: { min: 0, max: 100 }, sortOrder: 5 },
@@ -194,7 +195,7 @@ const OPPORTUNITY_FIELDS: FieldSeed[] = [
 ];
 
 const ACTIVITY_FIELDS: FieldSeed[] = [
-  { objectApiName: 'activity', apiName: 'subject',          label: 'Subject',         fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1 },
+  { objectApiName: 'activity', apiName: 'subject',          label: 'Subject',         fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1, isSystem: true },
   { objectApiName: 'activity', apiName: 'type',             label: 'Type',            fieldType: 'dropdown', required: true,  options: { choices: ['Call', 'Email', 'Meeting', 'Task', 'Demo', 'Follow-up', 'Other'] }, sortOrder: 2 },
   { objectApiName: 'activity', apiName: 'status',           label: 'Status',          fieldType: 'dropdown', required: true,  options: { choices: ['Not Started', 'In Progress', 'Completed', 'Deferred', 'Cancelled'] }, sortOrder: 3 },
   { objectApiName: 'activity', apiName: 'priority',         label: 'Priority',        fieldType: 'dropdown', required: false, options: { choices: ['High', 'Medium', 'Low'] }, sortOrder: 4 },
@@ -206,16 +207,16 @@ const ACTIVITY_FIELDS: FieldSeed[] = [
 ];
 
 const NEXT_ACTION_FIELDS: FieldSeed[] = [
-  { objectApiName: 'next_action', apiName: 'title',       label: 'Title',       fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1 },
+  { objectApiName: 'next_action', apiName: 'title',       label: 'Title',       fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1, isSystem: true },
   { objectApiName: 'next_action', apiName: 'due_date',    label: 'Due Date',    fieldType: 'date',     required: true,  options: {}, sortOrder: 2 },
   { objectApiName: 'next_action', apiName: 'priority',    label: 'Priority',    fieldType: 'dropdown', required: false, options: { choices: ['High', 'Medium', 'Low'] }, sortOrder: 3 },
-  { objectApiName: 'next_action', apiName: 'status',      label: 'Status',      fieldType: 'dropdown', required: true,  options: { choices: ['Pending', 'In Progress', 'Completed', 'Skipped'] }, sortOrder: 4 },
+  { objectApiName: 'next_action', apiName: 'status',      label: 'Status',      fieldType: 'dropdown', required: true,  options: { choices: ['Pending', 'In Progress', 'Completed', 'Skipped'] }, sortOrder: 4, isSystem: true },
   { objectApiName: 'next_action', apiName: 'assigned_to', label: 'Assigned To', fieldType: 'text',     required: false, options: { max_length: 255 }, sortOrder: 5 },
   { objectApiName: 'next_action', apiName: 'description', label: 'Description', fieldType: 'textarea', required: false, options: {}, sortOrder: 6 },
 ];
 
 const AGREEMENT_FIELDS: FieldSeed[] = [
-  { objectApiName: 'agreement', apiName: 'title',        label: 'Title',              fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1 },
+  { objectApiName: 'agreement', apiName: 'title',        label: 'Title',              fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1, isSystem: true },
   { objectApiName: 'agreement', apiName: 'type',         label: 'Type',               fieldType: 'dropdown', required: false, options: { choices: ['Contract', 'Proposal', 'Quote', 'SLA', 'NDA', 'SOW', 'Other'] }, sortOrder: 2 },
   { objectApiName: 'agreement', apiName: 'status',       label: 'Status',             fieldType: 'dropdown', required: true,  options: { choices: ['Draft', 'Sent', 'Under Review', 'Signed', 'Expired', 'Cancelled'] }, sortOrder: 3 },
   { objectApiName: 'agreement', apiName: 'start_date',   label: 'Start Date',         fieldType: 'date',     required: false, options: {}, sortOrder: 4 },
@@ -227,24 +228,24 @@ const AGREEMENT_FIELDS: FieldSeed[] = [
 ];
 
 const NOTE_FIELDS: FieldSeed[] = [
-  { objectApiName: 'note', apiName: 'title',    label: 'Title',    fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1 },
-  { objectApiName: 'note', apiName: 'body',     label: 'Body',     fieldType: 'textarea', required: true,  options: {}, sortOrder: 2 },
+  { objectApiName: 'note', apiName: 'title',    label: 'Title',    fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1, isSystem: true },
+  { objectApiName: 'note', apiName: 'body',     label: 'Body',     fieldType: 'textarea', required: true,  options: {}, sortOrder: 2, isSystem: true },
   { objectApiName: 'note', apiName: 'category', label: 'Category', fieldType: 'dropdown', required: false, options: { choices: ['General', 'Meeting Notes', 'Phone Call', 'Decision', 'Action Item', 'Important'] }, sortOrder: 3 },
 ];
 
 const FILE_FIELDS: FieldSeed[] = [
-  { objectApiName: 'file', apiName: 'filename',    label: 'Filename',       fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1 },
-  { objectApiName: 'file', apiName: 'file_url',    label: 'File URL',       fieldType: 'url',      required: true,  options: {}, sortOrder: 2 },
+  { objectApiName: 'file', apiName: 'filename',    label: 'Filename',       fieldType: 'text',     required: true,  options: { max_length: 500 }, sortOrder: 1, isSystem: true },
+  { objectApiName: 'file', apiName: 'file_url',    label: 'File URL',       fieldType: 'url',      required: true,  options: {}, sortOrder: 2, isSystem: true },
   { objectApiName: 'file', apiName: 'category',    label: 'Category',       fieldType: 'dropdown', required: false, options: { choices: ['Document', 'Spreadsheet', 'Presentation', 'Image', 'Contract', 'Proposal', 'Invoice', 'Other'] }, sortOrder: 3 },
   { objectApiName: 'file', apiName: 'file_size',   label: 'File Size (KB)', fieldType: 'number',   required: false, options: { min: 0 }, sortOrder: 4 },
   { objectApiName: 'file', apiName: 'description', label: 'Description',    fieldType: 'textarea', required: false, options: {}, sortOrder: 5 },
 ];
 
 const USER_FIELDS: FieldSeed[] = [
-  { objectApiName: 'user', apiName: 'email',            label: 'Email',            fieldType: 'email',    required: true,  options: {}, sortOrder: 1 },
-  { objectApiName: 'user', apiName: 'display_name',     label: 'Display Name',     fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 2 },
-  { objectApiName: 'user', apiName: 'role',             label: 'Role',             fieldType: 'dropdown', required: false, options: { choices: ['admin', 'manager', 'user', 'read_only'] }, sortOrder: 3 },
-  { objectApiName: 'user', apiName: 'descope_user_id',  label: 'Descope User ID',  fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 4 },
+  { objectApiName: 'user', apiName: 'email',            label: 'Email',            fieldType: 'email',    required: true,  options: {}, sortOrder: 1, isSystem: true },
+  { objectApiName: 'user', apiName: 'display_name',     label: 'Display Name',     fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 2, isSystem: true },
+  { objectApiName: 'user', apiName: 'role',             label: 'Role',             fieldType: 'dropdown', required: false, options: { choices: ['admin', 'manager', 'user', 'read_only'] }, sortOrder: 3, isSystem: true },
+  { objectApiName: 'user', apiName: 'descope_user_id',  label: 'Descope User ID',  fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 4, isSystem: true },
   { objectApiName: 'user', apiName: 'job_title',        label: 'Job Title',        fieldType: 'text',     required: false, options: { max_length: 200 }, sortOrder: 5 },
   { objectApiName: 'user', apiName: 'phone',            label: 'Phone',            fieldType: 'phone',    required: false, options: {}, sortOrder: 6 },
   { objectApiName: 'user', apiName: 'avatar_url',       label: 'Avatar URL',       fieldType: 'url',      required: false, options: {}, sortOrder: 7 },
@@ -252,7 +253,7 @@ const USER_FIELDS: FieldSeed[] = [
 ];
 
 const TEAM_FIELDS: FieldSeed[] = [
-  { objectApiName: 'team', apiName: 'name',        label: 'Team Name',   fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 1 },
+  { objectApiName: 'team', apiName: 'name',        label: 'Team Name',   fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 1, isSystem: true },
   { objectApiName: 'team', apiName: 'description', label: 'Description', fieldType: 'textarea', required: false, options: {},                  sortOrder: 2 },
 ];
 
@@ -745,10 +746,10 @@ async function seedFields(
     const id = randomUUID();
     const { rows } = await client.query(
       `INSERT INTO field_definitions (id, object_id, api_name, label, field_type, required, options, sort_order, is_system, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (tenant_id, object_id, api_name) DO NOTHING
        RETURNING id`,
-      [id, objectId, field.apiName, field.label, field.fieldType, field.required, JSON.stringify(field.options), field.sortOrder, tenantId],
+      [id, objectId, field.apiName, field.label, field.fieldType, field.required, JSON.stringify(field.options), field.sortOrder, field.isSystem ?? false, tenantId],
     );
 
     const key = `${field.objectApiName}.${field.apiName}`;
