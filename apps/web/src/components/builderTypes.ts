@@ -97,7 +97,12 @@ export interface CanvasSectionDragData {
   sectionId: string;
 }
 
-export type DragData = PaletteDragData | CanvasComponentDragData | CanvasSectionDragData;
+export interface TabDropTargetData {
+  origin: 'tab-drop-target';
+  tabId: string;
+}
+
+export type DragData = PaletteDragData | CanvasComponentDragData | CanvasSectionDragData | TabDropTargetData;
 
 // ─── Page layout API shapes ──────────────────────────────────────────────────
 

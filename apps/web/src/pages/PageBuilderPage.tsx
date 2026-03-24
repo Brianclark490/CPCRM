@@ -523,27 +523,72 @@ export function PageBuilderPage() {
       return;
     }
 
-    // Section reorder
+    // Section reorder (within same tab or across tabs)
     if (activeData.origin === 'canvas-section') {
       const sectionData = activeData as unknown as CanvasSectionDragData;
       const overData = over.data.current;
 
-      if (!overData || overData.origin !== 'canvas-section') return;
+      if (!overData) return;
+
+      // Dropped on a tab target — move section to that tab
+      if (overData.origin === 'tab-drop-target') {
+        const targetTabId = overData.tabId as string;
+        updateLayout((draft) => {
+          // Find and remove section from its current tab
+          let movedSection: BuilderSection | null = null;
+          for (const tab of draft.tabs) {
+            const idx = tab.sections.findIndex(
+              (s: BuilderSection) => s.id === sectionData.sectionId,
+            );
+            if (idx >= 0) {
+              // Don't move if already in the target tab
+              if (tab.id === targetTabId) return draft;
+              [movedSection] = tab.sections.splice(idx, 1);
+              break;
+            }
+          }
+          if (!movedSection) return draft;
+
+          // Append to the target tab
+          const targetTab = draft.tabs.find((t: BuilderTab) => t.id === targetTabId);
+          if (targetTab) {
+            targetTab.sections.push(movedSection);
+          }
+          return draft;
+        });
+        return;
+      }
+
+      // Dropped on another section — reorder within or across tabs
+      if (overData.origin !== 'canvas-section') return;
       const overSectionData = overData as unknown as CanvasSectionDragData;
       if (sectionData.sectionId === overSectionData.sectionId) return;
 
       updateLayout((draft) => {
-        // Find both sections (must be in the same tab)
-        for (const tab of draft.tabs) {
-          const fromIdx = tab.sections.findIndex(
+        // Find source section and remove it
+        let sourceTabIndex = -1;
+        let sourceIdx = -1;
+        for (let ti = 0; ti < draft.tabs.length; ti++) {
+          const idx = draft.tabs[ti].sections.findIndex(
             (s: BuilderSection) => s.id === sectionData.sectionId,
           );
-          const toIdx = tab.sections.findIndex(
+          if (idx >= 0) {
+            sourceTabIndex = ti;
+            sourceIdx = idx;
+            break;
+          }
+        }
+        if (sourceTabIndex < 0 || sourceIdx < 0) return draft;
+
+        const [moved] = draft.tabs[sourceTabIndex].sections.splice(sourceIdx, 1);
+
+        // Find target section and insert before it
+        for (let ti = 0; ti < draft.tabs.length; ti++) {
+          const toIdx = draft.tabs[ti].sections.findIndex(
             (s: BuilderSection) => s.id === overSectionData.sectionId,
           );
-          if (fromIdx >= 0 && toIdx >= 0) {
-            const [moved] = tab.sections.splice(fromIdx, 1);
-            tab.sections.splice(toIdx, 0, moved);
+          if (toIdx >= 0) {
+            draft.tabs[ti].sections.splice(toIdx, 0, moved);
             break;
           }
         }
