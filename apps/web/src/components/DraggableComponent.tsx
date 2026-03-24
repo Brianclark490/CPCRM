@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { BuilderComponent, FieldRef, ComponentDefinition } from './builderTypes.js';
+import { resolveIcon } from './iconMap.js';
 import styles from './DraggableComponent.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ function getComponentIcon(
   registry: ComponentDefinition[],
 ): string {
   const def = registry.find((r) => r.type === component.type);
-  return def?.icon ?? '📦';
+  return resolveIcon(def?.icon ?? '');
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────

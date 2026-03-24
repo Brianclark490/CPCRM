@@ -7,6 +7,7 @@ import type {
   PaletteDragData,
   BuilderTab,
 } from './builderTypes.js';
+import { resolveIcon } from './iconMap.js';
 import styles from './ComponentPalette.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ function PaletteItem({ id, label, icon, dragData, isPlaced }: PaletteItemProps) 
       {...listeners}
       {...attributes}
     >
-      <span className={styles.itemIcon} aria-hidden="true">{icon}</span>
+      <span className={styles.itemIcon} aria-hidden="true">{resolveIcon(icon)}</span>
       <span className={styles.itemLabel}>{label}</span>
       {isPlaced && <span className={styles.placedBadge}>✓</span>}
     </div>
