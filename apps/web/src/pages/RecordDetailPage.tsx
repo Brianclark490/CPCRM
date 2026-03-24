@@ -6,6 +6,7 @@ import { FieldInput } from '../components/FieldInput.js';
 import { ConvertLeadModal } from '../components/ConvertLeadModal.js';
 import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
 import { usePageLayout } from '../usePageLayout.js';
+import { useTenantLocale } from '../useTenantLocale.js';
 import styles from './RecordDetailPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -95,35 +96,6 @@ interface LayoutSection {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function formatRelativeTime(iso: string | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  const now = Date.now();
-  const diffMs = now - d.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
-
-  if (diffSec < 60) return 'just now';
-  if (diffMin < 60) return `${String(diffMin)} minute${diffMin === 1 ? '' : 's'} ago`;
-  if (diffHr < 24) return `${String(diffHr)} hour${diffHr === 1 ? '' : 's'} ago`;
-  if (diffDay < 7) return `${String(diffDay)} day${diffDay === 1 ? '' : 's'} ago`;
-  return formatDate(iso);
-}
-
 function getInitials(name: string | undefined): string {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
@@ -165,6 +137,7 @@ export function RecordDetailPage() {
   const { apiName, id } = useParams<{ apiName: string; id: string }>();
   const navigate = useNavigate();
   const { sessionToken } = useSession();
+  const { formatDate, formatRelativeTime } = useTenantLocale();
 
   // Data state
   const [record, setRecord] = useState<RecordDetail | null>(null);

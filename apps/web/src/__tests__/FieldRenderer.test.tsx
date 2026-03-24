@@ -64,7 +64,7 @@ describe('FieldRenderer', () => {
 
     it('renders zero as 0.00', () => {
       render(<FieldRenderer fieldType="currency" value={0} />);
-      expect(screen.getByText('0.00')).toBeInTheDocument();
+      expect(screen.getByText(/£0\.00/)).toBeInTheDocument();
     });
   });
 

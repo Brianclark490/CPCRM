@@ -50,7 +50,7 @@ describe('KanbanCard', () => {
 
   it('renders the formatted currency value', () => {
     renderCard();
-    expect(screen.getByText(/50.*000/)).toBeInTheDocument();
+    expect(screen.getByText(/£50K/)).toBeInTheDocument();
   });
 
   it('renders the close date', () => {

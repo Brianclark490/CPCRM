@@ -1,3 +1,4 @@
+import { useTenantLocale } from '../useTenantLocale.js';
 import { StatCard } from './StatCard.js';
 import styles from './PipelineSummaryBar.module.css';
 
@@ -20,18 +21,6 @@ export interface PipelineSummaryData {
 
 interface PipelineSummaryBarProps {
   data: PipelineSummaryData;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(0)}K`;
-  }
-  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -117,34 +106,35 @@ const ClockIcon = () => (
 
 export function PipelineSummaryBar({ data }: PipelineSummaryBarProps) {
   const { totals, avgDaysToClose } = data;
+  const { formatCurrencyCompact } = useTenantLocale();
 
   return (
     <div className={styles.bar} data-testid="pipeline-summary-bar">
       <StatCard
         label="Total Open Value"
-        value={formatCurrency(totals.totalOpenValue)}
+        value={formatCurrencyCompact(totals.totalOpenValue)}
         icon={<DollarIcon />}
       />
       <StatCard
         label="Weighted Pipeline"
-        value={formatCurrency(totals.totalWeightedValue)}
+        value={formatCurrencyCompact(totals.totalWeightedValue)}
         icon={<ScaleIcon />}
       />
       <StatCard
         label="Open Deals"
         value={String(totals.openDeals)}
-        meta={`Avg ${formatCurrency(totals.avgDealSize)}`}
+        meta={`Avg ${formatCurrencyCompact(totals.avgDealSize)}`}
         icon={<CountIcon />}
       />
       <StatCard
         label="Avg Deal Size"
-        value={formatCurrency(totals.avgDealSize)}
+        value={formatCurrencyCompact(totals.avgDealSize)}
         icon={<AvgIcon />}
       />
       <StatCard
         label="Won This Month"
         value={String(totals.wonThisMonth)}
-        meta={formatCurrency(totals.wonValueThisMonth)}
+        meta={formatCurrencyCompact(totals.wonValueThisMonth)}
         icon={<TrophyIcon />}
       />
       <StatCard

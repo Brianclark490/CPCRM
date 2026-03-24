@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { TenantSettingsProvider } from './store/tenantSettings.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
 import { OpportunitiesPage } from './pages/OpportunitiesPage.js';
@@ -35,6 +36,7 @@ import { AppShell } from './components/AppShell.js';
 export function App() {
   return (
     <BrowserRouter>
+      <TenantSettingsProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
@@ -355,6 +357,7 @@ export function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </TenantSettingsProvider>
     </BrowserRouter>
   );
 }

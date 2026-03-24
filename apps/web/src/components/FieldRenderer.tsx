@@ -1,3 +1,4 @@
+import { useTenantLocale } from '../useTenantLocale.js';
 import styles from './FieldRenderer.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,6 +36,8 @@ function getBadgeColour(value: string) {
  * Used in list pages, detail pages, and anywhere a field value is displayed.
  */
 export function FieldRenderer({ fieldType, value }: FieldRendererProps) {
+  const { formatCurrency, formatNumber, formatDate, formatDateTime } = useTenantLocale();
+
   if (value === null || value === undefined || value === '') {
     return <span className={styles.empty}>-</span>;
   }
@@ -45,41 +48,16 @@ export function FieldRenderer({ fieldType, value }: FieldRendererProps) {
       return <span>{String(value)}</span>;
 
     case 'number':
-      return <span>{Number(value).toLocaleString()}</span>;
+      return <span>{formatNumber(Number(value))}</span>;
 
     case 'currency':
-      return (
-        <span>
-          {Number(value).toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </span>
-      );
+      return <span>{formatCurrency(Number(value))}</span>;
 
     case 'date':
-      return (
-        <span>
-          {new Date(String(value)).toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-          })}
-        </span>
-      );
+      return <span>{formatDate(String(value))}</span>;
 
     case 'datetime':
-      return (
-        <span>
-          {new Date(String(value)).toLocaleString(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>
-      );
+      return <span>{formatDateTime(String(value))}</span>;
 
     case 'email':
       return (
@@ -150,7 +128,7 @@ export function FieldRenderer({ fieldType, value }: FieldRendererProps) {
     }
 
     case 'formula':
-      return <span>{Number(value).toLocaleString()}</span>;
+      return <span>{formatNumber(Number(value))}</span>;
 
     default:
       return <span>{String(value)}</span>;
