@@ -75,6 +75,7 @@ export function formatCurrencyCompact(value: number, locale: TenantLocale = {}):
   // Intl compact notation may produce uppercase suffixes like "K", "M", "B"
   // or locale-specific forms. Normalise to lowercase k / m / b / t.
   return formatted
+    .replace(/\.0([KMBTkmbt])/g, '$1') // Remove trailing '.0' before suffix
     .replace(/K/g, 'k')
     .replace(/M/g, 'm')
     .replace(/B/g, 'b')
