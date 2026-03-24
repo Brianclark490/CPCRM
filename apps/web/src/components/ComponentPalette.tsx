@@ -139,7 +139,7 @@ export function ComponentPalette({
             <PaletteItem
               key={`rel-${rel.id}`}
               id={`palette-rel-${rel.id}`}
-              label={rel.label}
+              label={rel.targetObjectLabel}
               icon="📋"
               isPlaced={placedRelationships.has(rel.id)}
               dragData={{
