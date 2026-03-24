@@ -185,12 +185,12 @@ describe('seedDefaultObjects', () => {
     client = createMockClient(db);
   });
 
-  it('creates all 10 object definitions on a fresh database', async () => {
+  it('creates all 11 object definitions on a fresh database', async () => {
     const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(result.objectsCreated).toBe(SEED_COUNTS.objects);
     expect(result.objectsSkipped).toBe(0);
-    expect(db.objects.size).toBe(10);
+    expect(db.objects.size).toBe(11);
   });
 
   it('creates all field definitions', async () => {
@@ -236,13 +236,13 @@ describe('seedDefaultObjects', () => {
   it('is idempotent — re-running skips all existing data', async () => {
     // First run — everything created
     const first = await seedWithClient(client, 'tenant-1', 'owner-1');
-    expect(first.objectsCreated).toBe(10);
+    expect(first.objectsCreated).toBe(11);
 
     // Second run — everything skipped
     const second = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     expect(second.objectsCreated).toBe(0);
-    expect(second.objectsSkipped).toBe(10);
+    expect(second.objectsSkipped).toBe(11);
     expect(second.fieldsCreated).toBe(0);
     expect(second.fieldsSkipped).toBe(SEED_COUNTS.fields);
     expect(second.relationshipsCreated).toBe(0);
@@ -279,19 +279,19 @@ describe('seedDefaultObjects', () => {
     const result = await seedWithClient(client, 'tenant-1', 'owner-1');
 
     const totalCreated = (key: keyof SeedResult) => result[key];
-    expect(totalCreated('objectsCreated')).toBe(10);
-    expect(totalCreated('fieldsCreated')).toBe(92);
-    expect(totalCreated('relationshipsCreated')).toBe(16);
-    expect(totalCreated('layoutsCreated')).toBe(20);
+    expect(totalCreated('objectsCreated')).toBe(11);
+    expect(totalCreated('fieldsCreated')).toBe(94);
+    expect(totalCreated('relationshipsCreated')).toBe(19);
+    expect(totalCreated('layoutsCreated')).toBe(22);
     expect(totalCreated('leadConversionMappingsCreated')).toBe(15);
   });
 
-  it('creates all 10 objects with the expected api_names', async () => {
+  it('creates all 11 objects with the expected api_names', async () => {
     await seedWithClient(client, 'tenant-1', 'owner-1');
 
     const expectedApiNames = [
       'account', 'contact', 'lead', 'opportunity', 'activity',
-      'next_action', 'agreement', 'note', 'file', 'user',
+      'next_action', 'agreement', 'note', 'file', 'user', 'team',
     ];
     const actualApiNames = [...db.objects.values()]
       .map((o) => o.api_name as string)
