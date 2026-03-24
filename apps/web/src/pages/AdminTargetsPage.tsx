@@ -231,6 +231,7 @@ export function AdminTargetsPage() {
 
   // UI state
   const [loading, setLoading] = useState(true);
+  const [initialFetchDone, setInitialFetchDone] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -309,6 +310,7 @@ export function AdminTargetsPage() {
       setLoadError('Failed to connect to the server. Please try again.');
     } finally {
       setLoading(false);
+      setInitialFetchDone(true);
     }
   }, [sessionToken, selectedPeriod]);
 
@@ -486,7 +488,7 @@ export function AdminTargetsPage() {
 
   // ── Loading state ─────────────────────────────────────────
 
-  if (loading && !businessTarget.id && teamTargets.length === 0) {
+  if (loading && !initialFetchDone) {
     return (
       <div className={styles.page}>
         <div className={styles.pageHeader}>
@@ -747,7 +749,7 @@ export function AdminTargetsPage() {
         )}
 
         {teamTargets.length > 0 && (
-          <div className={styles.summaryRow} style={{ marginTop: 'var(--space-3)' }}>
+          <div className={styles.summaryRowSpaced}>
             <span className={styles.summaryLabel}>Total team targets</span>
             <span className={styles.summaryValue}>
               {formatCurrency(teamSum, DEFAULT_CURRENCY)}
