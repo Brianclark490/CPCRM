@@ -177,7 +177,9 @@ describe('FieldBuilderPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Opportunity' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: /Opportunity/ }),
+      ).toBeInTheDocument();
     });
     expect(screen.getByText('opportunity')).toBeInTheDocument();
   });
