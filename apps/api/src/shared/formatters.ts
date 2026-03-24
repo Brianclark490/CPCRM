@@ -64,6 +64,16 @@ export function formatCurrency(value: number, locale: TenantLocale = {}): string
 export function formatCurrencyCompact(value: number, locale: TenantLocale = {}): string {
   const currency = locale.currency ?? 'GBP';
 
+  // Values below 1000 should not have suffixes or decimals
+  if (Math.abs(value) < 1000) {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    }).format(value);
+  }
+
   const formatted = new Intl.NumberFormat('en-GB', {
     style: 'currency',
     currency,
