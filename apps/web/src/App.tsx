@@ -1,8 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { TenantSettingsProvider } from './store/tenantSettings.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
-import { OpportunitiesPage } from './pages/OpportunitiesPage.js';
 import { AccountsPage } from './pages/AccountsPage.js';
 import { AccountDetailPage } from './pages/AccountDetailPage.js';
 import { AdminPage } from './pages/AdminPage.js';
@@ -12,8 +11,6 @@ import { PageBuilderPage } from './pages/PageBuilderPage.js';
 import { PipelineManagerPage } from './pages/PipelineManagerPage.js';
 import { PipelineDetailPage } from './pages/PipelineDetailPage.js';
 import { OrganisationProvisioningPage } from './pages/OrganisationProvisioningPage.js';
-import { CreateOpportunityPage } from './pages/CreateOpportunityPage.js';
-import { OpportunityDetailPage } from './pages/OpportunityDetailPage.js';
 import { CreateAccountPage } from './pages/CreateAccountPage.js';
 import { RecordListPage } from './pages/RecordListPage.js';
 import { RecordCreatePage } from './pages/RecordCreatePage.js';
@@ -33,6 +30,11 @@ import { AdminTargetsPage } from './pages/AdminTargetsPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
 import { TenantGuard } from './components/TenantGuard.js';
 import { AppShell } from './components/AppShell.js';
+
+function OpportunityDetailRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/objects/opportunity/${id ?? ''}`} replace />;
+}
 
 export function App() {
   return (
@@ -61,42 +63,9 @@ export function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/opportunities"
-          element={
-            <ProtectedRoute>
-              <TenantGuard>
-                <AppShell>
-                  <OpportunitiesPage />
-                </AppShell>
-              </TenantGuard>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/opportunities/new"
-          element={
-            <ProtectedRoute>
-              <TenantGuard>
-                <AppShell>
-                  <CreateOpportunityPage />
-                </AppShell>
-              </TenantGuard>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/opportunities/:id"
-          element={
-            <ProtectedRoute>
-              <TenantGuard>
-                <AppShell>
-                  <OpportunityDetailPage />
-                </AppShell>
-              </TenantGuard>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/opportunities" element={<Navigate to="/objects/opportunity" replace />} />
+        <Route path="/opportunities/new" element={<Navigate to="/objects/opportunity/new" replace />} />
+        <Route path="/opportunities/:id" element={<OpportunityDetailRedirect />} />
         <Route
           path="/accounts"
           element={

@@ -17,6 +17,9 @@ function createFakeDb() {
   const layouts = new Map<string, FakeRow>();
   const layoutFields = new Map<string, FakeRow>();
   const leadConversionMappings = new Map<string, FakeRow>();
+  const pipelines = new Map<string, FakeRow>();
+  const stages = new Map<string, FakeRow>();
+  const stageGates = new Map<string, FakeRow>();
 
   function clear() {
     objects.clear();
@@ -25,9 +28,12 @@ function createFakeDb() {
     layouts.clear();
     layoutFields.clear();
     leadConversionMappings.clear();
+    pipelines.clear();
+    stages.clear();
+    stageGates.clear();
   }
 
-  return { objects, fields, relationships, layouts, layoutFields, leadConversionMappings, clear };
+  return { objects, fields, relationships, layouts, layoutFields, leadConversionMappings, pipelines, stages, stageGates, clear };
 }
 
 // ─── Mock client ──────────────────────────────────────────────────────────────
@@ -167,6 +173,72 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
       return { rows: [{ id }] };
     }
 
+    // INSERT INTO pipeline_definitions ... ON CONFLICT ... RETURNING id
+    if (s.startsWith('INSERT INTO PIPELINE_DEFINITIONS')) {
+      const [id, tenantId, objectId, name, apiName, , isSystem, ownerId] = params as unknown[];
+      const existing = [...db.pipelines.values()].find(
+        (p) => p.tenant_id === tenantId && p.object_id === objectId && p.api_name === apiName,
+      );
+      if (existing) return { rows: [] };
+      const row: FakeRow = { id: id as string, tenant_id: tenantId, object_id: objectId, name, api_name: apiName, is_system: isSystem, owner_id: ownerId };
+      db.pipelines.set(id as string, row);
+      return { rows: [{ id }] };
+    }
+
+    // SELECT id, api_name FROM pipeline_definitions WHERE api_name = ANY($1) AND tenant_id = $2
+    if (s.includes('FROM PIPELINE_DEFINITIONS') && s.includes('ANY')) {
+      const apiNames = params![0] as string[];
+      const tenantId = params![1] as string;
+      const rows = [...db.pipelines.values()]
+        .filter((p) => apiNames.includes(p.api_name as string) && p.tenant_id === tenantId)
+        .map((p) => ({ id: p.id, api_name: p.api_name }));
+      return { rows };
+    }
+
+    // INSERT INTO stage_definitions ... ON CONFLICT ... RETURNING id
+    if (s.startsWith('INSERT INTO STAGE_DEFINITIONS')) {
+      const [id, tenantId, pipelineId, name, apiName, sortOrder, stageType, colour, defaultProbability, expectedDays] = params as unknown[];
+      const existing = [...db.stages.values()].find(
+        (st) => st.tenant_id === tenantId && st.pipeline_id === pipelineId && st.api_name === apiName,
+      );
+      if (existing) return { rows: [] };
+      const row: FakeRow = { id: id as string, tenant_id: tenantId, pipeline_id: pipelineId, name, api_name: apiName, sort_order: sortOrder, stage_type: stageType, colour, default_probability: defaultProbability, expected_days: expectedDays };
+      db.stages.set(id as string, row);
+      return { rows: [{ id }] };
+    }
+
+    // SELECT sd.id, sd.api_name, pd.api_name AS pipeline_api_name FROM stage_definitions sd JOIN pipeline_definitions pd ...
+    if (s.includes('FROM STAGE_DEFINITIONS SD') && s.includes('JOIN PIPELINE_DEFINITIONS PD')) {
+      const pipelineIds = params![0] as string[];
+      const tenantId = params![1] as string;
+      const rows: { id: string; api_name: string; pipeline_api_name: string }[] = [];
+      for (const stage of db.stages.values()) {
+        if (stage.tenant_id !== tenantId) continue;
+        if (!pipelineIds.includes(stage.pipeline_id as string)) continue;
+        const pipeline = [...db.pipelines.values()].find((p) => p.id === stage.pipeline_id);
+        if (pipeline) {
+          rows.push({
+            id: stage.id,
+            api_name: stage.api_name as string,
+            pipeline_api_name: pipeline.api_name as string,
+          });
+        }
+      }
+      return { rows };
+    }
+
+    // INSERT INTO stage_gates ... ON CONFLICT ... RETURNING id
+    if (s.startsWith('INSERT INTO STAGE_GATES')) {
+      const [id, tenantId, stageId, fieldId, gateType, gateValue, errorMessage] = params as unknown[];
+      const existing = [...db.stageGates.values()].find(
+        (g) => g.tenant_id === tenantId && g.stage_id === stageId && g.field_id === fieldId,
+      );
+      if (existing) return { rows: [] };
+      const row: FakeRow = { id: id as string, tenant_id: tenantId, stage_id: stageId, field_id: fieldId, gate_type: gateType, gate_value: gateValue, error_message: errorMessage };
+      db.stageGates.set(id as string, row);
+      return { rows: [{ id }] };
+    }
+
     return { rows: [] };
   });
 
@@ -253,6 +325,12 @@ describe('seedDefaultObjects', () => {
     expect(second.layoutFieldsSkipped).toBe(SEED_COUNTS.layoutFields);
     expect(second.leadConversionMappingsCreated).toBe(0);
     expect(second.leadConversionMappingsSkipped).toBe(SEED_COUNTS.leadConversionMappings);
+    expect(second.pipelinesCreated).toBe(0);
+    expect(second.pipelinesSkipped).toBe(SEED_COUNTS.pipelines);
+    expect(second.stagesCreated).toBe(0);
+    expect(second.stagesSkipped).toBe(SEED_COUNTS.stages);
+    expect(second.stageGatesCreated).toBe(0);
+    expect(second.stageGatesSkipped).toBe(SEED_COUNTS.stageGates);
   });
 
   it('passes the tenantId and ownerId to object definitions', async () => {
@@ -284,6 +362,9 @@ describe('seedDefaultObjects', () => {
     expect(totalCreated('relationshipsCreated')).toBe(19);
     expect(totalCreated('layoutsCreated')).toBe(22);
     expect(totalCreated('leadConversionMappingsCreated')).toBe(15);
+    expect(totalCreated('pipelinesCreated')).toBe(SEED_COUNTS.pipelines);
+    expect(totalCreated('stagesCreated')).toBe(SEED_COUNTS.stages);
+    expect(totalCreated('stageGatesCreated')).toBe(SEED_COUNTS.stageGates);
   });
 
   it('creates all 11 objects with the expected api_names', async () => {
@@ -441,6 +522,9 @@ describe('seedDefaultObjects', () => {
     expect(resultB.layoutsCreated).toBe(SEED_COUNTS.layouts);
     expect(resultB.layoutFieldsCreated).toBe(SEED_COUNTS.layoutFields);
     expect(resultB.leadConversionMappingsCreated).toBe(SEED_COUNTS.leadConversionMappings);
+    expect(resultB.pipelinesCreated).toBe(SEED_COUNTS.pipelines);
+    expect(resultB.stagesCreated).toBe(SEED_COUNTS.stages);
+    expect(resultB.stageGatesCreated).toBe(SEED_COUNTS.stageGates);
 
     // Both tenants' objects exist in the DB
     expect(db.objects.size).toBe(SEED_COUNTS.objects * 2);

@@ -203,7 +203,7 @@ export async function provisionTenant(
         objects: seedResult.objectsCreated,
         fields: seedResult.fieldsCreated,
         relationships: seedResult.relationshipsCreated,
-        pipelines: 1,
+        pipelines: seedResult.pipelinesCreated,
       },
     };
   } catch (err) {
