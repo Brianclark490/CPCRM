@@ -186,6 +186,10 @@ describe('formatPhone', () => {
     expect(formatPhone('+442012345678')).toBe('+44 20 1234 5678');
   });
 
+  it('formats US international number with +1', () => {
+    expect(formatPhone('+12125551234')).toBe('+1 (212) 555-1234');
+  });
+
   it('formats US 10-digit number', () => {
     expect(formatPhone('2125551234')).toBe('(212) 555-1234');
   });

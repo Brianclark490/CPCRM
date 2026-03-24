@@ -169,10 +169,11 @@ export function formatRelativeTime(value: string | Date): string {
   if (diffHr < 24) return rtf.format(-diffHr, 'hour');
   if (diffDay < 30) return rtf.format(-diffDay, 'day');
 
+  // Approximate month/year boundaries — acceptable for relative display
   const diffMonth = Math.floor(diffDay / 30);
   if (diffMonth < 12) return rtf.format(-diffMonth, 'month');
 
-  const diffYear = Math.floor(diffDay / 365);
+  const diffYear = Math.floor(diffMonth / 12);
   return rtf.format(-diffYear, 'year');
 }
 
@@ -197,10 +198,18 @@ export function formatPhone(value: string): string {
 
   if (digits.length === 0) return '—';
 
-  // International format: +CC remaining grouped in 2-4 digit blocks
+  // International format with country code
   if (hasPlus && digits.length > 10) {
     const countryCode = digits.slice(0, digits.length - 10);
     const remaining = digits.slice(digits.length - 10);
+
+    // US/CA (+1): format as +1 (XXX) XXX-XXXX
+    if (countryCode === '1') {
+      const local = remaining.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
+      return `+1 ${local}`;
+    }
+
+    // Other countries: group as CC XX XXXX XXXX
     const local = remaining.replace(/(\d{2})(\d{4})(\d{4})/, '$1 $2 $3');
     return `+${countryCode} ${local}`;
   }
