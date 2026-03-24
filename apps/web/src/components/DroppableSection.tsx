@@ -104,7 +104,7 @@ export function DroppableSection({
 
       <div
         ref={setDropRef}
-        className={`${styles.dropZone} ${isOver ? styles.dropZoneOver : ''}`}
+        className={`${styles.dropZone} ${section.columns === 2 ? styles.dropZoneTwoCol : ''} ${isOver ? styles.dropZoneOver : ''}`}
       >
         <SortableContext items={componentIds} strategy={verticalListSortingStrategy}>
           {section.components.map((comp: BuilderComponent) => (
