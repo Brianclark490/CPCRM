@@ -26,6 +26,8 @@ import { platformTenantsRouter } from './routes/platformTenants.js';
 import { adminTenantSettingsRouter } from './routes/adminTenantSettings.js';
 import { componentRegistryRouter } from './routes/adminPageLayouts.js';
 import { pageLayoutsRouter } from './routes/pageLayouts.js';
+import { adminTargetsRouter } from './routes/adminTargets.js';
+import { targetsRouter } from './routes/targets.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -69,6 +71,8 @@ app.use('/api/admin/users', adminUsersRouter);
 app.use('/api/platform/tenants', platformTenantsRouter);
 app.use('/api/admin/tenant-settings', adminTenantSettingsRouter);
 app.use('/api/admin/component-registry', componentRegistryRouter);
+app.use('/api/admin/targets', adminTargetsRouter);
+app.use('/api/targets', targetsRouter);
 
 if (config.env === 'production') {
   // In production the CI pipeline copies the built frontend to public/ alongside
