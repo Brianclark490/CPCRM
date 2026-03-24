@@ -313,7 +313,8 @@ describe('PageBuilderPage', () => {
     expect(screen.getByText('Related Fields')).toBeInTheDocument();
 
     // Should show the related object sub-group label
-    expect(screen.getByText('Opportunity')).toBeInTheDocument();
+    expect(screen.getByTestId('related-fields-group-label-account_opportunity')).toBeInTheDocument();
+    expect(screen.getByTestId('related-fields-group-label-account_opportunity')).toHaveTextContent('Opportunity');
 
     // Should show related field items with "Object → Field" label
     expect(

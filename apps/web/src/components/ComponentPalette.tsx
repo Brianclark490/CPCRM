@@ -174,7 +174,12 @@ export function ComponentPalette({
           <h4 className={styles.groupLabel}>Related Fields</h4>
           {Object.entries(relatedFieldsByRelationship).map(([relApiName, group]) => (
             <div key={relApiName} className={styles.subGroup}>
-              <h5 className={styles.subGroupLabel}>{group.label}</h5>
+              <h5
+                className={styles.subGroupLabel}
+                data-testid={`related-fields-group-label-${relApiName}`}
+              >
+                {group.label}
+              </h5>
               {group.fields.map((rf) => {
                 const compositeKey = `${rf.relationshipApiName}.${rf.fieldApiName}`;
                 return (
