@@ -77,3 +77,15 @@
   color: var(--success);
   flex-shrink: 0;
 }
+
+.subGroup {
+  margin-bottom: var(--space-2);
+}
+
+.subGroupLabel {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-1);
+}

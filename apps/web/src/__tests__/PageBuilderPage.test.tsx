@@ -55,8 +55,35 @@ const sampleRelationships = [
     label: 'Opportunities',
     required: false,
     targetObjectLabel: 'Opportunity',
+    targetObjectApiName: 'opportunity',
+    sourceObjectApiName: 'account',
+    sourceObjectLabel: 'Account',
   },
 ];
+
+const sampleRelatedObject = {
+  id: 'obj-2',
+  apiName: 'opportunity',
+  label: 'Opportunity',
+  pluralLabel: 'Opportunities',
+  isSystem: true,
+  fields: [
+    {
+      id: 'rel-field-1',
+      apiName: 'opp_name',
+      label: 'Opportunity Name',
+      fieldType: 'text',
+      required: true,
+    },
+    {
+      id: 'rel-field-2',
+      apiName: 'amount',
+      label: 'Amount',
+      fieldType: 'currency',
+      required: false,
+    },
+  ],
+};
 
 const sampleRegistry = [
   {
@@ -187,7 +214,13 @@ function mockAllFetches() {
     json: async () => samplePageLayouts,
   } as Response);
 
-  // 5. Page layout detail (auto-loaded for default layout)
+  // 5. Related object detail (for outgoing relationships)
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => sampleRelatedObject,
+  } as Response);
+
+  // 6. Page layout detail (auto-loaded for default layout)
   mockFetch.mockResolvedValueOnce({
     ok: true,
     json: async () => samplePageLayoutDetail,
@@ -266,6 +299,33 @@ describe('PageBuilderPage', () => {
     });
 
     expect(screen.getByTestId('palette-item-palette-rel-rel-1')).toBeInTheDocument();
+  });
+
+  it('shows related fields from lookup relationships in the component palette', async () => {
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('related-fields-group')).toBeInTheDocument();
+    });
+
+    // Should show the "Related Fields" group heading
+    expect(screen.getByText('Related Fields')).toBeInTheDocument();
+
+    // Should show the related object sub-group label
+    expect(screen.getByText('Opportunity')).toBeInTheDocument();
+
+    // Should show related field items with "Object → Field" label
+    expect(
+      screen.getByTestId('palette-item-palette-related-account_opportunity.opp_name'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('palette-item-palette-related-account_opportunity.amount'),
+    ).toBeInTheDocument();
+
+    // Should display the label with arrow notation
+    expect(screen.getByText('Opportunity → Opportunity Name')).toBeInTheDocument();
+    expect(screen.getByText('Opportunity → Amount')).toBeInTheDocument();
   });
 
   it('shows widgets from registry in the component palette', async () => {

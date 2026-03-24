@@ -78,6 +78,18 @@ export interface RelationshipRef {
   targetObjectLabel: string;
 }
 
+export interface RelatedFieldRef {
+  relationshipId: string;
+  relationshipApiName: string;
+  relationshipLabel: string;
+  relatedObjectApiName: string;
+  relatedObjectLabel: string;
+  fieldId: string;
+  fieldApiName: string;
+  fieldLabel: string;
+  fieldType: string;
+}
+
 // ─── Drag-and-drop item data ──────────────────────────────────────────────────
 
 export interface PaletteDragData {
