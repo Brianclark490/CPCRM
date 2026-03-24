@@ -268,8 +268,8 @@ export function calculatePace(
   const daysElapsed = Math.max(0, (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   const timeRatio = daysElapsed / totalDays;
 
-  // If no time has elapsed yet, any positive percentage is on track
-  if (timeRatio <= 0) return percentage > 0 ? 'on_track' : 'on_track';
+  // If no time has elapsed yet, the period hasn't started
+  if (timeRatio <= 0) return 'on_track';
 
   const pace = percentage / (timeRatio * 100);
 
