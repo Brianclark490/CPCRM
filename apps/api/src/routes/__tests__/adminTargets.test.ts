@@ -106,6 +106,7 @@ describe('POST /admin/targets', () => {
       periodEnd: '2026-04-01',
       targetValue: 500000,
       currency: undefined,
+      createdBy: 'user-123',
     });
   });
 
@@ -140,6 +141,7 @@ describe('POST /admin/targets', () => {
       periodEnd: '2026-04-01',
       targetValue: 100000,
       currency: 'USD',
+      createdBy: 'user-123',
     });
   });
 

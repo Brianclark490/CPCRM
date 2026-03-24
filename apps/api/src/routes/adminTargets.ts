@@ -75,6 +75,7 @@ export async function handleCreateTarget(
     periodEnd: body.period_end ?? body.periodEnd ?? '',
     targetValue: body.target_value ?? body.targetValue ?? NaN,
     currency: body.currency,
+    createdBy: req.user!.userId,
   };
 
   try {

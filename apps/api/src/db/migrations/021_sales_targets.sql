@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS sales_targets (
     period_end        DATE           NOT NULL,
     target_value      DECIMAL(15,2)  NOT NULL,
     currency          VARCHAR(3)     DEFAULT 'GBP',
+    created_by        UUID,
     created_at        TIMESTAMPTZ    DEFAULT NOW(),
     updated_at        TIMESTAMPTZ    DEFAULT NOW(),
     UNIQUE(tenant_id, target_type, target_entity_id, period_start),

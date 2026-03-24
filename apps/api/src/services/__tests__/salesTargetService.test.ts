@@ -69,7 +69,7 @@ vi.mock('../../db/client.js', () => ({
   pool: { query: mockQuery },
 }));
 
-const { upsertTarget, listTargets, deleteTarget, calculateActual } = await import(
+const { upsertTarget, listTargets, deleteTarget, calculateActual, calculatePace } = await import(
   '../salesTargetService.js'
 );
 
@@ -272,6 +272,55 @@ describe('salesTargetService', () => {
 
       const lastCall = mockQuery.mock.calls[mockQuery.mock.calls.length - 1];
       expect(lastCall[1]).toContain('user-123');
+    });
+  });
+
+  // ── calculatePace ─────────────────────────────────────────────────────────
+
+  describe('calculatePace', () => {
+    it('returns on_track when pace > 90%', () => {
+      // Period: Jan 1 to Apr 1 (90 days). If we're halfway through (45 days),
+      // and percentage is 55%, pace = 55 / (0.5 * 100) = 1.1 → on_track
+      const midpoint = new Date('2026-01-01');
+      midpoint.setDate(midpoint.getDate() + 45);
+      vi.setSystemTime(midpoint);
+
+      const result = calculatePace(55, '2026-01-01', '2026-04-01');
+      expect(result).toBe('on_track');
+    });
+
+    it('returns at_risk when pace is between 70% and 90%', () => {
+      // Period: Jan 1 to Apr 1 (90 days). At day 45 (50%),
+      // percentage is 40%, pace = 40 / (0.5 * 100) = 0.8 → at_risk
+      const midpoint = new Date('2026-01-01');
+      midpoint.setDate(midpoint.getDate() + 45);
+      vi.setSystemTime(midpoint);
+
+      const result = calculatePace(40, '2026-01-01', '2026-04-01');
+      expect(result).toBe('at_risk');
+    });
+
+    it('returns behind when pace < 70%', () => {
+      // Period: Jan 1 to Apr 1 (90 days). At day 45 (50%),
+      // percentage is 30%, pace = 30 / (0.5 * 100) = 0.6 → behind
+      const midpoint = new Date('2026-01-01');
+      midpoint.setDate(midpoint.getDate() + 45);
+      vi.setSystemTime(midpoint);
+
+      const result = calculatePace(30, '2026-01-01', '2026-04-01');
+      expect(result).toBe('behind');
+    });
+
+    it('returns behind for invalid period range', () => {
+      const result = calculatePace(50, '2026-04-01', '2026-01-01');
+      expect(result).toBe('behind');
+    });
+
+    it('returns on_track before the period starts', () => {
+      vi.setSystemTime(new Date('2025-12-01'));
+
+      const result = calculatePace(0, '2026-01-01', '2026-04-01');
+      expect(result).toBe('on_track');
     });
   });
 });

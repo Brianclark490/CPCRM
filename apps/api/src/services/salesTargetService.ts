@@ -12,6 +12,7 @@ export interface SalesTarget {
   period_end: string;
   target_value: number;
   currency: string;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +25,7 @@ export interface CreateTargetParams {
   periodEnd: string;
   targetValue: number;
   currency?: string;
+  createdBy?: string | null;
 }
 
 export interface TargetWithActual extends SalesTarget {
@@ -46,12 +48,18 @@ export interface TeamTargetSummary {
   users: UserTargetSummary[];
 }
 
+export type PaceStatus = 'on_track' | 'at_risk' | 'behind';
+
 export interface TargetSummaryResponse {
-  period: string;
+  period: {
+    type: string;
+    label: string;
+  };
   business: {
     target: number;
     actual: number;
     percentage: number;
+    pace: PaceStatus;
     currency: string;
   };
   teams: TeamTargetSummary[];
@@ -135,8 +143,8 @@ export async function upsertTarget(
   validateTargetParams(params);
 
   const result = await pool.query(
-    `INSERT INTO sales_targets (tenant_id, target_type, target_entity_id, period_type, period_start, period_end, target_value, currency)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO sales_targets (tenant_id, target_type, target_entity_id, period_type, period_start, period_end, target_value, currency, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (tenant_id, target_type, target_entity_id, period_start)
      DO UPDATE SET
        period_end = EXCLUDED.period_end,
@@ -154,6 +162,7 @@ export async function upsertTarget(
       params.periodEnd,
       params.targetValue,
       params.currency ?? 'GBP',
+      params.createdBy ?? null,
     ],
   );
 
@@ -235,6 +244,38 @@ export async function calculateActual(
 
   const result = await pool.query(query, queryParams);
   return parseFloat(result.rows[0]?.actual ?? '0');
+}
+
+/**
+ * Calculates the pace status for a target based on the percentage achieved
+ * relative to time elapsed in the period.
+ *
+ * Formula: pace = percentage / (days_elapsed / total_days_in_period)
+ * Classifications: on_track (>90%), at_risk (70-90%), behind (<70%)
+ */
+export function calculatePace(
+  percentage: number,
+  periodStart: string,
+  periodEnd: string,
+): PaceStatus {
+  const now = new Date();
+  const start = new Date(periodStart);
+  const end = new Date(periodEnd);
+
+  const totalDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+  if (totalDays <= 0) return 'behind';
+
+  const daysElapsed = Math.max(0, (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const timeRatio = daysElapsed / totalDays;
+
+  // If no time has elapsed yet, any positive percentage is on track
+  if (timeRatio <= 0) return percentage > 0 ? 'on_track' : 'on_track';
+
+  const pace = percentage / (timeRatio * 100);
+
+  if (pace > 0.9) return 'on_track';
+  if (pace >= 0.7) return 'at_risk';
+  return 'behind';
 }
 
 // ─── Summary endpoint ─────────────────────────────────────────────────────────
@@ -341,12 +382,24 @@ export async function getTargetSummary(
 
   const currency = businessTargets[0]?.currency ?? teamTargets[0]?.currency ?? userTargets[0]?.currency ?? 'GBP';
 
+  const businessPercentage = businessTargetValue > 0 ? Math.round((businessActual / businessTargetValue) * 100) : 0;
+
+  // Detect period type from targets or infer from the date range
+  const periodType = businessTargets[0]?.period_type
+    ?? teamTargets[0]?.period_type
+    ?? userTargets[0]?.period_type
+    ?? inferPeriodType(defaultStart, defaultEnd);
+
   return {
-    period: periodLabel,
+    period: {
+      type: periodType,
+      label: periodLabel,
+    },
     business: {
       target: businessTargetValue,
       actual: businessActual,
-      percentage: businessTargetValue > 0 ? Math.round((businessActual / businessTargetValue) * 100) : 0,
+      percentage: businessPercentage,
+      pace: calculatePace(businessPercentage, defaultStart, defaultEnd),
       currency,
     },
     teams,
@@ -426,6 +479,7 @@ function mapRow(row: Record<string, unknown>): SalesTarget {
     period_end: formatDate(row.period_end),
     target_value: parseFloat(String(row.target_value)),
     currency: (row.currency as string) ?? 'GBP',
+    created_by: (row.created_by as string) ?? null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -463,6 +517,31 @@ function formatPeriodLabel(start: string, end: string): string {
   }
 
   return `${start} – ${end}`;
+}
+
+function inferPeriodType(start: string, end: string): string {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const startMonth = startDate.getMonth();
+  const endMonth = endDate.getMonth();
+  const year = startDate.getFullYear();
+
+  // Full year
+  if (startMonth === 0 && endMonth === 0 && endDate.getFullYear() === year + 1) {
+    return 'annual';
+  }
+
+  // Quarter
+  if (startMonth % 3 === 0 && (endMonth - startMonth === 3 || (endMonth === 0 && endDate.getFullYear() === year + 1))) {
+    return 'quarterly';
+  }
+
+  // Single month
+  if (endDate.getTime() === new Date(year, startMonth + 1, 1).getTime()) {
+    return 'monthly';
+  }
+
+  return 'quarterly';
 }
 
 async function getRecordName(recordId: string | null): Promise<string | null> {
