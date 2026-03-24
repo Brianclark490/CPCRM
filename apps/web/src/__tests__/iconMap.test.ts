@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveIcon } from '../../components/iconMap.js';
+import { resolveIcon } from '../components/iconMap.js';
 
 describe('resolveIcon', () => {
   it('maps known icon identifiers to emoji characters', () => {
