@@ -267,10 +267,12 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
       if (response.ok) {
         const data = (await response.json()) as RecordsResponse;
-        setAllRecords(data.data);
+        setAllRecords(data.data ?? []);
+      } else {
+        setError('Failed to load records for the pipeline.');
       }
     } catch {
-      // Best-effort
+      setError('Failed to connect to the server.');
     } finally {
       setLoading(false);
     }
@@ -424,7 +426,8 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
     let effectiveCurrentStageId: string | undefined;
     // Match fieldValues.stage first (same priority as column placement)
-    const stageField = record.fieldValues.stage;
+    const dropFv = record.fieldValues ?? {};
+    const stageField = dropFv.stage;
     if (typeof stageField === 'string' && stageField.trim()) {
       effectiveCurrentStageId = localStageByName.get(stageField.trim().toLowerCase());
     }
@@ -519,8 +522,8 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   // Build a lookup map for matching stage names / api_names (case-insensitive)
   const stageByName = new Map<string, StageDefinition>();
   for (const stage of stages) {
-    stageByName.set(stage.name.toLowerCase(), stage);
-    stageByName.set(stage.apiName.toLowerCase(), stage);
+    if (stage.name) stageByName.set(stage.name.toLowerCase(), stage);
+    if (stage.apiName) stageByName.set(stage.apiName.toLowerCase(), stage);
   }
 
   /**
@@ -535,7 +538,8 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
    */
   function resolveStageForRecord(record: RecordItem): StageDefinition | null {
     // 1. Match fieldValues.stage against stage names / api_names
-    const stageFieldValue = record.fieldValues.stage;
+    const fv = record.fieldValues ?? {};
+    const stageFieldValue = fv.stage;
     if (typeof stageFieldValue === 'string' && stageFieldValue.trim()) {
       const matched = stageByName.get(stageFieldValue.trim().toLowerCase());
       if (matched) return matched;
@@ -546,7 +550,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
       return stages.find((s) => s.id === record.currentStageId) ?? null;
     }
 
-    // 3. Fall back to first open stage
+    // 3. Fall back to the first open stage
     return firstOpenStage ?? null;
   }
 
