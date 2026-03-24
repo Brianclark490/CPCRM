@@ -339,15 +339,17 @@ export async function moveRecordStage(
       [historyId, tenantId, recordId, resolvedPipelineId, resolvedCurrentStageId, targetStageId, ownerId, daysInPreviousStage],
     );
 
-    // 8. Update record: current_stage_id, stage_entered_at, and optionally probability
+    // 8. Update record: current_stage_id, stage_entered_at, stage field, and optionally probability
     const fieldValues = (recordRow.field_values as Record<string, unknown>) ?? {};
-    let updatedFieldValues = fieldValues;
+    let updatedFieldValues = { ...fieldValues };
+
+    // Sync the stage dropdown field with the pipeline stage name
+    if ('stage' in updatedFieldValues) {
+      updatedFieldValues.stage = targetStage.name;
+    }
 
     if (targetStage.defaultProbability !== null) {
-      updatedFieldValues = {
-        ...fieldValues,
-        probability: targetStage.defaultProbability,
-      };
+      updatedFieldValues.probability = targetStage.defaultProbability;
     }
 
     const updateResult = await client.query(
@@ -393,8 +395,13 @@ export async function moveRecordStage(
 // ─── Pipeline auto-assignment for record creation ────────────────────────────
 
 /**
- * Assigns a default pipeline and first stage to a newly created record.
+ * Assigns a default pipeline and initial stage to a newly created record.
  * Should be called within a transaction after the record is inserted.
+ *
+ * The initial stage is determined by matching the record's `stage` field
+ * value (from `field_values`) against the pipeline's stage names or
+ * api_names (case-insensitive). If no match is found, the first open
+ * stage is used as a fallback.
  *
  * @returns true if a pipeline was assigned, false otherwise
  */
@@ -418,49 +425,74 @@ export async function assignDefaultPipeline(
 
   const pipelineId = (pipelineResult.rows[0] as Record<string, unknown>).id as string;
 
-  // Find the first open stage (sort_order 0)
-  const stageQuery = tenantId
-    ? `SELECT id, default_probability FROM stage_definitions
-       WHERE pipeline_id = $1 AND stage_type = 'open' AND tenant_id = $2
-       ORDER BY sort_order ASC
-       LIMIT 1`
-    : `SELECT id, default_probability FROM stage_definitions
-       WHERE pipeline_id = $1 AND stage_type = 'open'
-       ORDER BY sort_order ASC
-       LIMIT 1`;
-  const stageParams: unknown[] = tenantId ? [pipelineId, tenantId] : [pipelineId];
-  const stageResult = await client.query(stageQuery, stageParams);
+  // Fetch ALL stages for this pipeline so we can match by name
+  const allStagesQuery = tenantId
+    ? `SELECT id, name, api_name, sort_order, stage_type, default_probability FROM stage_definitions
+       WHERE pipeline_id = $1 AND tenant_id = $2
+       ORDER BY sort_order ASC`
+    : `SELECT id, name, api_name, sort_order, stage_type, default_probability FROM stage_definitions
+       WHERE pipeline_id = $1
+       ORDER BY sort_order ASC`;
+  const allStagesParams: unknown[] = tenantId ? [pipelineId, tenantId] : [pipelineId];
+  const allStagesResult = await client.query(allStagesQuery, allStagesParams);
 
-  if (stageResult.rows.length === 0) {
+  if (allStagesResult.rows.length === 0) {
     return false;
   }
 
-  const stageRow = stageResult.rows[0] as Record<string, unknown>;
-  const firstStageId = stageRow.id as string;
-  const defaultProbability = (stageRow.default_probability as number | null) ?? null;
+  const allStages = allStagesResult.rows as Array<Record<string, unknown>>;
+
+  // Read the record's field_values to check for a stage field
+  const recordResult = await client.query(
+    'SELECT field_values FROM records WHERE id = $1',
+    [recordId],
+  );
+  const fieldValues = (recordResult.rows[0] as Record<string, unknown>).field_values as Record<string, unknown>;
+  const stageFieldValue = typeof fieldValues.stage === 'string' ? fieldValues.stage.trim() : '';
+
+  // Try to match the stage field value to a pipeline stage (case-insensitive)
+  let matchedStage: Record<string, unknown> | undefined;
+  if (stageFieldValue) {
+    const lowerStageValue = stageFieldValue.toLowerCase();
+    matchedStage = allStages.find((s) => {
+      const name = (s.name as string).toLowerCase();
+      const apiName = (s.api_name as string).toLowerCase();
+      return name === lowerStageValue || apiName === lowerStageValue;
+    });
+  }
+
+  // Fall back to first open stage if no match found
+  if (!matchedStage) {
+    matchedStage = allStages.find((s) => s.stage_type === 'open');
+  }
+
+  if (!matchedStage) {
+    return false;
+  }
+
+  const targetStageId = matchedStage.id as string;
+  const defaultProbability = (matchedStage.default_probability as number | null) ?? null;
 
   // Update the record with pipeline assignment
-  if (defaultProbability !== null) {
-    // Also set probability in field_values
-    const recordResult = await client.query(
-      'SELECT field_values FROM records WHERE id = $1',
-      [recordId],
-    );
-    const fieldValues = (recordResult.rows[0] as Record<string, unknown>).field_values as Record<string, unknown>;
-    const updatedFieldValues = { ...fieldValues, probability: defaultProbability };
+  const updatedFieldValues = defaultProbability !== null
+    ? { ...fieldValues, probability: defaultProbability }
+    : fieldValues;
 
+  const needsFieldUpdate = defaultProbability !== null;
+
+  if (needsFieldUpdate) {
     await client.query(
       `UPDATE records
        SET pipeline_id = $1, current_stage_id = $2, stage_entered_at = NOW(), field_values = $3
        WHERE id = $4`,
-      [pipelineId, firstStageId, JSON.stringify(updatedFieldValues), recordId],
+      [pipelineId, targetStageId, JSON.stringify(updatedFieldValues), recordId],
     );
   } else {
     await client.query(
       `UPDATE records
        SET pipeline_id = $1, current_stage_id = $2, stage_entered_at = NOW()
        WHERE id = $3`,
-      [pipelineId, firstStageId, recordId],
+      [pipelineId, targetStageId, recordId],
     );
   }
 
@@ -470,13 +502,13 @@ export async function assignDefaultPipeline(
     await client.query(
       `INSERT INTO stage_history (id, tenant_id, record_id, pipeline_id, from_stage_id, to_stage_id, changed_by, changed_at, days_in_previous_stage)
        VALUES ($1, $2, $3, $4, NULL, $5, $6, NOW(), NULL)`,
-      [historyId, tenantId, recordId, pipelineId, firstStageId, ownerId],
+      [historyId, tenantId, recordId, pipelineId, targetStageId, ownerId],
     );
   } else {
     await client.query(
       `INSERT INTO stage_history (id, record_id, pipeline_id, from_stage_id, to_stage_id, changed_by, changed_at, days_in_previous_stage)
        VALUES ($1, $2, $3, NULL, $4, $5, NOW(), NULL)`,
-      [historyId, recordId, pipelineId, firstStageId, ownerId],
+      [historyId, recordId, pipelineId, targetStageId, ownerId],
     );
   }
 
