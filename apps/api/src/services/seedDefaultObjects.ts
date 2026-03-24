@@ -56,6 +56,34 @@ interface LeadConversionMappingSeed {
   targetFieldApiName: string;
 }
 
+interface PipelineSeed {
+  objectApiName: string;
+  name: string;
+  apiName: string;
+  isSystem: boolean;
+}
+
+interface StageSeed {
+  pipelineApiName: string;
+  name: string;
+  apiName: string;
+  sortOrder: number;
+  stageType: string;
+  colour: string;
+  defaultProbability: number;
+  expectedDays: number | null;
+}
+
+interface StageGateSeed {
+  pipelineApiName: string;
+  stageApiName: string;
+  objectApiName: string;
+  fieldApiName: string;
+  gateType: string;
+  gateValue: string | null;
+  errorMessage: string | null;
+}
+
 // ─── Seed result ──────────────────────────────────────────────────────────────
 
 export interface SeedResult {
@@ -71,6 +99,12 @@ export interface SeedResult {
   layoutFieldsSkipped: number;
   leadConversionMappingsCreated: number;
   leadConversionMappingsSkipped: number;
+  pipelinesCreated: number;
+  pipelinesSkipped: number;
+  stagesCreated: number;
+  stagesSkipped: number;
+  stageGatesCreated: number;
+  stageGatesSkipped: number;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -492,6 +526,44 @@ const LEAD_CONVERSION_MAPPING_SEEDS: LeadConversionMappingSeed[] = [
   { leadFieldApiName: 'description',     targetObject: 'opportunity', targetFieldApiName: 'description' },
 ];
 
+// ─── Pipeline definitions ─────────────────────────────────────────────────────
+
+const PIPELINE_SEEDS: PipelineSeed[] = [
+  { objectApiName: 'opportunity', name: 'Sales Pipeline', apiName: 'sales_pipeline', isSystem: true },
+];
+
+// ─── Stage definitions ────────────────────────────────────────────────────────
+
+const STAGE_SEEDS: StageSeed[] = [
+  { pipelineApiName: 'sales_pipeline', name: 'Prospecting',    apiName: 'prospecting',    sortOrder: 0, stageType: 'open', colour: 'blue',   defaultProbability: 10,  expectedDays: 14   },
+  { pipelineApiName: 'sales_pipeline', name: 'Qualification',  apiName: 'qualification',  sortOrder: 1, stageType: 'open', colour: 'blue',   defaultProbability: 25,  expectedDays: 14   },
+  { pipelineApiName: 'sales_pipeline', name: 'Needs Analysis', apiName: 'needs_analysis', sortOrder: 2, stageType: 'open', colour: 'purple', defaultProbability: 40,  expectedDays: 21   },
+  { pipelineApiName: 'sales_pipeline', name: 'Proposal',       apiName: 'proposal',       sortOrder: 3, stageType: 'open', colour: 'purple', defaultProbability: 60,  expectedDays: 14   },
+  { pipelineApiName: 'sales_pipeline', name: 'Negotiation',    apiName: 'negotiation',    sortOrder: 4, stageType: 'open', colour: 'amber',  defaultProbability: 80,  expectedDays: 14   },
+  { pipelineApiName: 'sales_pipeline', name: 'Closed Won',     apiName: 'closed_won',     sortOrder: 5, stageType: 'won',  colour: 'green',  defaultProbability: 100, expectedDays: null },
+  { pipelineApiName: 'sales_pipeline', name: 'Closed Lost',    apiName: 'closed_lost',    sortOrder: 6, stageType: 'lost', colour: 'red',    defaultProbability: 0,   expectedDays: null },
+];
+
+// ─── Stage gate definitions ───────────────────────────────────────────────────
+
+const STAGE_GATE_SEEDS: StageGateSeed[] = [
+  // Qualification gate: value required
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'qualification',  objectApiName: 'opportunity', fieldApiName: 'value',       gateType: 'required',  gateValue: null, errorMessage: 'Deal value is required to enter Qualification' },
+  // Needs Analysis gate: close_date required
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'needs_analysis', objectApiName: 'opportunity', fieldApiName: 'close_date',  gateType: 'required',  gateValue: null, errorMessage: 'Expected close date is required' },
+  // Proposal gates: value, close_date, description
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'proposal',       objectApiName: 'opportunity', fieldApiName: 'value',       gateType: 'required',  gateValue: null, errorMessage: null },
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'proposal',       objectApiName: 'opportunity', fieldApiName: 'close_date',  gateType: 'required',  gateValue: null, errorMessage: null },
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'proposal',       objectApiName: 'opportunity', fieldApiName: 'description', gateType: 'required',  gateValue: null, errorMessage: 'A description of the opportunity is required' },
+  // Negotiation gates: value min_value 0, close_date, probability
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'negotiation',    objectApiName: 'opportunity', fieldApiName: 'value',       gateType: 'min_value', gateValue: '0',  errorMessage: 'Deal value must be set' },
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'negotiation',    objectApiName: 'opportunity', fieldApiName: 'close_date',  gateType: 'required',  gateValue: null, errorMessage: null },
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'negotiation',    objectApiName: 'opportunity', fieldApiName: 'probability', gateType: 'required',  gateValue: null, errorMessage: null },
+  // Closed Won gates: value, close_date
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'closed_won',     objectApiName: 'opportunity', fieldApiName: 'value',       gateType: 'required',  gateValue: null, errorMessage: null },
+  { pipelineApiName: 'sales_pipeline', stageApiName: 'closed_won',     objectApiName: 'opportunity', fieldApiName: 'close_date',  gateType: 'required',  gateValue: null, errorMessage: null },
+];
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // IMPLEMENTATION
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -535,6 +607,12 @@ export async function seedDefaultObjects(tenantId: string, ownerId: string): Pro
         layoutFieldsSkipped: result.layoutFieldsSkipped,
         leadConversionMappingsCreated: result.leadConversionMappingsCreated,
         leadConversionMappingsSkipped: result.leadConversionMappingsSkipped,
+        pipelinesCreated: result.pipelinesCreated,
+        pipelinesSkipped: result.pipelinesSkipped,
+        stagesCreated: result.stagesCreated,
+        stagesSkipped: result.stagesSkipped,
+        stageGatesCreated: result.stageGatesCreated,
+        stageGatesSkipped: result.stageGatesSkipped,
       },
       'Default objects seeded',
     );
@@ -570,6 +648,12 @@ export async function seedWithClient(
     layoutFieldsSkipped: 0,
     leadConversionMappingsCreated: 0,
     leadConversionMappingsSkipped: 0,
+    pipelinesCreated: 0,
+    pipelinesSkipped: 0,
+    stagesCreated: 0,
+    stagesSkipped: 0,
+    stageGatesCreated: 0,
+    stageGatesSkipped: 0,
   };
 
   // Step 1: Seed object definitions
@@ -592,6 +676,9 @@ export async function seedWithClient(
 
   // Step 6: Seed lead conversion mappings
   await seedLeadConversionMappings(client, tenantId, result);
+
+  // Step 7: Seed pipeline definitions, stages, and stage gates
+  await seedPipelines(client, tenantId, ownerId, objectIdMap, fieldIdMap, result);
 
   return result;
 }
@@ -879,6 +966,133 @@ async function seedLeadConversionMappings(
   );
 }
 
+async function seedPipelines(
+  client: QueryClient,
+  tenantId: string,
+  ownerId: string,
+  objectIdMap: Map<string, string>,
+  fieldIdMap: Map<string, string>,
+  result: SeedResult,
+): Promise<void> {
+  const pipelineIdMap = new Map<string, string>();
+
+  // Step 7a: Create pipeline definitions
+  for (const pipeline of PIPELINE_SEEDS) {
+    const objectId = objectIdMap.get(pipeline.objectApiName);
+    if (!objectId) continue;
+
+    const id = randomUUID();
+    const { rows } = await client.query(
+      `INSERT INTO pipeline_definitions (id, tenant_id, object_id, name, api_name, is_default, is_system, owner_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, true, $6, $7, NOW(), NOW())
+       ON CONFLICT (tenant_id, object_id, api_name) DO NOTHING
+       RETURNING id`,
+      [id, tenantId, objectId, pipeline.name, pipeline.apiName, pipeline.isSystem, ownerId],
+    );
+
+    if (rows.length > 0) {
+      pipelineIdMap.set(pipeline.apiName, rows[0].id as string);
+      result.pipelinesCreated++;
+    } else {
+      result.pipelinesSkipped++;
+    }
+  }
+
+  // Fetch IDs for pipelines that already existed
+  if (result.pipelinesSkipped > 0) {
+    const { rows } = await client.query(
+      `SELECT id, api_name FROM pipeline_definitions WHERE api_name = ANY($1) AND tenant_id = $2`,
+      [PIPELINE_SEEDS.map((p) => p.apiName), tenantId],
+    );
+    for (const row of rows) {
+      pipelineIdMap.set(row.api_name as string, row.id as string);
+    }
+  }
+
+  logger.info(
+    { created: result.pipelinesCreated, skipped: result.pipelinesSkipped },
+    'Seeded pipeline definitions',
+  );
+
+  // Step 7b: Create stage definitions
+  const stageIdMap = new Map<string, string>();
+
+  for (const stage of STAGE_SEEDS) {
+    const pipelineId = pipelineIdMap.get(stage.pipelineApiName);
+    if (!pipelineId) continue;
+
+    const id = randomUUID();
+    const { rows } = await client.query(
+      `INSERT INTO stage_definitions (id, tenant_id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, expected_days, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+       ON CONFLICT (tenant_id, pipeline_id, api_name) DO NOTHING
+       RETURNING id`,
+      [id, tenantId, pipelineId, stage.name, stage.apiName, stage.sortOrder, stage.stageType, stage.colour, stage.defaultProbability, stage.expectedDays],
+    );
+
+    const key = `${stage.pipelineApiName}.${stage.apiName}`;
+    if (rows.length > 0) {
+      stageIdMap.set(key, rows[0].id as string);
+      result.stagesCreated++;
+    } else {
+      result.stagesSkipped++;
+    }
+  }
+
+  // Fetch IDs for stages that already existed
+  if (result.stagesSkipped > 0) {
+    const pipelineIds = [...pipelineIdMap.values()];
+    if (pipelineIds.length > 0) {
+      const { rows } = await client.query(
+        `SELECT sd.id, sd.api_name, pd.api_name AS pipeline_api_name
+         FROM stage_definitions sd
+         JOIN pipeline_definitions pd ON sd.pipeline_id = pd.id
+         WHERE sd.pipeline_id = ANY($1) AND sd.tenant_id = $2`,
+        [pipelineIds, tenantId],
+      );
+      for (const row of rows) {
+        const key = `${row.pipeline_api_name}.${row.api_name}`;
+        stageIdMap.set(key, row.id as string);
+      }
+    }
+  }
+
+  logger.info(
+    { created: result.stagesCreated, skipped: result.stagesSkipped },
+    'Seeded stage definitions',
+  );
+
+  // Step 7c: Create stage gates
+  for (const gate of STAGE_GATE_SEEDS) {
+    const stageKey = `${gate.pipelineApiName}.${gate.stageApiName}`;
+    const stageId = stageIdMap.get(stageKey);
+    const fieldKey = `${gate.objectApiName}.${gate.fieldApiName}`;
+    const fieldId = fieldIdMap.get(fieldKey);
+
+    if (!stageId || !fieldId) continue;
+
+    const id = randomUUID();
+    const { rows } = await client.query(
+      `INSERT INTO stage_gates (id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (tenant_id, stage_id, field_id) DO NOTHING
+       RETURNING id`,
+      [id, tenantId, stageId, fieldId, gate.gateType, gate.gateValue, gate.errorMessage],
+    );
+
+    if (rows.length > 0) {
+      result.stageGatesCreated++;
+    } else {
+      result.stageGatesSkipped++;
+    }
+  }
+
+  logger.info(
+    { created: result.stageGatesCreated, skipped: result.stageGatesSkipped },
+    'Seeded stage gates',
+  );
+}
+
 // ─── Exported constants for testing ───────────────────────────────────────────
 
 export const SEED_COUNTS = {
@@ -888,4 +1102,7 @@ export const SEED_COUNTS = {
   layouts: LAYOUT_SEEDS.length,
   layoutFields: LAYOUT_FIELD_SEEDS.length,
   leadConversionMappings: LEAD_CONVERSION_MAPPING_SEEDS.length,
+  pipelines: PIPELINE_SEEDS.length,
+  stages: STAGE_SEEDS.length,
+  stageGates: STAGE_GATE_SEEDS.length,
 } as const;
