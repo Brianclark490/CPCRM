@@ -1,3 +1,4 @@
+import { useTenantLocale } from '../useTenantLocale.js';
 import styles from './FieldInput.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ export function FieldInput({
   name,
   label,
 }: FieldInputProps) {
+  const { currencySymbol } = useTenantLocale();
   const stringValue = value !== null && value !== undefined ? String(value) : '';
 
   switch (fieldType) {
@@ -80,20 +82,23 @@ export function FieldInput({
 
     case 'currency':
       return (
-        <input
-          className={styles.input}
-          type="number"
-          id={id}
-          name={name}
-          value={stringValue}
-          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
-          disabled={disabled}
-          required={required}
-          step="0.01"
-          min={(options.min as number) ?? undefined}
-          max={(options.max as number) ?? undefined}
-          placeholder="0.00"
-        />
+        <div className={styles.currencyWrapper}>
+          <span className={styles.currencyPrefix}>{currencySymbol}</span>
+          <input
+            className={`${styles.input} ${styles.currencyInput}`}
+            type="number"
+            id={id}
+            name={name}
+            value={stringValue}
+            onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+            disabled={disabled}
+            required={required}
+            step="0.01"
+            min={(options.min as number) ?? undefined}
+            max={(options.max as number) ?? undefined}
+            placeholder="0.00"
+          />
+        </div>
       );
 
     case 'date':

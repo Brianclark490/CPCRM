@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useTenantLocale } from '../useTenantLocale.js';
 import styles from './KanbanCard.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,21 +24,6 @@ interface KanbanCardProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
 
 function isOverdue(dateStr: string): boolean {
   return new Date(dateStr) < new Date();
@@ -71,6 +57,7 @@ export function KanbanCard({
   isDragging,
 }: KanbanCardProps) {
   const navigate = useNavigate();
+  const { formatCurrencyCompact, formatDate } = useTenantLocale();
 
   const daysInStage =
     record.stageEnteredAt ? getDaysInStage(record.stageEnteredAt) : 0;
@@ -106,7 +93,7 @@ export function KanbanCard({
 
       <div className={styles.cardRow}>
         {record.value !== null && (
-          <span className={styles.cardValue}>${formatCurrency(record.value)}</span>
+          <span className={styles.cardValue}>{formatCurrencyCompact(record.value)}</span>
         )}
         {record.closeDate && (
           <span className={styles.cardDate}>

@@ -72,7 +72,7 @@ describe('OverdueDealsPanel', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('button'));
 
-    expect(screen.getByText(/\$50,000/)).toBeInTheDocument();
+    expect(screen.getByText(/£50K/)).toBeInTheDocument();
   });
 
   it('shows overdue days count', () => {

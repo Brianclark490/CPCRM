@@ -38,10 +38,10 @@ describe('PipelineSummaryBar', () => {
 
   it('displays formatted currency values', () => {
     renderBar();
-    // $1.5M for total open value
-    expect(screen.getByText('$1.5M')).toBeInTheDocument();
-    // $750K for weighted pipeline
-    expect(screen.getByText('$750K')).toBeInTheDocument();
+    // £1.5M for total open value
+    expect(screen.getByText('£1.5M')).toBeInTheDocument();
+    // £750K for weighted pipeline
+    expect(screen.getByText('£750K')).toBeInTheDocument();
   });
 
   it('displays open deals count', () => {

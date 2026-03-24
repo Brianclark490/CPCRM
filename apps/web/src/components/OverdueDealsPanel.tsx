@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTenantLocale } from '../useTenantLocale.js';
 import styles from './OverdueDealsPanel.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -19,19 +20,11 @@ interface OverdueDealsProps {
   apiName: string;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OverdueDealsPanel({ records, apiName }: OverdueDealsProps) {
   const navigate = useNavigate();
+  const { formatCurrencyCompact } = useTenantLocale();
   const [expanded, setExpanded] = useState(false);
 
   if (records.length === 0) return null;
@@ -96,7 +89,7 @@ export function OverdueDealsPanel({ records, apiName }: OverdueDealsProps) {
                 </div>
                 <div className={styles.itemRight}>
                   {record.value !== null && (
-                    <span className={styles.itemValue}>${formatCurrency(record.value)}</span>
+                    <span className={styles.itemValue}>{formatCurrencyCompact(record.value)}</span>
                   )}
                   <span className={styles.itemOverdue}>
                     +{record.daysInStage - record.expectedDays}d overdue

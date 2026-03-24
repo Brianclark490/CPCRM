@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useTenantLocale } from '../useTenantLocale.js';
 import { KanbanCard } from './KanbanCard.js';
 import type { KanbanCardRecord } from './KanbanCard.js';
 import { KanbanFilterBar, EMPTY_FILTERS } from './KanbanFilterBar.js';
@@ -107,13 +108,6 @@ function resolveColour(colour: string): string {
   return COLOUR_MAP[colour.toLowerCase()] ?? colour;
 }
 
-function formatCurrency(value: number): string {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-}
-
 function getOwnerInitials(ownerId: string): string {
   // Fall back to first two chars of ownerId
   return (ownerId.slice(0, 2) || '??').toUpperCase();
@@ -178,6 +172,7 @@ function applyFilters(
 
 export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const { sessionToken } = useSession();
+  const { formatCurrencyCompact } = useTenantLocale();
 
   const [pipeline, setPipeline] = useState<PipelineDefinition | null>(null);
   const [allRecords, setAllRecords] = useState<RecordItem[]>([]);
@@ -585,11 +580,11 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
         <div className={styles.summaryBar} data-testid="kanban-summary">
           <div className={styles.summaryItem}>
             <span className={styles.summaryLabel}>Open value</span>
-            <span className={styles.summaryValue}>${formatCurrency(totalOpenValue)}</span>
+            <span className={styles.summaryValue}>{formatCurrencyCompact(totalOpenValue)}</span>
           </div>
           <div className={styles.summaryItem}>
             <span className={styles.summaryLabel}>Weighted value</span>
-            <span className={styles.summaryValue}>${formatCurrency(totalWeightedValue)}</span>
+            <span className={styles.summaryValue}>{formatCurrencyCompact(totalWeightedValue)}</span>
           </div>
           <div className={styles.summaryItem}>
             <span className={styles.summaryLabel}>Deals</span>
@@ -641,7 +636,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
                   <span className={styles.columnCount}>{cards.length}</span>
                 </div>
                 <span className={styles.columnValue}>
-                  ${formatCurrency(stageValue)}
+                  {formatCurrencyCompact(stageValue)}
                 </span>
               </div>
 
