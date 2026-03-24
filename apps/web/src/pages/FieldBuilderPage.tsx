@@ -832,8 +832,10 @@ export function FieldBuilderPage() {
       <div className={styles.objectHeader}>
         <span className={styles.objectIcon}>{resolveIcon(objectDef.icon ?? 'package')}</span>
         <div className={styles.objectMeta}>
-          <h1 className={styles.objectLabel}>{objectDef.label}</h1>
-          <code className={styles.objectApiName}>{objectDef.apiName}</code>
+          <h1 className={styles.objectLabel}>
+            {objectDef.label}
+            <code className={styles.objectApiName}>{objectDef.apiName}</code>
+          </h1>
           {objectDef.description && (
             <p className={styles.objectDescription}>{objectDef.description}</p>
           )}
