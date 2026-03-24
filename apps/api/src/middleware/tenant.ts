@@ -3,6 +3,7 @@ import type { AuthenticatedRequest } from './auth.js';
 import { pool } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import { seedDefaultObjects } from '../services/seedDefaultObjects.js';
+import { syncUserRecord } from '../services/userSyncService.js';
 
 /**
  * Enforces that an active tenant context is present on the request and that
@@ -80,6 +81,21 @@ export async function requireTenant(
     res.status(503).json({ error: 'Tenant validation service unavailable' });
     return;
   }
+
+  // Sync User record (best-effort, non-blocking for the response)
+  // Creates or updates a User record from the Descope JWT claims.
+  syncUserRecord({
+    tenantId: req.user.tenantId,
+    descopeUserId: req.user.userId,
+    email: req.user.email,
+    displayName: req.user.name,
+    role: req.user.roles[0],
+  }).catch((err: unknown) => {
+    logger.warn(
+      { err, userId: req.user?.userId, tenantId: req.user?.tenantId },
+      'User sync failed (best-effort)',
+    );
+  });
 
   next();
 }
