@@ -96,6 +96,14 @@ const SettingsIcon = () => (
   </svg>
 );
 
+const TargetIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
+    <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="1.5" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" />
+  </svg>
+);
+
 /* ── Card definitions ─────────────────────────────────────── */
 
 const baseCards: AdminCard[] = [
@@ -116,6 +124,12 @@ const baseCards: AdminCard[] = [
     description: 'Invite users, assign roles, deactivate',
     to: '/admin/users',
     icon: <UserPlusIcon />,
+  },
+  {
+    title: 'Sales targets',
+    description: 'Business, team, and user targets',
+    to: '/admin/targets',
+    icon: <TargetIcon />,
   },
 ];
 

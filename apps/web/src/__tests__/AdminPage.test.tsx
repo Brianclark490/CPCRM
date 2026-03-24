@@ -68,6 +68,14 @@ describe('AdminPage', () => {
     expect(screen.getByText('Login history, role changes, data access')).toBeInTheDocument();
   });
 
+  it('renders a card linking to Sales Targets', () => {
+    renderPage();
+
+    const link = screen.getByRole('link', { name: /Sales targets/i });
+    expect(link).toHaveAttribute('href', '/admin/targets');
+    expect(screen.getByText('Business, team, and user targets')).toBeInTheDocument();
+  });
+
   it('renders a card linking to Tenant Settings', () => {
     renderPage();
 
@@ -94,21 +102,21 @@ describe('AdminPage', () => {
     expect(screen.queryByRole('link', { name: /Roles and permissions/i })).not.toBeInTheDocument();
   });
 
-  it('renders 5 cards for non-super-admin users', () => {
+  it('renders 6 cards for non-super-admin users', () => {
     vi.mocked(useSuperAdmin).mockReturnValue({ isSuperAdmin: false, loading: false });
 
     renderPage();
 
     const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(5);
+    expect(links).toHaveLength(6);
   });
 
-  it('renders 6 cards for super-admin users', () => {
+  it('renders 7 cards for super-admin users', () => {
     vi.mocked(useSuperAdmin).mockReturnValue({ isSuperAdmin: true, loading: false });
 
     renderPage();
 
     const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(6);
+    expect(links).toHaveLength(7);
   });
 });

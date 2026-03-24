@@ -28,6 +28,7 @@ import { TenantPickerPage } from './pages/TenantPickerPage.js';
 import { PlatformTenantsPage } from './pages/PlatformTenantsPage.js';
 import { PlatformTenantDetailPage } from './pages/PlatformTenantDetailPage.js';
 import { AdminTenantSettingsPage } from './pages/AdminTenantSettingsPage.js';
+import { AdminTargetsPage } from './pages/AdminTargetsPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
 import { TenantGuard } from './components/TenantGuard.js';
 import { AppShell } from './components/AppShell.js';
@@ -233,6 +234,18 @@ export function App() {
               <TenantGuard>
                 <AppShell>
                   <AdminAuditPage />
+                </AppShell>
+              </TenantGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/targets"
+          element={
+            <ProtectedRoute>
+              <TenantGuard>
+                <AppShell>
+                  <AdminTargetsPage />
                 </AppShell>
               </TenantGuard>
             </ProtectedRoute>
