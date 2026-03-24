@@ -102,6 +102,11 @@
   transition: background var(--transition-base);
 }
 
+.dropZoneTwoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
 .dropZone.dropZoneOver {
   background: var(--accent-soft);
 }
@@ -115,4 +120,5 @@
   color: var(--text-tertiary);
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
+  grid-column: 1 / -1;
 }
