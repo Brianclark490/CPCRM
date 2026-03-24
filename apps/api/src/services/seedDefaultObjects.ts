@@ -77,7 +77,7 @@ export interface SeedResult {
 // SEED DATA — canonical final state after all migrations
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── Object definitions (9 system objects) ────────────────────────────────────
+// ─── Object definitions (10 system objects) ───────────────────────────────────
 
 const OBJECT_SEEDS: ObjectSeed[] = [
   { apiName: 'account',     label: 'Account',     pluralLabel: 'Accounts',      description: 'Companies and organisations',            icon: 'building',        nameFieldApiName: 'name' },
@@ -89,6 +89,7 @@ const OBJECT_SEEDS: ObjectSeed[] = [
   { apiName: 'agreement',   label: 'Agreement',   pluralLabel: 'Agreements',    description: 'Contracts, proposals, and agreements',   icon: 'file-text',       nameFieldApiName: 'title' },
   { apiName: 'note',        label: 'Note',        pluralLabel: 'Notes',         description: 'Free-text notes linked to any record',   icon: 'message-square',  nameFieldApiName: 'title' },
   { apiName: 'file',        label: 'File',        pluralLabel: 'Files',         description: 'Uploaded documents and attachments',     icon: 'paperclip',       nameFieldApiName: 'filename' },
+  { apiName: 'user',        label: 'User',        pluralLabel: 'Users',         description: 'CRM users synced from Descope',          icon: 'users',           nameFieldApiName: 'display_name' },
 ];
 
 // ─── Field definitions ────────────────────────────────────────────────────────
@@ -204,6 +205,17 @@ const FILE_FIELDS: FieldSeed[] = [
   { objectApiName: 'file', apiName: 'description', label: 'Description',    fieldType: 'textarea', required: false, options: {}, sortOrder: 5 },
 ];
 
+const USER_FIELDS: FieldSeed[] = [
+  { objectApiName: 'user', apiName: 'email',            label: 'Email',            fieldType: 'email',    required: true,  options: {}, sortOrder: 1 },
+  { objectApiName: 'user', apiName: 'display_name',     label: 'Display Name',     fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 2 },
+  { objectApiName: 'user', apiName: 'role',             label: 'Role',             fieldType: 'dropdown', required: false, options: { choices: ['admin', 'manager', 'user', 'read_only'] }, sortOrder: 3 },
+  { objectApiName: 'user', apiName: 'descope_user_id',  label: 'Descope User ID',  fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 4 },
+  { objectApiName: 'user', apiName: 'job_title',        label: 'Job Title',        fieldType: 'text',     required: false, options: { max_length: 200 }, sortOrder: 5 },
+  { objectApiName: 'user', apiName: 'phone',            label: 'Phone',            fieldType: 'phone',    required: false, options: {}, sortOrder: 6 },
+  { objectApiName: 'user', apiName: 'avatar_url',       label: 'Avatar URL',       fieldType: 'url',      required: false, options: {}, sortOrder: 7 },
+  { objectApiName: 'user', apiName: 'is_active',        label: 'Active',           fieldType: 'boolean',  required: false, options: {}, sortOrder: 8 },
+];
+
 const ALL_FIELD_SEEDS: FieldSeed[] = [
   ...ACCOUNT_FIELDS,
   ...CONTACT_FIELDS,
@@ -214,6 +226,7 @@ const ALL_FIELD_SEEDS: FieldSeed[] = [
   ...AGREEMENT_FIELDS,
   ...NOTE_FIELDS,
   ...FILE_FIELDS,
+  ...USER_FIELDS,
 ];
 
 // ─── Relationship definitions ─────────────────────────────────────────────────
@@ -258,6 +271,8 @@ const LAYOUT_SEEDS: LayoutSeed[] = [
   { objectApiName: 'note',        name: 'List View',     layoutType: 'list' },
   { objectApiName: 'file',        name: 'Default Form',  layoutType: 'form' },
   { objectApiName: 'file',        name: 'List View',     layoutType: 'list' },
+  { objectApiName: 'user',        name: 'Default Form',  layoutType: 'form' },
+  { objectApiName: 'user',        name: 'List View',     layoutType: 'list' },
 ];
 
 // ─── Layout field assignments ─────────────────────────────────────────────────
@@ -417,6 +432,22 @@ const LAYOUT_FIELD_SEEDS: LayoutFieldSeed[] = [
   { objectApiName: 'file', layoutName: 'List View', fieldApiName: 'filename',  section: 0, sectionLabel: null, sortOrder: 1, width: 'full' },
   { objectApiName: 'file', layoutName: 'List View', fieldApiName: 'category',  section: 0, sectionLabel: null, sortOrder: 2, width: 'full' },
   { objectApiName: 'file', layoutName: 'List View', fieldApiName: 'file_size', section: 0, sectionLabel: null, sortOrder: 3, width: 'full' },
+
+  // ── User "Default Form" ──────────────────────────────────────────────
+  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'email',           section: 0, sectionLabel: 'Identity', sortOrder: 1, width: 'full' },
+  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'display_name',    section: 0, sectionLabel: 'Identity', sortOrder: 2, width: 'full' },
+  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'role',            section: 0, sectionLabel: 'Identity', sortOrder: 3, width: 'half' },
+  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'is_active',       section: 0, sectionLabel: 'Identity', sortOrder: 4, width: 'half' },
+  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'job_title',       section: 1, sectionLabel: 'Details',  sortOrder: 5, width: 'full' },
+  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'phone',           section: 1, sectionLabel: 'Details',  sortOrder: 6, width: 'half' },
+  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'avatar_url',      section: 1, sectionLabel: 'Details',  sortOrder: 7, width: 'full' },
+  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'descope_user_id', section: 2, sectionLabel: 'System',   sortOrder: 8, width: 'full' },
+  // ── User "List View" ─────────────────────────────────────────────────
+  { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'display_name', section: 0, sectionLabel: null, sortOrder: 1, width: 'full' },
+  { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'email',        section: 0, sectionLabel: null, sortOrder: 2, width: 'full' },
+  { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'role',         section: 0, sectionLabel: null, sortOrder: 3, width: 'full' },
+  { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'job_title',    section: 0, sectionLabel: null, sortOrder: 4, width: 'full' },
+  { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'is_active',    section: 0, sectionLabel: null, sortOrder: 5, width: 'full' },
 ];
 
 // ─── Lead conversion mappings ─────────────────────────────────────────────────

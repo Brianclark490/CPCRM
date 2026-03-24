@@ -48,8 +48,10 @@ interface RecordDetail {
   fieldValues: Record<string, unknown>;
   ownerId: string;
   ownerName?: string;
+  ownerRecordId?: string;
   updatedBy?: string;
   updatedByName?: string;
+  updatedByRecordId?: string;
   createdAt: string;
   updatedAt: string;
   fields: RecordField[];
@@ -870,10 +872,17 @@ export function RecordDetailPage() {
                     <span className={styles.metaLabel}>Owner</span>
                     <span className={styles.metaValue}>
                       {record.ownerName ? (
-                        <span className={styles.avatarChip}>
-                          <span className={styles.avatarInitials}>{getInitials(record.ownerName)}</span>
-                          {record.ownerName}
-                        </span>
+                        record.ownerRecordId ? (
+                          <Link to={`/objects/user/${record.ownerRecordId}`} className={styles.avatarChipLink}>
+                            <span className={styles.avatarInitials}>{getInitials(record.ownerName)}</span>
+                            {record.ownerName}
+                          </Link>
+                        ) : (
+                          <span className={styles.avatarChip}>
+                            <span className={styles.avatarInitials}>{getInitials(record.ownerName)}</span>
+                            {record.ownerName}
+                          </span>
+                        )
                       ) : '—'}
                     </span>
                   </div>
@@ -881,10 +890,17 @@ export function RecordDetailPage() {
                     <span className={styles.metaLabel}>Last modified</span>
                     <span className={styles.metaValue}>
                       {record.updatedByName ? (
-                        <span className={styles.avatarChip}>
-                          <span className={styles.avatarInitials}>{getInitials(record.updatedByName)}</span>
-                          {record.updatedByName}
-                        </span>
+                        record.updatedByRecordId ? (
+                          <Link to={`/objects/user/${record.updatedByRecordId}`} className={styles.avatarChipLink}>
+                            <span className={styles.avatarInitials}>{getInitials(record.updatedByName)}</span>
+                            {record.updatedByName}
+                          </Link>
+                        ) : (
+                          <span className={styles.avatarChip}>
+                            <span className={styles.avatarInitials}>{getInitials(record.updatedByName)}</span>
+                            {record.updatedByName}
+                          </span>
+                        )
                       ) : null}
                       {record.updatedByName ? ' · ' : ''}{formatRelativeTime(record.updatedAt)}
                     </span>
