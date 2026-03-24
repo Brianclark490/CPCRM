@@ -85,11 +85,11 @@ export async function requireTenant(
   // Sync User record (best-effort, non-blocking for the response)
   // Creates or updates a User record from the Descope JWT claims.
   syncUserRecord({
-    tenantId: req.user.tenantId,
+    tenantId: req.user.tenantId!,
     descopeUserId: req.user.userId,
     email: req.user.email,
     displayName: req.user.name,
-    role: req.user.roles[0],
+    role: req.user.roles?.[0],
   }).catch((err: unknown) => {
     logger.warn(
       { err, userId: req.user?.userId, tenantId: req.user?.tenantId },

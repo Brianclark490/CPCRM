@@ -7,6 +7,7 @@ const mockLoggerWarn = vi.fn();
 const mockLoggerError = vi.fn();
 const mockLoggerInfo = vi.fn();
 const mockSeedDefaultObjects = vi.fn();
+const mockSyncUserRecord = vi.fn();
 
 vi.mock('../../db/client.js', () => ({
   pool: {
@@ -24,6 +25,10 @@ vi.mock('../../lib/logger.js', () => ({
 
 vi.mock('../../services/seedDefaultObjects.js', () => ({
   seedDefaultObjects: (...args: unknown[]) => mockSeedDefaultObjects(...args),
+}));
+
+vi.mock('../../services/userSyncService.js', () => ({
+  syncUserRecord: (...args: unknown[]) => mockSyncUserRecord(...args),
 }));
 
 const { requireTenant } = await import('../tenant.js');
@@ -46,6 +51,8 @@ describe('requireTenant middleware', () => {
     mockLoggerError.mockReset();
     mockLoggerInfo.mockReset();
     mockSeedDefaultObjects.mockReset();
+    mockSyncUserRecord.mockReset();
+    mockSyncUserRecord.mockResolvedValue({ userRecordId: '', created: false });
   });
 
   it('returns 403 NO_TENANT when req.user is not set (requireAuth not called)', async () => {
