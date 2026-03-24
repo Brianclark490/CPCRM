@@ -69,6 +69,26 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     },
     defaultConfig: { showFilters: true, limit: 20 },
   },
+  {
+    type: 'sales_targets',
+    label: 'Sales Targets',
+    icon: 'target',
+    category: 'widgets',
+    configSchema: {
+      showBusinessTarget: { type: 'boolean', description: 'Show business-level target progress bar' },
+      showTeamTargets: { type: 'boolean', description: 'Show team-level target progress bars' },
+      showUserTargets: { type: 'boolean', description: 'Show user-level target progress bars' },
+      enableDrillDown: { type: 'boolean', description: 'Allow drill-down from business → team → user' },
+      periodType: { type: 'string', description: 'Default period type: monthly, quarterly, annual' },
+    },
+    defaultConfig: {
+      showBusinessTarget: true,
+      showTeamTargets: true,
+      showUserTargets: true,
+      enableDrillDown: true,
+      periodType: 'quarterly',
+    },
+  },
 
   // ── Layout components ───────────────────────────────────────────────────────
   {
