@@ -1,0 +1,332 @@
+/* ============================================================
+   SalesTargetsRenderer — Sales target progress bars widget
+   ============================================================ */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6) var(--space-6);
+}
+
+/* ── Loading state ─────────────────────────────────────────── */
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8);
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2.5px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loadingText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* ── Error state ───────────────────────────────────────────── */
+
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.errorIcon {
+  width: 20px;
+  height: 20px;
+  color: var(--color-error);
+}
+
+.errorText {
+  font-size: var(--font-size-sm);
+  color: var(--color-error-text);
+}
+
+.retryButton {
+  appearance: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.retryButton:hover {
+  background: var(--color-border);
+}
+
+/* ── Empty state ───────────────────────────────────────────── */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 28px;
+  height: 28px;
+  color: var(--color-text-muted);
+}
+
+.emptyTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.emptyText {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Period label ──────────────────────────────────────────── */
+
+.periodLabel {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+/* ── Business target (hero bar) ────────────────────────────── */
+
+.businessSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.businessHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.businessLabel {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.businessValues {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.businessPercentage {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  margin-left: var(--space-2);
+}
+
+.barTrack {
+  background-color: var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barTrackLarge {
+  height: 12px;
+}
+
+.barTrackSmall {
+  height: 8px;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 2px;
+}
+
+/* ── Color variants for bar fills + percentage text ────────── */
+
+.colorGreen {
+  background-color: #22c55e;
+}
+
+.colorAmber {
+  background-color: #f59e0b;
+}
+
+.colorRed {
+  background-color: #ef4444;
+}
+
+.textGreen {
+  color: #22c55e;
+}
+
+.textAmber {
+  color: #f59e0b;
+}
+
+.textRed {
+  color: #ef4444;
+}
+
+/* ── Teams section ─────────────────────────────────────────── */
+
+.teamsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.teamsSectionLabel {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: var(--space-2);
+}
+
+/* ── Team row ──────────────────────────────────────────────── */
+
+.teamBlock {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.teamBlock:last-child {
+  border-bottom: none;
+}
+
+.teamHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s ease;
+}
+
+.teamHeader:hover {
+  opacity: 0.8;
+}
+
+.chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.teamInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.teamTopRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.teamName {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.teamValues {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.teamPercentage {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  margin-left: var(--space-1);
+}
+
+/* ── Users list (inside expanded team) ─────────────────────── */
+
+.usersList {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 var(--space-2) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.userRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.userTopRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.userName {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.userValues {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.userPercentage {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  margin-left: var(--space-1);
+}

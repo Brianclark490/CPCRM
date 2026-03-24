@@ -4,12 +4,14 @@ import { evaluateVisibility } from './evaluateVisibility.js';
 import { LayoutFieldRenderer } from './LayoutFieldRenderer.js';
 import { RelatedListRenderer } from './RelatedListRenderer.js';
 import { PlaceholderWidget } from './PlaceholderWidget.js';
+import { SalesTargetsRenderer } from './SalesTargetsRenderer.js';
 
 // ─── Component registry (map, not switch) ─────────────────────────────────────
 
 const COMPONENT_RENDERERS: Record<string, ComponentType<ComponentRendererProps>> = {
   field: LayoutFieldRenderer,
   related_list: RelatedListRenderer,
+  sales_targets: SalesTargetsRenderer,
   activity_timeline: PlaceholderWidget,
   notes: PlaceholderWidget,
   stage_history: PlaceholderWidget,

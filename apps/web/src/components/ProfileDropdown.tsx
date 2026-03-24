@@ -141,6 +141,17 @@ export function ProfileDropdown({
             </span>
             Audit log
           </Link>
+          <Link
+            to="/admin/targets"
+            className={styles.menuItem}
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            <span className={styles.menuItemIcon} aria-hidden="true">
+              🎯
+            </span>
+            Sales targets
+          </Link>
 
           {/* ── Platform section (super-admin only) ──────── */}
           {isSuperAdmin && (
