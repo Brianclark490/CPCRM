@@ -257,6 +257,72 @@ describe('PageBuilderPage', () => {
     expect(screen.getByTestId('palette-item-palette-field-field-3')).toBeInTheDocument();
   });
 
+  it('renders a search input for fields in the palette', async () => {
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('field-search-input')).toBeInTheDocument();
+    });
+
+    const input = screen.getByTestId('field-search-input') as HTMLInputElement;
+    expect(input.placeholder).toBe('Search fields…');
+  });
+
+  it('filters fields when typing in the search input', async () => {
+    const user = userEvent.setup();
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('field-search-input')).toBeInTheDocument();
+    });
+
+    // All three fields visible initially
+    expect(screen.getByTestId('palette-item-palette-field-field-1')).toBeInTheDocument();
+    expect(screen.getByTestId('palette-item-palette-field-field-2')).toBeInTheDocument();
+    expect(screen.getByTestId('palette-item-palette-field-field-3')).toBeInTheDocument();
+
+    // Type "email" to filter
+    await user.type(screen.getByTestId('field-search-input'), 'email');
+
+    // Only Email field should remain
+    expect(screen.getByTestId('palette-item-palette-field-field-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('palette-item-palette-field-field-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('palette-item-palette-field-field-3')).not.toBeInTheDocument();
+  });
+
+  it('shows no-results message when search matches nothing', async () => {
+    const user = userEvent.setup();
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('field-search-input')).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByTestId('field-search-input'), 'zzzzz');
+
+    expect(screen.getByTestId('field-search-no-results')).toBeInTheDocument();
+    expect(screen.getByText('No fields match your search.')).toBeInTheDocument();
+  });
+
+  it('field search is case-insensitive', async () => {
+    const user = userEvent.setup();
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('field-search-input')).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByTestId('field-search-input'), 'NAME');
+
+    expect(screen.getByTestId('palette-item-palette-field-field-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('palette-item-palette-field-field-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('palette-item-palette-field-field-3')).not.toBeInTheDocument();
+  });
+
   it('shows relationships in the component palette', async () => {
     mockAllFetches();
     renderPage();

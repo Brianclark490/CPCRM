@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import type {
   ComponentDefinition,
@@ -97,8 +98,13 @@ export function ComponentPalette({
   relationships,
   tabs,
 }: ComponentPaletteProps) {
+  const [fieldSearch, setFieldSearch] = useState('');
   const placedFields = getPlacedFieldIds(tabs);
   const placedRelationships = getPlacedRelationshipIds(tabs);
+
+  const filteredFields = fieldSearch
+    ? fields.filter((f) => f.label.toLowerCase().includes(fieldSearch.toLowerCase()))
+    : fields;
 
   const grouped = CATEGORY_ORDER
     .map((cat) => ({
@@ -115,7 +121,15 @@ export function ComponentPalette({
       {fields.length > 0 && (
         <div className={styles.group}>
           <h4 className={styles.groupLabel}>Fields</h4>
-          {fields.map((field) => (
+          <input
+            type="text"
+            className={styles.fieldSearch}
+            placeholder="Search fields…"
+            value={fieldSearch}
+            onChange={(e) => setFieldSearch(e.target.value)}
+            data-testid="field-search-input"
+          />
+          {filteredFields.map((field) => (
             <PaletteItem
               key={`field-${field.id}`}
               id={`palette-field-${field.id}`}
@@ -129,6 +143,11 @@ export function ComponentPalette({
               }}
             />
           ))}
+          {filteredFields.length === 0 && (
+            <p className={styles.noResults} data-testid="field-search-no-results">
+              No fields match your search.
+            </p>
+          )}
         </div>
       )}
 
