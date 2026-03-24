@@ -89,6 +89,7 @@ function fmtDate(value: string | Date, settings: TenantLocaleSettings): string {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
+    timeZone: settings.timezone || undefined,
   });
 }
 
@@ -106,6 +107,7 @@ function fmtDateTime(value: string | Date, settings: TenantLocaleSettings): stri
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: settings.timezone || undefined,
   });
 }
 
