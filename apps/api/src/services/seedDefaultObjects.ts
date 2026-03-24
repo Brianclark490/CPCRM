@@ -77,7 +77,7 @@ export interface SeedResult {
 // SEED DATA — canonical final state after all migrations
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── Object definitions (10 system objects) ───────────────────────────────────
+// ─── Object definitions (11 system objects) ───────────────────────────────────
 
 const OBJECT_SEEDS: ObjectSeed[] = [
   { apiName: 'account',     label: 'Account',     pluralLabel: 'Accounts',      description: 'Companies and organisations',            icon: 'building',        nameFieldApiName: 'name' },
@@ -90,6 +90,7 @@ const OBJECT_SEEDS: ObjectSeed[] = [
   { apiName: 'note',        label: 'Note',        pluralLabel: 'Notes',         description: 'Free-text notes linked to any record',   icon: 'message-square',  nameFieldApiName: 'title' },
   { apiName: 'file',        label: 'File',        pluralLabel: 'Files',         description: 'Uploaded documents and attachments',     icon: 'paperclip',       nameFieldApiName: 'filename' },
   { apiName: 'user',        label: 'User',        pluralLabel: 'Users',         description: 'CRM users synced from Descope',          icon: 'users',           nameFieldApiName: 'display_name' },
+  { apiName: 'team',        label: 'Team',        pluralLabel: 'Teams',         description: 'Teams of users with targets and hierarchy', icon: 'users',        nameFieldApiName: 'name' },
 ];
 
 // ─── Field definitions ────────────────────────────────────────────────────────
@@ -216,6 +217,11 @@ const USER_FIELDS: FieldSeed[] = [
   { objectApiName: 'user', apiName: 'is_active',        label: 'Active',           fieldType: 'boolean',  required: false, options: {}, sortOrder: 8 },
 ];
 
+const TEAM_FIELDS: FieldSeed[] = [
+  { objectApiName: 'team', apiName: 'name',        label: 'Team Name',   fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 1 },
+  { objectApiName: 'team', apiName: 'description', label: 'Description', fieldType: 'textarea', required: false, options: {},                  sortOrder: 2 },
+];
+
 const ALL_FIELD_SEEDS: FieldSeed[] = [
   ...ACCOUNT_FIELDS,
   ...CONTACT_FIELDS,
@@ -227,6 +233,7 @@ const ALL_FIELD_SEEDS: FieldSeed[] = [
   ...NOTE_FIELDS,
   ...FILE_FIELDS,
   ...USER_FIELDS,
+  ...TEAM_FIELDS,
 ];
 
 // ─── Relationship definitions ─────────────────────────────────────────────────
@@ -248,6 +255,9 @@ const RELATIONSHIP_SEEDS: RelationshipSeed[] = [
   { sourceApiName: 'file',        targetApiName: 'contact',     relationshipType: 'lookup', apiName: 'file_contact',            label: 'Contact',       reverseLabel: 'Files',         required: false },
   { sourceApiName: 'file',        targetApiName: 'opportunity', relationshipType: 'lookup', apiName: 'file_opportunity',        label: 'Opportunity',   reverseLabel: 'Files',         required: false },
   { sourceApiName: 'file',        targetApiName: 'agreement',   relationshipType: 'lookup', apiName: 'file_agreement',          label: 'Agreement',     reverseLabel: 'Files',         required: false },
+  { sourceApiName: 'team',        targetApiName: 'user',        relationshipType: 'lookup',       apiName: 'team_manager',            label: 'Manager',       reverseLabel: 'Managed Teams', required: false },
+  { sourceApiName: 'team',        targetApiName: 'user',        relationshipType: 'lookup',       apiName: 'team_members',            label: 'Members',       reverseLabel: 'Teams',         required: false },
+  { sourceApiName: 'team',        targetApiName: 'team',        relationshipType: 'parent_child', apiName: 'team_parent',             label: 'Parent Team',   reverseLabel: 'Sub-Teams',     required: false },
 ];
 
 // ─── Layout definitions ───────────────────────────────────────────────────────
@@ -273,6 +283,8 @@ const LAYOUT_SEEDS: LayoutSeed[] = [
   { objectApiName: 'file',        name: 'List View',     layoutType: 'list' },
   { objectApiName: 'user',        name: 'Default Form',  layoutType: 'form' },
   { objectApiName: 'user',        name: 'List View',     layoutType: 'list' },
+  { objectApiName: 'team',        name: 'Default Form',  layoutType: 'form' },
+  { objectApiName: 'team',        name: 'List View',     layoutType: 'list' },
 ];
 
 // ─── Layout field assignments ─────────────────────────────────────────────────
@@ -448,6 +460,13 @@ const LAYOUT_FIELD_SEEDS: LayoutFieldSeed[] = [
   { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'role',         section: 0, sectionLabel: null, sortOrder: 3, width: 'full' },
   { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'job_title',    section: 0, sectionLabel: null, sortOrder: 4, width: 'full' },
   { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'is_active',    section: 0, sectionLabel: null, sortOrder: 5, width: 'full' },
+
+  // ── Team "Default Form" ──────────────────────────────────────────────
+  { objectApiName: 'team', layoutName: 'Default Form', fieldApiName: 'name',        section: 0, sectionLabel: 'Details', sortOrder: 1, width: 'full' },
+  { objectApiName: 'team', layoutName: 'Default Form', fieldApiName: 'description', section: 0, sectionLabel: 'Details', sortOrder: 2, width: 'full' },
+  // ── Team "List View" ─────────────────────────────────────────────────
+  { objectApiName: 'team', layoutName: 'List View', fieldApiName: 'name',        section: 0, sectionLabel: null, sortOrder: 1, width: 'full' },
+  { objectApiName: 'team', layoutName: 'List View', fieldApiName: 'description', section: 0, sectionLabel: null, sortOrder: 2, width: 'full' },
 ];
 
 // ─── Lead conversion mappings ─────────────────────────────────────────────────
