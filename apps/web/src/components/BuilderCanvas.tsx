@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type {
   BuilderLayout,
@@ -12,6 +13,29 @@ import type { HeaderConfig } from './layoutTypes.js';
 import styles from './BuilderCanvas.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DroppableTabProps {
+  tabId: string;
+  isActive: boolean;
+  children: React.ReactNode;
+}
+
+function DroppableTab({ tabId, isActive, children }: DroppableTabProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `tab-drop-${tabId}`,
+    data: { origin: 'tab-drop-target', tabId },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`${styles.tab} ${isActive ? styles.tabActive : ''} ${isOver ? styles.tabDropOver : ''}`}
+      data-testid={`builder-tab-${tabId}`}
+    >
+      {children}
+    </div>
+  );
+}
 
 interface BuilderCanvasProps {
   layout: BuilderLayout;
@@ -77,9 +101,10 @@ export function BuilderCanvas({
       {/* Tab bar */}
       <div className={styles.tabBar} data-testid="builder-tab-bar">
         {layout.tabs.map((tab) => (
-          <div
+          <DroppableTab
             key={tab.id}
-            className={`${styles.tab} ${tab.id === activeTabId ? styles.tabActive : ''}`}
+            tabId={tab.id}
+            isActive={tab.id === activeTabId}
           >
             {renamingTabId === tab.id ? (
               <input
@@ -140,7 +165,7 @@ export function BuilderCanvas({
                 ×
               </button>
             )}
-          </div>
+          </DroppableTab>
         ))}
         <button
           type="button"

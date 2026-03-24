@@ -48,6 +48,13 @@
   border-bottom-color: var(--accent);
 }
 
+.tabDropOver {
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
 .tabInput {
   padding: var(--space-1) var(--space-2);
   font-size: var(--font-size-sm);
