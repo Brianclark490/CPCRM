@@ -66,11 +66,12 @@ describe('GET /targets/summary', () => {
 
   it('returns 200 with target summary', async () => {
     const summaryData = {
-      period: 'Q1 2026',
+      period: { type: 'quarterly', label: 'Q1 2026' },
       business: {
         target: 500000,
         actual: 325000,
         percentage: 65,
+        pace: 'on_track',
         currency: 'GBP',
       },
       teams: [
@@ -100,7 +101,7 @@ describe('GET /targets/summary', () => {
   });
 
   it('passes period query parameters to service', async () => {
-    mockGetTargetSummary.mockResolvedValue({ period: '2026', business: {}, teams: [] });
+    mockGetTargetSummary.mockResolvedValue({ period: { type: 'annual', label: '2026' }, business: {}, teams: [] });
 
     const req = mockReq({}, { period_start: '2026-01-01', period_end: '2026-12-31' });
     const res = mockRes();
