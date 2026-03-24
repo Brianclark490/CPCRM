@@ -8,6 +8,19 @@ const ICON_MAP: Record<string, string> = {
   clock: '🕐',
   target: '🎯',
   square: '⬜',
+  // Field-type icons
+  text: '✏️',
+  textarea: '📝',
+  number: '🔢',
+  currency: '💲',
+  date: '📅',
+  datetime: '📅',
+  email: '📧',
+  phone: '📞',
+  url: '🔗',
+  boolean: '✅',
+  dropdown: '📋',
+  multi_select: '🏷️',
 };
 
 /**

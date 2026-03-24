@@ -10,6 +10,21 @@ describe('resolveIcon', () => {
     expect(resolveIcon('list')).toBe('📋');
   });
 
+  it('maps field type identifiers to emoji characters', () => {
+    expect(resolveIcon('text')).toBe('✏️');
+    expect(resolveIcon('textarea')).toBe('📝');
+    expect(resolveIcon('number')).toBe('🔢');
+    expect(resolveIcon('currency')).toBe('💲');
+    expect(resolveIcon('date')).toBe('📅');
+    expect(resolveIcon('datetime')).toBe('📅');
+    expect(resolveIcon('email')).toBe('📧');
+    expect(resolveIcon('phone')).toBe('📞');
+    expect(resolveIcon('url')).toBe('🔗');
+    expect(resolveIcon('boolean')).toBe('✅');
+    expect(resolveIcon('dropdown')).toBe('📋');
+    expect(resolveIcon('multi_select')).toBe('🏷️');
+  });
+
   it('returns emoji strings as-is when not in the map', () => {
     expect(resolveIcon('📝')).toBe('📝');
     expect(resolveIcon('📋')).toBe('📋');

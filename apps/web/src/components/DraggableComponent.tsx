@@ -34,8 +34,16 @@ function getComponentLabel(
 
 function getComponentIcon(
   component: BuilderComponent,
+  fields: FieldRef[],
   registry: ComponentDefinition[],
 ): string {
+  if (component.type === 'field') {
+    const field = fields.find((f) => f.apiName === component.config.fieldApiName);
+    if (field) {
+      return resolveIcon(field.fieldType);
+    }
+  }
+
   const def = registry.find((r) => r.type === component.type);
   return resolveIcon(def?.icon ?? '');
 }
@@ -74,7 +82,7 @@ export function DraggableComponent({
   };
 
   const label = getComponentLabel(component, fields, registry);
-  const icon = getComponentIcon(component, registry);
+  const icon = getComponentIcon(component, fields, registry);
 
   return (
     <div

@@ -319,6 +319,21 @@ describe('PageBuilderPage', () => {
     });
   });
 
+  it('renders field-type-specific icons instead of literal icon names', async () => {
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('canvas-component-comp-1')).toBeInTheDocument();
+    });
+
+    const component = screen.getByTestId('canvas-component-comp-1');
+    // The 'name' field has fieldType 'text', which should resolve to '✏️'
+    expect(component.textContent).toContain('✏️');
+    // Should NOT contain the literal icon identifier string
+    expect(component.textContent).not.toContain('text-cursor');
+  });
+
   it('shows empty properties panel when nothing selected', async () => {
     mockAllFetches();
     renderPage();
