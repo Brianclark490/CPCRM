@@ -146,11 +146,16 @@ export async function provisionTenant(
     await client.query('BEGIN');
 
     const now = new Date();
+    const defaultSettings = {
+      currency: 'GBP',
+      dateFormat: 'DD/MM/YYYY',
+      timezone: 'Europe/London',
+    };
     const tenantResult = await client.query(
       `INSERT INTO tenants (id, name, slug, status, plan, settings, created_at, updated_at)
-       VALUES ($1, $2, $3, 'active', $4, '{}', $5, $6)
+       VALUES ($1, $2, $3, 'active', $4, $5::jsonb, $6, $7)
        RETURNING *`,
-      [tenantId, name.trim(), slug, plan, now, now],
+      [tenantId, name.trim(), slug, plan, JSON.stringify(defaultSettings), now, now],
     );
     const tenantRow = tenantResult.rows[0] as TenantRow;
 
