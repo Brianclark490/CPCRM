@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
+import { LayoutBuilderTab } from '../components/LayoutBuilderTab.js';
 import { slugify, resolveIcon } from '../utils.js';
 import styles from './FieldBuilderPage.module.css';
 
@@ -86,7 +87,7 @@ interface ApiError {
   error: string;
 }
 
-type TabName = 'fields' | 'relationships';
+type TabName = 'fields' | 'relationships' | 'page_layout';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -840,13 +841,6 @@ export function FieldBuilderPage() {
             <p className={styles.objectDescription}>{objectDef.description}</p>
           )}
         </div>
-        <Link
-          to={`/admin/objects/${objectId}/page-builder`}
-          className={styles.pageBuilderLink}
-          data-testid="page-builder-link"
-        >
-          🎨 Page Builder
-        </Link>
       </div>
 
       {/* Tabs */}
@@ -866,6 +860,14 @@ export function FieldBuilderPage() {
           onClick={() => setActiveTab('relationships')}
         >
           Relationships
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'page_layout'}
+          className={`${styles.tab} ${activeTab === 'page_layout' ? styles.tabActive : ''}`}
+          onClick={() => setActiveTab('page_layout')}
+        >
+          Page Layout
         </button>
       </div>
 
@@ -1074,6 +1076,15 @@ export function FieldBuilderPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Page Layout tab */}
+      {activeTab === 'page_layout' && sessionToken && objectId && (
+        <LayoutBuilderTab
+          objectId={objectId}
+          sessionToken={sessionToken}
+          fields={fields}
+        />
       )}
 
       {/* ── Add/Edit Field Modal ─────────────────────────────── */}

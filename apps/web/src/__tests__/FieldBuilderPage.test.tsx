@@ -215,7 +215,7 @@ describe('FieldBuilderPage', () => {
     });
   });
 
-  it('renders tabs for Fields and Relationships', async () => {
+  it('renders tabs for Fields, Relationships, and Page Layout', async () => {
     mockFetchObject();
     renderPage();
 
@@ -223,6 +223,7 @@ describe('FieldBuilderPage', () => {
       expect(screen.getByRole('tab', { name: 'Fields' })).toBeInTheDocument();
     });
     expect(screen.getByRole('tab', { name: 'Relationships' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Page Layout' })).toBeInTheDocument();
   });
 
   it('shows the Fields tab as active by default', async () => {
@@ -890,6 +891,36 @@ describe('FieldBuilderPage', () => {
     expect(screen.getByLabelText('Min')).toBeInTheDocument();
     expect(screen.getByLabelText('Max')).toBeInTheDocument();
     expect(screen.getByLabelText('Precision')).toBeInTheDocument();
+  });
+
+  it('switches to Page Layout tab when clicked', async () => {
+    const mockFetch = vi.fn();
+    // First call: fetch object definition
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleObject,
+    } as Response);
+    // Second call: fetch layouts (from LayoutBuilderTab)
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Page Layout' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Page Layout' }));
+
+    expect(screen.getByRole('tab', { name: 'Page Layout' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 
 });
