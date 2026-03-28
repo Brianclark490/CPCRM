@@ -9,7 +9,7 @@ import {
   getOpportunity,
   updateOpportunity,
 } from '../services/opportunityService.js';
-import type { OpportunityStage, UpdateOpportunityParams } from '../services/opportunityService.js';
+import type { UpdateOpportunityParams } from '../services/opportunityService.js';
 import { logger } from '../lib/logger.js';
 
 export const opportunitiesRouter = Router();
@@ -160,6 +160,9 @@ export async function handleGetOpportunity(
  * Only the fields present in the request body are updated.
  * The updatedAt timestamp is refreshed automatically.
  *
+ * Stage changes are NOT permitted via this endpoint — use the
+ * POST /objects/opportunity/records/:id/move-stage endpoint instead.
+ *
  * Requires: valid Bearer token (requireAuth) + resolved tenantId (requireTenant).
  *
  * Request body (JSON) — all fields optional:
@@ -167,7 +170,6 @@ export async function handleGetOpportunity(
  *     "title"?: string,
  *     "accountId"?: string | null,
  *     "ownerId"?: string,
- *     "stage"?: OpportunityStage,
  *     "value"?: number | null,
  *     "currency"?: string | null,
  *     "expectedCloseDate"?: string | null,
@@ -193,18 +195,26 @@ export async function handleUpdateOpportunity(
     title?: string;
     accountId?: string | null;
     ownerId?: string;
-    stage?: OpportunityStage;
+    stage?: unknown;
     value?: number | null;
     currency?: string | null;
     expectedCloseDate?: string | null;
     description?: string | null;
   };
 
+  // Reject stage changes — they must go through the move-stage endpoint
+  if ('stage' in body) {
+    res.status(400).json({
+      error: 'Stage changes are not permitted via this endpoint. Use POST /api/objects/opportunity/records/:id/move-stage instead.',
+      code: 'VALIDATION_ERROR',
+    });
+    return;
+  }
+
   const params: UpdateOpportunityParams = {};
   if ('title' in body) params.title = body.title;
   if ('accountId' in body) params.accountId = body.accountId;
   if ('ownerId' in body) params.ownerId = body.ownerId;
-  if ('stage' in body) params.stage = body.stage;
   if ('value' in body) params.value = body.value;
   if ('currency' in body) params.currency = body.currency;
   if ('expectedCloseDate' in body) params.expectedCloseDate = body.expectedCloseDate;
@@ -216,7 +226,7 @@ export async function handleUpdateOpportunity(
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 
-    if (code === 'VALIDATION_ERROR' || code === 'INVALID_STAGE_TRANSITION' || code === 'ACCOUNT_NOT_FOUND') {
+    if (code === 'VALIDATION_ERROR' || code === 'ACCOUNT_NOT_FOUND') {
       res.status(400).json({ error: (err as Error).message, code });
       return;
     }

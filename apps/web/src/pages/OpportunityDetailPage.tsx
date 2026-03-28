@@ -2,21 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { AccountSearchDropdown } from '../components/AccountSearchDropdown.js';
+import { GateFailureModal } from '../components/GateFailureModal.js';
 import styles from './OpportunityDetailPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type OpportunityStage =
-  | 'prospecting'
-  | 'qualification'
-  | 'proposal'
-  | 'negotiation'
-  | 'closed_won'
-  | 'closed_lost';
-
 interface StageTransition {
-  from: OpportunityStage | null;
-  to: OpportunityStage;
+  from: string | null;
+  to: string;
   changedAt: string;
   changedBy: string;
 }
@@ -27,7 +20,7 @@ interface Opportunity {
   accountId?: string;
   ownerId: string;
   title: string;
-  stage: OpportunityStage;
+  stage: string;
   value?: number;
   currency?: string;
   expectedCloseDate?: string;
@@ -38,12 +31,31 @@ interface Opportunity {
   stageHistory?: StageTransition[];
 }
 
+interface PipelineStage {
+  id: string;
+  name: string;
+  apiName: string;
+  sortOrder: number;
+  stageType: string;
+  defaultProbability: number | null;
+  colour: string | null;
+}
+
+interface GateFailure {
+  field: string;
+  label: string;
+  gate: string;
+  message: string;
+  fieldType: string;
+  currentValue: unknown;
+  options: Record<string, unknown>;
+}
+
 interface FormState {
   title: string;
   accountId: string | null;
   accountName: string | null;
   ownerId: string;
-  stage: OpportunityStage;
   value: string;
   currency: string;
   expectedCloseDate: string;
@@ -52,27 +64,11 @@ interface FormState {
 
 interface ApiError {
   error: string;
+  code?: string;
+  failures?: GateFailure[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const STAGE_LABELS: Record<OpportunityStage, string> = {
-  prospecting: 'Prospecting',
-  qualification: 'Qualification',
-  proposal: 'Proposal',
-  negotiation: 'Negotiation',
-  closed_won: 'Closed Won',
-  closed_lost: 'Closed Lost',
-};
-
-const ALLOWED_STAGE_TRANSITIONS: Record<OpportunityStage, readonly OpportunityStage[]> = {
-  prospecting:   ['qualification', 'closed_lost'],
-  qualification: ['proposal', 'prospecting', 'closed_lost'],
-  proposal:      ['negotiation', 'qualification', 'closed_lost'],
-  negotiation:   ['closed_won', 'closed_lost', 'proposal'],
-  closed_won:    ['negotiation'],
-  closed_lost:   ['prospecting'],
-};
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return '—';
@@ -87,7 +83,6 @@ function opportunityToForm(opp: Opportunity): FormState {
     accountId: opp.accountId ?? null,
     accountName: null,
     ownerId: opp.ownerId,
-    stage: opp.stage,
     value: opp.value !== undefined ? String(opp.value) : '',
     currency: opp.currency ?? '',
     expectedCloseDate: opp.expectedCloseDate
@@ -114,6 +109,13 @@ export function OpportunityDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Pipeline stage state
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
+  const [movingStage, setMovingStage] = useState(false);
+  const [stageError, setStageError] = useState<string | null>(null);
+  const [gateFailures, setGateFailures] = useState<GateFailure[]>([]);
+  const [pendingTargetStageId, setPendingTargetStageId] = useState<string | null>(null);
 
   // ── Resolve account name ───────────────────────────────────────────────────
 
@@ -184,6 +186,149 @@ export function OpportunityDetailPage() {
       abortController.abort();
     };
   }, [id, sessionToken, resolveAccountName]);
+
+  // ── Load pipeline stages ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!sessionToken) return;
+
+    let cancelled = false;
+
+    const loadStages = async () => {
+      try {
+        const response = await fetch('/api/admin/pipelines', {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        });
+        if (cancelled || !response.ok) return;
+
+        const pipelines = (await response.json()) as Array<{
+          id: string;
+          objectId: string;
+          isDefault: boolean;
+          stages?: PipelineStage[];
+        }>;
+
+        // Find the default opportunity pipeline — look for one where the object
+        // is the "opportunity" object type. The list API doesn't nest stages,
+        // so we need to fetch the detail endpoint.
+        const oppPipeline = pipelines.find((p) => p.isDefault);
+        if (!oppPipeline || cancelled) return;
+
+        const detailResponse = await fetch(`/api/admin/pipelines/${oppPipeline.id}`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        });
+        if (cancelled || !detailResponse.ok) return;
+
+        const detail = (await detailResponse.json()) as {
+          stages: PipelineStage[];
+        };
+
+        if (!cancelled) {
+          setPipelineStages(
+            detail.stages
+              .map((s) => ({
+                id: s.id,
+                name: s.name,
+                apiName: s.apiName ?? (s as Record<string, unknown>).api_name as string,
+                sortOrder: s.sortOrder ?? (s as Record<string, unknown>).sort_order as number,
+                stageType: s.stageType ?? (s as Record<string, unknown>).stage_type as string,
+                defaultProbability: s.defaultProbability ?? (s as Record<string, unknown>).default_probability as number | null,
+                colour: s.colour ?? (s as Record<string, unknown>).colour as string | null,
+              }))
+              .sort((a, b) => a.sortOrder - b.sortOrder),
+          );
+        }
+      } catch {
+        // silently fail — stage dropdown will remain empty
+      }
+    };
+
+    void loadStages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionToken]);
+
+  // ── Move stage handler ────────────────────────────────────────────────────
+
+  const handleMoveStage = useCallback(
+    async (targetStageId: string, extraFieldValues?: Record<string, unknown>) => {
+      if (!opportunity || !sessionToken) return;
+
+      setMovingStage(true);
+      setStageError(null);
+
+      try {
+        // If we have extra field values to fill first (from gate failure modal),
+        // update the record fields first
+        if (extraFieldValues && Object.keys(extraFieldValues).length > 0) {
+          const updateResponse = await fetch(
+            `/api/objects/opportunity/records/${opportunity.id}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${sessionToken}`,
+              },
+              body: JSON.stringify({ fieldValues: extraFieldValues }),
+            },
+          );
+          if (!updateResponse.ok) {
+            const data = (await updateResponse.json()) as ApiError;
+            setStageError(data.error ?? 'Failed to update fields');
+            return;
+          }
+        }
+
+        const response = await fetch(
+          `/api/objects/opportunity/records/${opportunity.id}/move-stage`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessionToken}`,
+            },
+            body: JSON.stringify({ target_stage_id: targetStageId }),
+          },
+        );
+
+        if (response.ok) {
+          // Reload the opportunity to pick up the new stage
+          const reloadResponse = await fetch(`/api/opportunities/${opportunity.id}`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          });
+          if (reloadResponse.ok) {
+            const data = (await reloadResponse.json()) as Opportunity;
+            setOpportunity(data);
+          }
+          setGateFailures([]);
+        } else {
+          const data = (await response.json()) as ApiError;
+          if (data.code === 'GATE_VALIDATION_FAILED' && data.failures) {
+            setGateFailures(data.failures);
+            setPendingTargetStageId(targetStageId);
+          } else {
+            setStageError(data.error ?? 'Failed to move stage');
+          }
+        }
+      } catch {
+        setStageError('Failed to connect to the server. Please try again.');
+      } finally {
+        setMovingStage(false);
+      }
+    },
+    [opportunity, sessionToken],
+  );
+
+  // ── Resolve current stage name from pipeline stages ────────────────────────
+
+  const currentStageName =
+    pipelineStages.find(
+      (s) =>
+        s.name.toLowerCase() === opportunity?.stage?.toLowerCase() ||
+        s.apiName.toLowerCase() === opportunity?.stage?.toLowerCase(),
+    )?.name ?? opportunity?.stage ?? '—';
 
   // ── Edit handlers ─────────────────────────────────────────────────────────
 
@@ -260,7 +405,6 @@ export function OpportunityDetailPage() {
           title: trimmedTitle,
           accountId: form.accountId ?? null,
           ownerId: form.ownerId.trim() || undefined,
-          stage: form.stage,
           value: validatedValue,
           currency: form.currency.trim() || null,
           expectedCloseDate: form.expectedCloseDate.trim() || null,
@@ -320,7 +464,7 @@ export function OpportunityDetailPage() {
             ← Back to opportunities
           </button>
           <h1 className={styles.pageTitle}>{opportunity.title}</h1>
-          <span className={styles.stageBadge}>{STAGE_LABELS[opportunity.stage]}</span>
+          <span className={styles.stageBadge}>{currentStageName}</span>
         </div>
 
         {!editing && (
@@ -405,29 +549,17 @@ export function OpportunityDetailPage() {
                   />
                 </div>
 
-                {/* Stage */}
+                {/* Stage — read-only in edit mode; changes go through move-stage */}
                 <div className={styles.formField}>
-                  <label className={styles.label} htmlFor="stage">
+                  <label className={styles.label}>
                     Stage
                   </label>
-                  <select
-                    className={styles.select}
-                    id="stage"
-                    name="stage"
-                    value={form.stage}
-                    onChange={handleChange}
-                    disabled={submitting}
-                  >
-                    {/* Current stage is always selectable (no-op change) */}
-                    <option value={form.stage}>{STAGE_LABELS[form.stage]}</option>
-                    {ALLOWED_STAGE_TRANSITIONS[form.stage]
-                      .filter((s) => s !== form.stage)
-                      .map((s) => (
-                        <option key={s} value={s}>
-                          {STAGE_LABELS[s]}
-                        </option>
-                      ))}
-                  </select>
+                  <span className={styles.fieldValue}>
+                    {currentStageName}
+                  </span>
+                  <span className={styles.fieldEmpty} style={{ fontSize: '0.75rem' }}>
+                    Use the stage selector below the form to change stages.
+                  </span>
                 </div>
 
                 {/* Estimated Value */}
@@ -542,7 +674,7 @@ export function OpportunityDetailPage() {
 
               <div className={styles.fieldGroup}>
                 <span className={styles.fieldLabel}>Stage</span>
-                <span className={styles.fieldValue}>{STAGE_LABELS[opportunity.stage]}</span>
+                <span className={styles.fieldValue}>{currentStageName}</span>
               </div>
 
               <div className={styles.fieldGroup}>
@@ -582,15 +714,25 @@ export function OpportunityDetailPage() {
                 <div className={`${styles.fieldGroup} ${styles.fieldFull}`}>
                   <span className={styles.fieldLabel}>Stage history</span>
                   <ol className={styles.stageHistory}>
-                    {opportunity.stageHistory!.map((t, i) => (
-                      <li key={i} className={styles.stageHistoryItem}>
-                        <span className={styles.stageHistoryBadge}>{STAGE_LABELS[t.to]}</span>
-                        <span className={styles.stageHistoryMeta}>
-                          {t.from ? `from ${STAGE_LABELS[t.from]} · ` : ''}
-                          {formatDate(t.changedAt)}
-                        </span>
-                      </li>
-                    ))}
+                    {opportunity.stageHistory!.map((t, i) => {
+                      const toStage = pipelineStages.find(
+                        (s) => s.name.toLowerCase() === t.to.toLowerCase() || s.apiName.toLowerCase() === t.to.toLowerCase(),
+                      );
+                      const fromStage = t.from
+                        ? pipelineStages.find(
+                            (s) => s.name.toLowerCase() === t.from!.toLowerCase() || s.apiName.toLowerCase() === t.from!.toLowerCase(),
+                          )
+                        : null;
+                      return (
+                        <li key={i} className={styles.stageHistoryItem}>
+                          <span className={styles.stageHistoryBadge}>{toStage?.name ?? t.to}</span>
+                          <span className={styles.stageHistoryMeta}>
+                            {t.from ? `from ${fromStage?.name ?? t.from} · ` : ''}
+                            {formatDate(t.changedAt)}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ol>
                 </div>
               )}
@@ -612,6 +754,64 @@ export function OpportunityDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Pipeline stage selector */}
+      {pipelineStages.length > 0 && (
+        <div className={styles.card} style={{ marginTop: '1rem' }}>
+          <div className={styles.cardHeader}>
+            <span className={styles.cardTitle}>Pipeline stage</span>
+          </div>
+          <div className={styles.cardBody}>
+            {stageError && (
+              <p role="alert" className={styles.errorAlert} style={{ marginBottom: '12px' }}>
+                {stageError}
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {pipelineStages.map((stage) => {
+                const isCurrent =
+                  stage.name.toLowerCase() === opportunity.stage?.toLowerCase() ||
+                  stage.apiName.toLowerCase() === opportunity.stage?.toLowerCase();
+                return (
+                  <button
+                    key={stage.id}
+                    type="button"
+                    className={styles.btnSecondary}
+                    style={{
+                      fontWeight: isCurrent ? 700 : 400,
+                      opacity: isCurrent ? 1 : 0.7,
+                      border: isCurrent ? '2px solid var(--color-primary, #3b82f6)' : undefined,
+                    }}
+                    disabled={isCurrent || movingStage}
+                    onClick={() => void handleMoveStage(stage.id)}
+                  >
+                    {stage.name}
+                  </button>
+                );
+              })}
+            </div>
+            {movingStage && <p style={{ marginTop: '8px', color: 'var(--color-muted)' }}>Moving stage…</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Gate failure modal */}
+      {gateFailures.length > 0 && pendingTargetStageId && (
+        <GateFailureModal
+          stageName={
+            pipelineStages.find((s) => s.id === pendingTargetStageId)?.name ?? 'target stage'
+          }
+          failures={gateFailures}
+          onFillAndMove={(fieldValues) => {
+            void handleMoveStage(pendingTargetStageId, fieldValues);
+          }}
+          onCancel={() => {
+            setGateFailures([]);
+            setPendingTargetStageId(null);
+          }}
+          loading={movingStage}
+        />
+      )}
     </div>
   );
 }
