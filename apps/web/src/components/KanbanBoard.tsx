@@ -208,8 +208,10 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
         });
 
         if (cancelled || !response.ok) {
-          if (!cancelled) setError('Failed to load pipeline configuration.');
-          setLoading(false);
+          if (!cancelled) {
+            setError('Failed to load pipeline configuration.');
+            setLoading(false);
+          }
           return;
         }
 
