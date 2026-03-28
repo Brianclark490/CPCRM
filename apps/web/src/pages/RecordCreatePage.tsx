@@ -194,6 +194,10 @@ function validateField(
       break;
 
     case 'dropdown': {
+      // Pipeline-managed dropdowns get their choices from stage_definitions
+      if (field.fieldOptions.pipeline_managed === true) {
+        break;
+      }
       const choices = (field.fieldOptions.choices as string[]) ?? [];
       if (choices.length > 0 && !choices.includes(stringValue)) {
         return `${field.fieldLabel} must be one of the available choices`;
