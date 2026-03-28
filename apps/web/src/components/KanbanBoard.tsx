@@ -194,6 +194,27 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const [summaryData, setSummaryData] = useState<PipelineSummaryData | null>(null);
   const [overdueRecords, setOverdueRecords] = useState<OverdueRecord[]>([]);
 
+  // Summary collapse state (persisted in localStorage)
+  const [summaryCollapsed, setSummaryCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cpcrm-pipeline-summary-collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSummary = () => {
+    setSummaryCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cpcrm-pipeline-summary-collapsed', String(next));
+      } catch {
+        // localStorage unavailable
+      }
+      return next;
+    });
+  };
+
   // ── Fetch pipeline + records ─────────────────────────────
   useEffect(() => {
     if (!sessionToken || !objectId || !apiName) return;
@@ -619,25 +640,49 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
   return (
     <div className={styles.board} data-testid="kanban-board">
-      {/* Summary bar — live API data */}
-      {summaryData ? (
-        <PipelineSummaryBar data={summaryData} />
-      ) : (
-        <div className={styles.summaryBar} data-testid="kanban-summary">
-          <div className={styles.summaryItem}>
-            <span className={styles.summaryLabel}>Open value</span>
-            <span className={styles.summaryValue}>{formatCurrencyCompact(totalOpenValue)}</span>
+      {/* Summary toggle */}
+      <div className={styles.summaryHeader}>
+        <button
+          type="button"
+          className={styles.summaryToggle}
+          onClick={toggleSummary}
+          aria-expanded={!summaryCollapsed}
+          aria-label={summaryCollapsed ? 'Show summary cards' : 'Hide summary cards'}
+          data-testid="summary-toggle"
+        >
+          <span
+            className={`${styles.summaryToggleIcon} ${summaryCollapsed ? styles.summaryToggleIconCollapsed : ''}`}
+          >
+            ▼
+          </span>
+          {summaryCollapsed ? 'Show summary' : 'Hide summary'}
+        </button>
+      </div>
+
+      {/* Summary bar — collapsible */}
+      <div
+        className={`${styles.summarySection} ${summaryCollapsed ? styles.summarySectionCollapsed : styles.summarySectionExpanded}`}
+        data-testid="summary-section"
+      >
+        {summaryData ? (
+          <PipelineSummaryBar data={summaryData} />
+        ) : (
+          <div className={styles.summaryBar} data-testid="kanban-summary">
+            <div className={styles.summaryItem}>
+              <span className={styles.summaryLabel}>Open value</span>
+              <span className={styles.summaryValue}>{formatCurrencyCompact(totalOpenValue)}</span>
+            </div>
+            <div className={styles.summaryItem}>
+              <span className={styles.summaryLabel}>Weighted value</span>
+              <span className={styles.summaryValue}>{formatCurrencyCompact(totalWeightedValue)}</span>
+            </div>
+            <div className={styles.summaryItem}>
+              <span className={styles.summaryLabel}>Deals</span>
+              <span className={styles.summaryValue}>{dealCount}</span>
+            </div>
           </div>
-          <div className={styles.summaryItem}>
-            <span className={styles.summaryLabel}>Weighted value</span>
-            <span className={styles.summaryValue}>{formatCurrencyCompact(totalWeightedValue)}</span>
-          </div>
-          <div className={styles.summaryItem}>
-            <span className={styles.summaryLabel}>Deals</span>
-            <span className={styles.summaryValue}>{dealCount}</span>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Overdue deals panel */}
       <OverdueDealsPanel records={overdueRecords} apiName={apiName} />
@@ -650,7 +695,15 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
       />
 
       {/* Columns */}
-      <div className={styles.columnsContainer}>
+      <div
+        className={styles.columnsContainer}
+        style={{
+          gridTemplateColumns: stages.length > 0
+            ? `repeat(${stages.length}, minmax(${stages.length >= 10 ? '120px' : '0'}, 1fr))`
+            : undefined,
+          overflowX: stages.length >= 10 ? 'auto' : undefined,
+        }}
+      >
         {stages.map((stage) => {
           const cards = stageRecordMap.get(stage.id) ?? [];
           const stageValue = cards.reduce((sum, c) => sum + (c.value ?? 0), 0);
