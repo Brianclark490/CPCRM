@@ -191,6 +191,30 @@ describe('AppShell', () => {
     });
   });
 
+  it('hides User and Team objects from the tab navigation', async () => {
+    mockFetchObjects([
+      { apiName: 'account', pluralLabel: 'Accounts', icon: '🏢' },
+      { apiName: 'user', pluralLabel: 'Users', icon: '👤' },
+      { apiName: 'team', pluralLabel: 'Teams', icon: '👥' },
+      { apiName: 'opportunity', pluralLabel: 'Opportunities' },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /Accounts/ })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: /Opportunities/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Users$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Teams$/ })).not.toBeInTheDocument();
+  });
+
   it('renders child content in the main area', () => {
     render(
       <MemoryRouter>

@@ -41,6 +41,16 @@ export async function handleCreateRecord(
   res: Response,
 ): Promise<void> {
   const { apiName } = req.params as { apiName: string };
+
+  // User records are created exclusively via Descope sync
+  if (apiName === 'user') {
+    res.status(403).json({
+      error: 'User records cannot be created manually. They are synced automatically from Descope on login.',
+      code: 'CREATE_DISABLED',
+    });
+    return;
+  }
+
   const { userId: ownerId, name: ownerName } = req.user!;
 
   const body = req.body as { fieldValues?: Record<string, unknown> };

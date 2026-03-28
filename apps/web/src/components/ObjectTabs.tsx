@@ -41,13 +41,16 @@ export function ObjectTabs({ sessionToken }: ObjectTabsProps) {
         }>;
 
         if (!cancelled) {
+          const HIDDEN_FROM_NAV = new Set(['user', 'team']);
           setItems(
-            objects.map((o) => ({
-              id: o.id,
-              apiName: o.apiName,
-              pluralLabel: o.pluralLabel,
-              icon: o.icon,
-            })),
+            objects
+              .filter((o) => !HIDDEN_FROM_NAV.has(o.apiName))
+              .map((o) => ({
+                id: o.id,
+                apiName: o.apiName,
+                pluralLabel: o.pluralLabel,
+                icon: o.icon,
+              })),
           );
         }
       } catch {

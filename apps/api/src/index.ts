@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { config } from './lib/config.js';
 import { logger } from './lib/logger.js';
 import { runMigrations } from './db/runMigrations.js';
+import { backfillSeedObjects } from './db/backfillSeedObjects.js';
 import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import { organisationsRouter } from './routes/organisations.js';
@@ -88,8 +89,9 @@ if (config.env === 'production') {
   });
 }
 
-// Run database migrations then start the HTTP server.
+// Run database migrations, backfill seed data, then start the HTTP server.
 runMigrations()
+  .then(() => backfillSeedObjects())
   .then(() => {
     app.listen(config.port, () => {
       logger.info({ port: config.port, env: config.env, corsOrigin: config.corsOrigin }, 'API server started');

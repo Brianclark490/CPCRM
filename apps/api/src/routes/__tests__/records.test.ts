@@ -169,6 +169,7 @@ describe('POST /objects/:apiName/records', () => {
 
     await handleCreateRecord(req, res);
 
+
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'An unexpected error occurred' });
   });
@@ -192,6 +193,24 @@ describe('POST /objects/:apiName/records', () => {
     await handleCreateRecord(req, res);
 
     expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', {}, 'user-123', undefined);
+  });
+
+  it('returns 403 when trying to manually create a user record', async () => {
+    const req = mockReq(
+      { fieldValues: { email: 'test@example.com' } },
+      undefined,
+      { apiName: 'user' },
+    );
+    const res = mockRes();
+
+    await handleCreateRecord(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'User records cannot be created manually. They are synced automatically from Descope on login.',
+      code: 'CREATE_DISABLED',
+    });
+    expect(mockCreateRecord).not.toHaveBeenCalled();
   });
 });
 
