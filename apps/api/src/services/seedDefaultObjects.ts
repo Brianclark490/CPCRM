@@ -183,7 +183,7 @@ const LEAD_FIELDS: FieldSeed[] = [
 
 const OPPORTUNITY_FIELDS: FieldSeed[] = [
   { objectApiName: 'opportunity', apiName: 'name',        label: 'Opportunity Name', fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 1, isSystem: true },
-  { objectApiName: 'opportunity', apiName: 'stage',       label: 'Stage',            fieldType: 'dropdown', required: true,  options: { choices: ['Prospecting', 'Qualification', 'Needs Analysis', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'] }, sortOrder: 2, isSystem: true },
+  { objectApiName: 'opportunity', apiName: 'stage',       label: 'Stage',            fieldType: 'dropdown', required: true,  options: { pipeline_managed: true, choices: ['Prospecting', 'Qualification', 'Needs Analysis', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'] }, sortOrder: 2, isSystem: true },
   { objectApiName: 'opportunity', apiName: 'value',       label: 'Value',            fieldType: 'currency', required: false, options: { min: 0, precision: 2 }, sortOrder: 3 },
   { objectApiName: 'opportunity', apiName: 'close_date',  label: 'Close Date',       fieldType: 'date',     required: false, options: {}, sortOrder: 4 },
   { objectApiName: 'opportunity', apiName: 'probability', label: 'Probability (%)',  fieldType: 'number',   required: false, options: { min: 0, max: 100 }, sortOrder: 5 },
