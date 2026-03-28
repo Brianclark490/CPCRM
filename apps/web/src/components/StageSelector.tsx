@@ -21,7 +21,6 @@ interface StageSelectorProps {
   apiName: string;
   recordId: string;
   currentStageId: string | undefined;
-  currentStageName: string | undefined;
   disabled?: boolean;
   onStageChanged: () => void;
 }
@@ -46,7 +45,6 @@ export function StageSelector({
   apiName,
   recordId,
   currentStageId,
-  currentStageName,
   disabled = false,
   onStageChanged,
 }: StageSelectorProps) {

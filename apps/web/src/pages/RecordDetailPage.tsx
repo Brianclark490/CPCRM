@@ -507,7 +507,6 @@ export function RecordDetailPage() {
             apiName={apiName!}
             recordId={record.id}
             currentStageId={record.currentStageId}
-            currentStageName={record.fieldValues['stage'] as string | undefined}
             onStageChanged={() => void loadRecord()}
           />
         </div>
@@ -554,7 +553,6 @@ export function RecordDetailPage() {
             apiName={apiName!}
             recordId={record.id}
             currentStageId={record.currentStageId}
-            currentStageName={record.fieldValues['stage'] as string | undefined}
             onStageChanged={() => void loadRecord()}
           />
         </div>
@@ -728,7 +726,6 @@ export function RecordDetailPage() {
                 apiName={apiName!}
                 recordId={record.id}
                 currentStageId={record.currentStageId}
-                currentStageName={record.fieldValues['stage'] as string | undefined}
                 onStageChanged={() => void loadRecord()}
               />
             </div>
