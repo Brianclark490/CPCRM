@@ -15,6 +15,7 @@ function renderPage(objectId = 'obj-1') {
     <MemoryRouter initialEntries={[`/admin/objects/${objectId}`]}>
       <Routes>
         <Route path="/admin/objects/:id" element={<FieldBuilderPage />} />
+        <Route path="/admin/objects/:objectId/page-builder" element={<div>Page Builder</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -906,14 +907,14 @@ describe('FieldBuilderPage', () => {
     expect(screen.getByLabelText('Precision')).toBeInTheDocument();
   });
 
-  it('switches to Page Layout tab when clicked', async () => {
+  it('switches to Page Layout tab and shows page builder link', async () => {
     const mockFetch = vi.fn();
     // First call: fetch object definition
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => sampleObject,
     } as Response);
-    // Second call: fetch layouts (from LayoutBuilderTab)
+    // Second call: fetch page layouts
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
@@ -933,6 +934,85 @@ describe('FieldBuilderPage', () => {
     expect(screen.getByRole('tab', { name: 'Page Layout' })).toHaveAttribute(
       'aria-selected',
       'true',
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Configure how record pages look for this object/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('shows empty state with create button when no page layouts exist', async () => {
+    const mockFetch = vi.fn();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleObject,
+    } as Response);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Page Layout' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Page Layout' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('No page layouts yet')).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: 'Create default layout' })).toBeInTheDocument();
+  });
+
+  it('shows page layout list when layouts exist', async () => {
+    const mockFetch = vi.fn();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => sampleObject,
+    } as Response);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          id: 'pl-1',
+          objectId: 'obj-1',
+          name: 'Opportunity - Default',
+          role: null,
+          isDefault: true,
+          version: 1,
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+        },
+      ],
+    } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Page Layout' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Page Layout' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Opportunity - Default')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Published')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Edit in page builder/ })).toHaveAttribute(
+      'href',
+      '/admin/objects/obj-1/page-builder',
     );
   });
 

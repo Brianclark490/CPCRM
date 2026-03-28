@@ -636,3 +636,16 @@
   font-weight: 600;
   color: var(--color-text-primary);
 }
+
+/* ── Page layout tab ─────────────────────────────────────── */
+
+.pageLayoutTab {
+  margin-top: var(--space-2);
+}
+
+.pageLayoutDescription {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-6);
+  line-height: 1.6;
+}
