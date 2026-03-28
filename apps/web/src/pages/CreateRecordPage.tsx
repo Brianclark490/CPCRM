@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { FieldInput } from '../components/FieldInput.js';
+import { StageFieldRenderer } from '../components/StageFieldRenderer.js';
 import styles from './CreateRecordPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -346,33 +347,50 @@ export function CreateRecordPage() {
           <div key={sIdx} className={styles.card}>
             <div className={styles.cardHeader}>{section.label}</div>
             <div className={styles.formGrid}>
-              {section.fields.map((field) => (
-                <div
-                  key={field.fieldApiName}
-                  className={`${styles.formField} ${field.width === 'full' ? styles.formFieldFull : ''}`}
-                >
-                  <label
-                    className={styles.label}
-                    htmlFor={`field-${field.fieldApiName}`}
+              {section.fields.map((field) => {
+                const isPipelineManaged = field.fieldOptions?.pipeline_managed === true;
+
+                return (
+                  <div
+                    key={field.fieldApiName}
+                    className={`${styles.formField} ${field.width === 'full' ? styles.formFieldFull : ''}`}
                   >
-                    {field.fieldLabel}
-                    {field.fieldRequired && (
-                      <span className={styles.required}>*</span>
+                    <label
+                      className={styles.label}
+                      htmlFor={`field-${field.fieldApiName}`}
+                    >
+                      {field.fieldLabel}
+                      {field.fieldRequired && (
+                        <span className={styles.required}>*</span>
+                      )}
+                    </label>
+                    {isPipelineManaged && objectDef ? (
+                      <StageFieldRenderer
+                        objectApiName={apiName!}
+                        objectId={objectDef.id}
+                        recordId={null}
+                        currentStageId={null}
+                        value={formValues[field.fieldApiName] ?? null}
+                        editing={true}
+                        disabled={submitting}
+                        onChange={(v) => handleFieldChange(field.fieldApiName, v)}
+                      />
+                    ) : (
+                      <FieldInput
+                        fieldType={field.fieldType}
+                        value={formValues[field.fieldApiName] ?? null}
+                        onChange={(v) => handleFieldChange(field.fieldApiName, v)}
+                        disabled={submitting}
+                        required={field.fieldRequired}
+                        options={field.fieldOptions}
+                        id={`field-${field.fieldApiName}`}
+                        name={field.fieldApiName}
+                        label={field.fieldLabel}
+                      />
                     )}
-                  </label>
-                  <FieldInput
-                    fieldType={field.fieldType}
-                    value={formValues[field.fieldApiName] ?? null}
-                    onChange={(v) => handleFieldChange(field.fieldApiName, v)}
-                    disabled={submitting}
-                    required={field.fieldRequired}
-                    options={field.fieldOptions}
-                    id={`field-${field.fieldApiName}`}
-                    name={field.fieldApiName}
-                    label={field.fieldLabel}
-                  />
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}

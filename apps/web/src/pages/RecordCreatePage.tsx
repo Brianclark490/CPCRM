@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { FieldInput } from '../components/FieldInput.js';
+import { StageFieldRenderer } from '../components/StageFieldRenderer.js';
 import { RelationshipSearchDropdown } from '../components/RelationshipSearchDropdown.js';
 import styles from './RecordCreatePage.module.css';
 
@@ -193,6 +194,10 @@ function validateField(
       break;
 
     case 'dropdown': {
+      // Pipeline-managed dropdowns get their choices from stage_definitions
+      if (field.fieldOptions.pipeline_managed === true) {
+        break;
+      }
       const choices = (field.fieldOptions.choices as string[]) ?? [];
       if (choices.length > 0 && !choices.includes(stringValue)) {
         return `${field.fieldLabel} must be one of the available choices`;
@@ -502,6 +507,7 @@ export function RecordCreatePage() {
   const renderField = (field: LayoutFieldWithMetadata) => {
     const value = formValues[field.fieldApiName] ?? null;
     const error = fieldErrors[field.fieldApiName];
+    const isPipelineManaged = field.fieldOptions?.pipeline_managed === true;
 
     return (
       <div
@@ -512,17 +518,30 @@ export function RecordCreatePage() {
           {field.fieldLabel}
           {field.fieldRequired && <span className={styles.required}>*</span>}
         </label>
-        <FieldInput
-          fieldType={field.fieldType}
-          value={value}
-          onChange={(v) => handleFieldChange(field.fieldApiName, v)}
-          disabled={submitting}
-          required={field.fieldRequired}
-          options={field.fieldOptions}
-          id={`field-${field.fieldApiName}`}
-          name={field.fieldApiName}
-          label={field.fieldLabel}
-        />
+        {isPipelineManaged && objectDef ? (
+          <StageFieldRenderer
+            objectApiName={apiName!}
+            objectId={objectDef.id}
+            recordId={null}
+            currentStageId={null}
+            value={value}
+            editing={true}
+            disabled={submitting}
+            onChange={(v) => handleFieldChange(field.fieldApiName, v)}
+          />
+        ) : (
+          <FieldInput
+            fieldType={field.fieldType}
+            value={value}
+            onChange={(v) => handleFieldChange(field.fieldApiName, v)}
+            disabled={submitting}
+            required={field.fieldRequired}
+            options={field.fieldOptions}
+            id={`field-${field.fieldApiName}`}
+            name={field.fieldApiName}
+            label={field.fieldLabel}
+          />
+        )}
         {error && <span className={styles.fieldError}>{error}</span>}
       </div>
     );

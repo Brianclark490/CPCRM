@@ -1,0 +1,65 @@
+/* ============================================================
+   StageFieldRenderer — pipeline-aware stage selector
+   ============================================================ */
+
+.select {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-subtle);
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.select:focus {
+  border-color: rgba(217, 70, 239, 0.5);
+  box-shadow: 0 0 0 3px rgba(217, 70, 239, 0.1);
+}
+
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Stage badge (view mode) ─────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.badgeDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Inline error ────────────────────────────────────────────── */
+
+.error {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-danger, #ef4444);
+}
+
+/* ── Loading text ────────────────────────────────────────────── */
+
+.loading {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { FieldRenderer } from '../components/FieldRenderer.js';
 import { FieldInput } from '../components/FieldInput.js';
+import { StageFieldRenderer } from '../components/StageFieldRenderer.js';
 import { ConvertLeadModal } from '../components/ConvertLeadModal.js';
 import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
 import { usePageLayout } from '../usePageLayout.js';
@@ -54,6 +55,8 @@ interface RecordDetail {
   updatedBy?: string;
   updatedByName?: string;
   updatedByRecordId?: string;
+  pipelineId?: string;
+  currentStageId?: string;
   createdAt: string;
   updatedAt: string;
   fields: RecordField[];
@@ -349,12 +352,25 @@ export function RecordDetailPage() {
     e.preventDefault();
     if (!record || !sessionToken) return;
 
+    // Collect pipeline-managed field api_names so we can skip them
+    const pipelineManagedFields = new Set<string>();
+    if (layoutSections) {
+      for (const section of layoutSections) {
+        for (const field of section.fields) {
+          if (field.fieldOptions?.pipeline_managed === true) {
+            pipelineManagedFields.add(field.fieldApiName);
+          }
+        }
+      }
+    }
+
     // Client-side required field validation
     if (layoutSections) {
       for (const section of layoutSections) {
         for (const field of section.fields) {
           // Skip formula fields — they are computed, not user-provided
-          if (field.fieldRequired && field.fieldType !== 'formula') {
+          // Skip pipeline-managed fields — they are handled by move-stage
+          if (field.fieldRequired && field.fieldType !== 'formula' && !pipelineManagedFields.has(field.fieldApiName)) {
             const val = formValues[field.fieldApiName];
             if (val === undefined || val === null || val === '') {
               setSaveError(`Field '${field.fieldLabel}' is required`);
@@ -369,6 +385,12 @@ export function RecordDetailPage() {
     setSaveError(null);
     setSaveSuccess(false);
 
+    // Exclude pipeline-managed fields from the save payload
+    const saveValues = { ...formValues };
+    for (const fieldName of pipelineManagedFields) {
+      delete saveValues[fieldName];
+    }
+
     try {
       const response = await fetch(
         `/api/objects/${apiName}/records/${record.id}`,
@@ -378,7 +400,7 @@ export function RecordDetailPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${sessionToken}`,
           },
-          body: JSON.stringify({ fieldValues: formValues }),
+          body: JSON.stringify({ fieldValues: saveValues }),
         },
       );
 
@@ -494,11 +516,15 @@ export function RecordDetailPage() {
     fieldLabel: string,
     fieldType: string,
     width: string,
+    fieldOptions?: Record<string, unknown>,
   ) => {
     const field = record?.fields.find((f) => f.apiName === fieldApiName);
     const value = field?.value ?? record?.fieldValues[fieldApiName] ?? null;
     const isEmpty =
       value === null || value === undefined || value === '';
+
+    // Pipeline-managed fields use StageFieldRenderer
+    const isPipelineManaged = fieldOptions?.pipeline_managed === true;
 
     return (
       <div
@@ -506,7 +532,18 @@ export function RecordDetailPage() {
         className={`${styles.fieldGroup} ${width === 'full' ? styles.fieldFull : ''}`}
       >
         <span className={styles.fieldLabel}>{fieldLabel}</span>
-        {isEmpty ? (
+        {isPipelineManaged && record && objectDef ? (
+          <span className={styles.fieldValue}>
+            <StageFieldRenderer
+              objectApiName={apiName!}
+              objectId={record.objectId}
+              recordId={record.id}
+              currentStageId={record.currentStageId ?? null}
+              value={value}
+              editing={false}
+            />
+          </span>
+        ) : isEmpty ? (
           <span className={styles.fieldEmpty}>—</span>
         ) : (
           <span className={styles.fieldValue}>
@@ -517,6 +554,26 @@ export function RecordDetailPage() {
     );
   };
 
+  const handleStageChanged = (result: {
+    currentStageId: string;
+    fieldValues: Record<string, unknown>;
+  }) => {
+    // Update the local record state with the new stage and field values
+    if (record) {
+      setRecord({
+        ...record,
+        currentStageId: result.currentStageId,
+        fieldValues: result.fieldValues,
+        fields: record.fields.map((f) => {
+          if (f.apiName in result.fieldValues) {
+            return { ...f, value: result.fieldValues[f.apiName] };
+          }
+          return f;
+        }),
+      });
+    }
+  };
+
   const renderEditField = (
     field: LayoutFieldWithMetadata,
   ) => {
@@ -524,6 +581,32 @@ export function RecordDetailPage() {
     const value = field.fieldType === 'formula'
       ? (record?.fields.find((f) => f.apiName === field.fieldApiName)?.value ?? null)
       : (formValues[field.fieldApiName] ?? null);
+
+    // Pipeline-managed fields use StageFieldRenderer
+    const isPipelineManaged = field.fieldOptions?.pipeline_managed === true;
+
+    if (isPipelineManaged && record) {
+      return (
+        <div
+          key={field.fieldApiName}
+          className={`${styles.formField} ${field.width === 'full' ? styles.formFieldFull : ''}`}
+        >
+          <label className={styles.label} htmlFor={`field-${field.fieldApiName}`}>
+            {field.fieldLabel}
+          </label>
+          <StageFieldRenderer
+            objectApiName={apiName!}
+            objectId={record.objectId}
+            recordId={record.id}
+            currentStageId={record.currentStageId ?? null}
+            value={value}
+            editing={true}
+            disabled={submitting}
+            onStageChanged={handleStageChanged}
+          />
+        </div>
+      );
+    }
 
     return (
       <div
@@ -892,6 +975,7 @@ export function RecordDetailPage() {
                       field.fieldLabel,
                       field.fieldType,
                       field.width,
+                      field.fieldOptions,
                     ),
                   )}
                 </div>

@@ -488,6 +488,11 @@ export function validateFieldValue(
       if (typeof value !== 'string') {
         return `Field '${label}' must be a string`;
       }
+      // Pipeline-managed dropdowns get their choices from stage_definitions,
+      // not from field_definitions.options.choices — skip choice validation
+      if (options.pipeline_managed === true) {
+        return null;
+      }
       const choices = (options.choices as string[]) ?? [];
       if (!choices.includes(value)) {
         return `Field '${label}' must be one of: ${choices.join(', ')}`;
