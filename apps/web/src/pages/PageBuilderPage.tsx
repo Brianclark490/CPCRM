@@ -16,6 +16,7 @@ import type {
   ComponentDefinition,
   FieldRef,
   RelationshipRef,
+  RelatedFieldRef,
   BuilderLayout,
   BuilderSection,
   BuilderComponent,
@@ -61,6 +62,16 @@ interface RelationshipApiItem {
   reverseLabel?: string;
   required: boolean;
   targetObjectLabel: string;
+  targetObjectApiName: string;
+  sourceObjectApiName: string;
+  sourceObjectLabel: string;
+}
+
+interface RelatedObjectFields {
+  id: string;
+  apiName: string;
+  label: string;
+  fields: FieldRef[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,6 +130,7 @@ export function PageBuilderPage() {
   const [objectDef, setObjectDef] = useState<ObjectDefinitionDetail | null>(null);
   const [fields, setFields] = useState<FieldRef[]>([]);
   const [relationships, setRelationships] = useState<RelationshipRef[]>([]);
+  const [relatedFields, setRelatedFields] = useState<RelatedFieldRef[]>([]);
   const [registry, setRegistry] = useState<ComponentDefinition[]>([]);
 
   // Builder state
@@ -196,6 +208,49 @@ export function PageBuilderPage() {
             targetObjectLabel: r.targetObjectLabel,
           })),
         );
+
+        // Fetch fields for related objects (outgoing lookups from this object)
+        const outgoingRels = relData.filter((r) => r.sourceObjectId === objectId);
+        const uniqueTargetIds = [...new Set(outgoingRels.map((r) => r.targetObjectId))];
+
+        const relatedObjResults = await Promise.all(
+          uniqueTargetIds.map((targetId) =>
+            fetch(`/api/admin/objects/${targetId}`, {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+            })
+              .then(async (res) => {
+                if (!res.ok) return null;
+                return (await res.json()) as RelatedObjectFields;
+              })
+              .catch(() => null),
+          ),
+        );
+
+        const relatedObjMap = new Map<string, RelatedObjectFields>();
+        for (const obj of relatedObjResults) {
+          if (obj) relatedObjMap.set(obj.id, obj);
+        }
+
+        const builtRelatedFields: RelatedFieldRef[] = [];
+        for (const rel of outgoingRels) {
+          const targetObj = relatedObjMap.get(rel.targetObjectId);
+          if (!targetObj) continue;
+          for (const field of targetObj.fields) {
+            builtRelatedFields.push({
+              relationshipId: rel.id,
+              relationshipApiName: rel.apiName,
+              relationshipLabel: rel.label,
+              relatedObjectApiName: targetObj.apiName,
+              relatedObjectLabel: targetObj.label,
+              fieldId: field.id,
+              fieldApiName: field.apiName,
+              fieldLabel: field.label,
+              fieldType: field.fieldType,
+            });
+          }
+        }
+
+        setRelatedFields(builtRelatedFields);
       }
 
       if (regRes.ok) {
@@ -946,6 +1001,7 @@ export function PageBuilderPage() {
             registry={registry}
             fields={fields}
             relationships={relationships}
+            relatedFields={relatedFields}
             tabs={layout.tabs}
           />
 

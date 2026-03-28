@@ -5,6 +5,7 @@ import type {
   ComponentCategory,
   FieldRef,
   RelationshipRef,
+  RelatedFieldRef,
   PaletteDragData,
   BuilderTab,
 } from './builderTypes.js';
@@ -17,6 +18,7 @@ interface ComponentPaletteProps {
   registry: ComponentDefinition[];
   fields: FieldRef[];
   relationships: RelationshipRef[];
+  relatedFields: RelatedFieldRef[];
   tabs: BuilderTab[];
 }
 
@@ -52,6 +54,24 @@ function getPlacedRelationshipIds(tabs: BuilderTab[]): Set<string> {
       for (const comp of section.components) {
         if (comp.type === 'related_list' && comp.config.relationshipId) {
           ids.add(String(comp.config.relationshipId));
+        }
+      }
+    }
+  }
+  return ids;
+}
+
+function getPlacedRelatedFieldIds(tabs: BuilderTab[]): Set<string> {
+  const ids = new Set<string>();
+  for (const tab of tabs) {
+    for (const section of tab.sections) {
+      for (const comp of section.components) {
+        if (
+          comp.type === 'related_field' &&
+          comp.config.relationshipApiName &&
+          comp.config.relatedFieldApiName
+        ) {
+          ids.add(`${comp.config.relationshipApiName}.${comp.config.relatedFieldApiName}`);
         }
       }
     }
@@ -96,11 +116,13 @@ export function ComponentPalette({
   registry,
   fields,
   relationships,
+  relatedFields,
   tabs,
 }: ComponentPaletteProps) {
   const [fieldSearch, setFieldSearch] = useState('');
   const placedFields = getPlacedFieldIds(tabs);
   const placedRelationships = getPlacedRelationshipIds(tabs);
+  const placedRelatedFields = getPlacedRelatedFieldIds(tabs);
 
   const filteredFields = fieldSearch
     ? fields.filter((f) => f.label.toLowerCase().includes(fieldSearch.toLowerCase()))
@@ -112,6 +134,20 @@ export function ComponentPalette({
       items: registry.filter((r) => r.category === cat),
     }))
     .filter((g) => g.items.length > 0);
+
+  // Group related fields by relationship
+  const relatedFieldsByRelationship = relatedFields.reduce<
+    Record<string, { label: string; fields: RelatedFieldRef[] }>
+  >((acc, rf) => {
+    if (!acc[rf.relationshipApiName]) {
+      acc[rf.relationshipApiName] = {
+        label: rf.relatedObjectLabel,
+        fields: [],
+      };
+    }
+    acc[rf.relationshipApiName].fields.push(rf);
+    return acc;
+  }, {});
 
   return (
     <div className={styles.palette} data-testid="component-palette">
@@ -148,6 +184,46 @@ export function ComponentPalette({
               No fields match your search.
             </p>
           )}
+        </div>
+      )}
+
+      {/* Related field instances */}
+      {Object.keys(relatedFieldsByRelationship).length > 0 && (
+        <div className={styles.group} data-testid="related-fields-group">
+          <h4 className={styles.groupLabel}>Related Fields</h4>
+          {Object.entries(relatedFieldsByRelationship).map(([relApiName, group]) => (
+            <div key={relApiName} className={styles.subGroup}>
+              <h5
+                className={styles.subGroupLabel}
+                data-testid={`related-fields-group-label-${relApiName}`}
+              >
+                {group.label}
+              </h5>
+              {group.fields.map((rf) => {
+                const compositeKey = `${rf.relationshipApiName}.${rf.fieldApiName}`;
+                return (
+                  <PaletteItem
+                    key={`related-${compositeKey}`}
+                    id={`palette-related-${compositeKey}`}
+                    label={`${rf.relatedObjectLabel} → ${rf.fieldLabel}`}
+                    icon="🔗"
+                    isPlaced={placedRelatedFields.has(compositeKey)}
+                    dragData={{
+                      origin: 'palette',
+                      componentType: 'related_field',
+                      defaultConfig: {
+                        relationshipApiName: rf.relationshipApiName,
+                        relatedFieldApiName: rf.fieldApiName,
+                        relatedObjectApiName: rf.relatedObjectApiName,
+                        span: 1,
+                        readOnly: true,
+                      },
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
 
