@@ -718,6 +718,23 @@ export function RecordDetailPage() {
           </p>
         )}
 
+        {hasPipeline && (
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <span className={styles.cardTitle}>Stage</span>
+            </div>
+            <div className={styles.cardBody}>
+              <StageSelector
+                apiName={apiName!}
+                recordId={record.id}
+                currentStageId={record.currentStageId}
+                currentStageName={record.fieldValues['stage'] as string | undefined}
+                onStageChanged={() => void loadRecord()}
+              />
+            </div>
+          </div>
+        )}
+
         <PageLayoutRenderer
           layout={pageLayout}
           record={record}
