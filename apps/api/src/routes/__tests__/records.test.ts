@@ -209,6 +209,18 @@ describe('POST /objects/:apiName/records', () => {
       undefined,
       { apiName: 'user' },
     );
+    const res = mockRes();
+
+    await handleCreateRecord(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'User records cannot be created manually. They are synced automatically from Descope on login.',
+      code: 'CREATE_DISABLED',
+    });
+    expect(mockCreateRecord).not.toHaveBeenCalled();
+  });
+
   it('calls linkRecords when linkTo is provided with source direction', async () => {
     const now = new Date();
     const expectedRecord = {
@@ -1048,5 +1060,4 @@ describe('POST /objects/:apiName/records/:id/move-stage', () => {
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'An unexpected error occurred' });
   });
-});
 });
