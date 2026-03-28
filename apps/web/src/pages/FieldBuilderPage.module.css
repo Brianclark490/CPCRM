@@ -307,6 +307,31 @@
   border-color: var(--color-error-border);
 }
 
+/* ── Edit button ─────────────────────────────────────────── */
+
+.editButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base),
+    border-color var(--transition-base);
+}
+
+.editButton:hover {
+  color: var(--color-primary-text);
+  background-color: var(--color-primary-subtle);
+  border-color: var(--color-primary);
+}
+
 .actionCell {
   display: flex;
   align-items: center;

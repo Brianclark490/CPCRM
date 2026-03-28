@@ -65,12 +65,12 @@ function createMockClient(db: ReturnType<typeof createFakeDb>) {
 
     // INSERT INTO field_definitions ... ON CONFLICT ... RETURNING id
     if (s.startsWith('INSERT INTO FIELD_DEFINITIONS')) {
-      const [id, objectId, apiName, label, fieldType, required, options, sortOrder, tenantId] = params as unknown[];
+      const [id, objectId, apiName, label, fieldType, required, options, sortOrder, isSystem, tenantId] = params as unknown[];
       const existing = [...db.fields.values()].find(
         (f) => f.tenant_id === tenantId && f.object_id === objectId && f.api_name === apiName,
       );
       if (existing) return { rows: [] };
-      const row: FakeRow = { id: id as string, object_id: objectId, api_name: apiName, label, field_type: fieldType, required, options, sort_order: sortOrder, tenant_id: tenantId };
+      const row: FakeRow = { id: id as string, object_id: objectId, api_name: apiName, label, field_type: fieldType, required, options, sort_order: sortOrder, is_system: isSystem, tenant_id: tenantId };
       db.fields.set(id as string, row);
       return { rows: [{ id }] };
     }
@@ -551,5 +551,35 @@ describe('seedDefaultObjects', () => {
         expect(upper).toContain('TENANT_ID');
       }
     }
+  });
+
+  it('marks only essential identity fields as system', async () => {
+    await seedWithClient(client, 'tenant-1', 'owner-1');
+
+    const findField = (objectApiName: string, fieldApiName: string) => {
+      return [...db.fields.values()].find((f) => {
+        const obj = [...db.objects.values()].find((o) => o.id === f.object_id);
+        return obj?.api_name === objectApiName && f.api_name === fieldApiName;
+      });
+    };
+
+    // System fields — essential identity fields
+    expect(findField('account', 'name')!.is_system).toBe(true);
+    expect(findField('contact', 'first_name')!.is_system).toBe(true);
+    expect(findField('contact', 'last_name')!.is_system).toBe(true);
+    expect(findField('opportunity', 'name')!.is_system).toBe(true);
+    expect(findField('opportunity', 'stage')!.is_system).toBe(true);
+    expect(findField('user', 'email')!.is_system).toBe(true);
+    expect(findField('user', 'display_name')!.is_system).toBe(true);
+
+    // Non-system fields — configurable and deletable by admins
+    expect(findField('account', 'type')!.is_system).toBe(false);
+    expect(findField('account', 'industry')!.is_system).toBe(false);
+    expect(findField('account', 'website')!.is_system).toBe(false);
+    expect(findField('account', 'description')!.is_system).toBe(false);
+    expect(findField('contact', 'email')!.is_system).toBe(false);
+    expect(findField('contact', 'phone')!.is_system).toBe(false);
+    expect(findField('opportunity', 'value')!.is_system).toBe(false);
+    expect(findField('opportunity', 'description')!.is_system).toBe(false);
   });
 });

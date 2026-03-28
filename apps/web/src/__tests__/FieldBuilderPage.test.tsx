@@ -297,6 +297,19 @@ describe('FieldBuilderPage', () => {
     expect(screen.queryByRole('button', { name: 'Delete Name' })).not.toBeInTheDocument();
   });
 
+  it('shows edit button for system fields', async () => {
+    mockFetchObject();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Name')).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: 'Edit Name' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Amount' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Stage' })).not.toBeInTheDocument();
+  });
+
   it('shows reorder buttons for each field', async () => {
     mockFetchObject();
     renderPage();
