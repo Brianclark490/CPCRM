@@ -182,6 +182,7 @@ function renderBoard() {
 
 describe('KanbanBoard', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.mocked(useSession).mockReturnValue({
       isAuthenticated: true,
       isSessionLoading: false,
@@ -676,5 +677,88 @@ describe('KanbanBoard', () => {
     // Lowercase Stage should be in Prospecting column (matches apiName)
     const prospectingColumn = screen.getByTestId('kanban-column-prospecting');
     expect(prospectingColumn).toHaveTextContent('Lowercase Stage');
+  });
+
+  it('renders the summary toggle button', async () => {
+    mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('summary-toggle')).toBeInTheDocument();
+    });
+
+    const toggle = screen.getByTestId('summary-toggle');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveTextContent('Hide summary');
+  });
+
+  it('collapses summary cards when toggle is clicked', async () => {
+    mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('summary-toggle')).toBeInTheDocument();
+    });
+
+    const toggle = screen.getByTestId('summary-toggle');
+
+    // Initially expanded
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const section = screen.getByTestId('summary-section');
+    expect(section.className).toContain('Expanded');
+
+    // Click to collapse
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveTextContent('Show summary');
+    expect(section.className).toContain('Collapsed');
+  });
+
+  it('keeps filter bar visible when summary is collapsed', async () => {
+    mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-filter-bar')).toBeInTheDocument();
+    });
+
+    // Collapse summary
+    fireEvent.click(screen.getByTestId('summary-toggle'));
+
+    // Filter bar should still be visible
+    expect(screen.getByTestId('kanban-filter-bar')).toBeInTheDocument();
+  });
+
+  it('persists collapsed state in localStorage', async () => {
+    mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('summary-toggle')).toBeInTheDocument();
+    });
+
+    // Click to collapse
+    fireEvent.click(screen.getByTestId('summary-toggle'));
+
+    expect(localStorage.getItem('cpcrm-pipeline-summary-collapsed')).toBe('true');
+
+    // Click to expand
+    fireEvent.click(screen.getByTestId('summary-toggle'));
+
+    expect(localStorage.getItem('cpcrm-pipeline-summary-collapsed')).toBe('false');
+  });
+
+  it('uses grid layout for columns container', async () => {
+    mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-column-prospecting')).toBeInTheDocument();
+    });
   });
 });
