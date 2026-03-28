@@ -203,6 +203,12 @@ describe('POST /objects/:apiName/records', () => {
     expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', {}, 'user-123', undefined);
   });
 
+  it('returns 403 when trying to manually create a user record', async () => {
+    const req = mockReq(
+      { fieldValues: { email: 'test@example.com' } },
+      undefined,
+      { apiName: 'user' },
+    );
   it('calls linkRecords when linkTo is provided with source direction', async () => {
     const now = new Date();
     const expectedRecord = {
@@ -264,6 +270,12 @@ describe('POST /objects/:apiName/records', () => {
 
     await handleCreateRecord(req, res);
 
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'User records cannot be created manually. They are synced automatically from Descope on login.',
+      code: 'CREATE_DISABLED',
+    });
+    expect(mockCreateRecord).not.toHaveBeenCalled();
     // When parent direction is 'target', new record is the source and parent is the target
     expect(mockLinkRecords).toHaveBeenCalledWith(
       'tenant-abc',

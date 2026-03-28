@@ -1,5 +1,5 @@
 /* ============================================================
-   AdminUsersPage — Descope User Management widget wrapper
+   AdminUsersPage — CRM user list + Descope widget
    ============================================================ */
 
 .page {
@@ -21,6 +21,106 @@
 .pageSubtitle {
   font-size: var(--font-size-md);
   color: var(--color-text-secondary);
+}
+
+/* ── Section headings ──────────────────────────────────── */
+
+.sectionTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.sectionSubtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+/* ── CRM User list ─────────────────────────────────────── */
+
+.userListSection {
+  margin-bottom: var(--space-10);
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.userTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.userTable th {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-subtle);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.userTable td {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.userTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.userLink {
+  color: var(--color-accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.userLink:hover {
+  text-decoration: underline;
+}
+
+.badgeActive {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  background-color: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+.badgeInactive {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+}
+
+.loadingText,
+.errorText,
+.emptyText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  padding: var(--space-4) 0;
+}
+
+.errorText {
+  color: var(--color-danger);
+}
+
+/* ── Descope widget ────────────────────────────────────── */
+
+.widgetSection {
+  margin-top: var(--space-4);
 }
 
 .widgetContainer {

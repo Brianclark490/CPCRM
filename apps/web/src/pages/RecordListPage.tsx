@@ -397,12 +397,14 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
               </button>
             </div>
           )}
-          <Link to={`/objects/${apiName}/new`}>
-            <PrimaryButton size="sm">
-              <PlusIcon />
-              New {singularLabel.toLowerCase()}
-            </PrimaryButton>
-          </Link>
+          {apiName !== 'user' && (
+            <Link to={`/objects/${apiName}/new`}>
+              <PrimaryButton size="sm">
+                <PlusIcon />
+                New {singularLabel.toLowerCase()}
+              </PrimaryButton>
+            </Link>
+          )}
         </div>
       </div>
 
