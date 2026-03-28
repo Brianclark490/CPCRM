@@ -354,11 +354,12 @@ export function RecordDetailPage() {
 
     // Collect pipeline-managed field api_names so we can skip them
     const pipelineManagedFields = new Set<string>();
-    const allSections = layoutSections ?? sections;
-    for (const section of allSections) {
-      for (const field of section.fields) {
-        if (field.fieldOptions?.pipeline_managed === true) {
-          pipelineManagedFields.add(field.fieldApiName);
+    if (layoutSections) {
+      for (const section of layoutSections) {
+        for (const field of section.fields) {
+          if (field.fieldOptions?.pipeline_managed === true) {
+            pipelineManagedFields.add(field.fieldApiName);
+          }
         }
       }
     }
