@@ -1049,3 +1049,4 @@ describe('POST /objects/:apiName/records/:id/move-stage', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'An unexpected error occurred' });
   });
 });
+});
