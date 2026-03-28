@@ -50,6 +50,7 @@ export interface RecordWithLabels extends RecordRow {
     label: string;
     fieldType: string;
     value: unknown;
+    options: Record<string, unknown>;
   }>;
 }
 
@@ -309,6 +310,7 @@ function resolveFieldLabels(
         label: fd.label,
         fieldType: fd.fieldType,
         value,
+        options: fd.options,
       };
     }
     return {
@@ -316,6 +318,7 @@ function resolveFieldLabels(
       label: fd.label,
       fieldType: fd.fieldType,
       value: record.fieldValues[fd.apiName] ?? null,
+      options: fd.options,
     };
   });
 

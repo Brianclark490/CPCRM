@@ -26,6 +26,7 @@ interface RecordField {
   label: string;
   fieldType: string;
   value: unknown;
+  options?: Record<string, unknown>;
 }
 
 interface RelatedRecord {
@@ -167,7 +168,7 @@ function sectionsFromPageLayout(
             fieldLabel: recordField?.label ?? apiName,
             fieldType: recordField?.fieldType ?? 'text',
             fieldRequired: false,
-            fieldOptions: {},
+            fieldOptions: recordField?.options ?? {},
             sortOrder,
             section: 0,
             sectionLabel: section.label,
@@ -361,6 +362,12 @@ export function RecordDetailPage() {
             pipelineManagedFields.add(field.fieldApiName);
           }
         }
+      }
+    }
+    // Also check record field options (covers page-layout and fallback paths)
+    for (const field of record.fields) {
+      if (field.options?.pipeline_managed === true) {
+        pipelineManagedFields.add(field.apiName);
       }
     }
 
@@ -679,7 +686,7 @@ export function RecordDetailPage() {
           fieldLabel: f.label,
           fieldType: f.fieldType,
           fieldRequired: false,
-          fieldOptions: {},
+          fieldOptions: f.options ?? {},
           sortOrder: i,
           section: 0,
           width: f.fieldType === 'textarea' ? 'full' : 'half',
