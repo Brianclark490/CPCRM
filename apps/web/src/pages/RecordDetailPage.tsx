@@ -365,7 +365,7 @@ export function RecordDetailPage() {
     // (stage changes go through the move-stage API)
     let valuesToSave = formValues;
     if (hasPipeline && 'stage' in formValues) {
-      const { stage: _stage, ...rest } = formValues;
+      const { stage, ...rest } = formValues;
       valuesToSave = rest;
     }
 
