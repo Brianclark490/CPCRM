@@ -1,15 +1,22 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ComponentRendererProps } from './layoutTypes.js';
+import { InlineRecordForm } from './InlineRecordForm.js';
 import styles from './RelatedListRenderer.module.css';
 
 /**
  * Renders a related records table within a page layout.
  * Looks up the relationship by ID from the record data.
+ * Includes a "+ New" button to create a related record inline.
  */
 export function RelatedListRenderer({
   component,
   record,
+  onRecordCreated,
+  sessionToken,
 }: ComponentRendererProps) {
+  const [showInlineForm, setShowInlineForm] = useState(false);
+
   const relationshipId = component.config.relationshipId;
   if (!relationshipId) return null;
 
@@ -19,15 +26,44 @@ export function RelatedListRenderer({
 
   if (!relationship) return null;
 
+  const handleCreated = () => {
+    setShowInlineForm(false);
+    onRecordCreated?.();
+  };
+
   return (
     <div className={styles.relatedCard} data-testid={`related-list-${relationshipId}`}>
       <div className={styles.relatedHeader}>
         <span className={styles.relatedTitle}>{relationship.label}</span>
+        {sessionToken && (
+          <button
+            className={styles.btnNew}
+            type="button"
+            onClick={() => setShowInlineForm(!showInlineForm)}
+            data-testid={`new-related-${relationship.relatedObjectApiName}`}
+          >
+            + New
+          </button>
+        )}
       </div>
 
-      {relationship.records.length === 0 ? (
+      {showInlineForm && sessionToken && (
+        <InlineRecordForm
+          relatedObjectApiName={relationship.relatedObjectApiName}
+          relatedObjectLabel={relationship.label}
+          parentRecordId={record.id}
+          parentRecordName={record.name}
+          relationshipId={relationshipId}
+          parentDirection={relationship.direction}
+          sessionToken={sessionToken}
+          onCreated={handleCreated}
+          onCancel={() => setShowInlineForm(false)}
+        />
+      )}
+
+      {relationship.records.length === 0 && !showInlineForm ? (
         <div className={styles.relatedEmpty}>No related records</div>
-      ) : (
+      ) : relationship.records.length > 0 ? (
         <table className={styles.relatedTable}>
           <thead>
             <tr>
@@ -49,7 +85,7 @@ export function RelatedListRenderer({
             ))}
           </tbody>
         </table>
-      )}
+      ) : null}
     </div>
   );
 }

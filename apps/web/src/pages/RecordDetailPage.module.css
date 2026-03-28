@@ -370,6 +370,9 @@
 .relatedHeader {
   padding: var(--space-4) var(--space-6);
   border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .relatedTitle {
@@ -431,6 +434,29 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+.btnNew {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  background: none;
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--transition-base),
+    border-color var(--transition-base),
+    background-color var(--transition-base);
+}
+
+.btnNew:hover {
+  border-color: var(--color-primary-text);
+  background-color: rgba(217, 70, 239, 0.08);
 }
 
 /* ── Delete confirmation ──────────────────────────────────── */
