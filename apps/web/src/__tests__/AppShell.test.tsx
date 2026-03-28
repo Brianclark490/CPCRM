@@ -102,6 +102,18 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
   });
 
+  it('renders the Admin navigation link in the top bar', () => {
+    render(
+      <MemoryRouter>
+        <AppShell>
+          <div>Page content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Admin' })).toBeInTheDocument();
+  });
+
   it('renders Admin links inside the profile dropdown', async () => {
     render(
       <MemoryRouter>
