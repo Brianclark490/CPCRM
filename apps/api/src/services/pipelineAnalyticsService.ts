@@ -90,9 +90,9 @@ function periodToDays(period: string): number | null {
 async function resolvePipeline(
   tenantId: string,
   pipelineId: string,
-): Promise<{ id: string; name: string }> {
+): Promise<{ id: string; name: string; objectId: string }> {
   const result = await pool.query(
-    'SELECT id, name FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
+    'SELECT id, name, object_id FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
     [pipelineId, tenantId],
   );
 
@@ -101,7 +101,47 @@ async function resolvePipeline(
   }
 
   const row = result.rows[0] as Record<string, unknown>;
-  return { id: row.id as string, name: row.name as string };
+  return { id: row.id as string, name: row.name as string, objectId: row.object_id as string };
+}
+
+/**
+ * Extract a numeric value from field_values, checking multiple common field
+ * names (value, amount, deal_value) to match the kanban board's extraction
+ * logic.
+ */
+function extractRecordValue(fv: Record<string, unknown>): number {
+  const v = fv.value ?? fv.amount ?? fv.deal_value;
+  if (v === null || v === undefined) return 0;
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Resolve which pipeline stage a record belongs to, using the same priority
+ * as the kanban board's resolveStageForRecord:
+ *   1. field_values.stage matches a stage name/api_name
+ *   2. current_stage_id matches a known stage
+ *   3. Fall back to the first open stage
+ */
+function resolveRecordStage(
+  record: Record<string, unknown>,
+  stageById: Map<string, Record<string, unknown>>,
+  stageByName: Map<string, Record<string, unknown>>,
+  firstOpenStage: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const fv = (record.field_values ?? {}) as Record<string, unknown>;
+  const stageField = fv.stage;
+  if (typeof stageField === 'string' && stageField.trim()) {
+    const matched = stageByName.get(stageField.trim().toLowerCase());
+    if (matched) return matched;
+  }
+
+  if (record.current_stage_id) {
+    const direct = stageById.get(record.current_stage_id as string);
+    if (direct) return direct;
+  }
+
+  return firstOpenStage;
 }
 
 // ─── Service functions ───────────────────────────────────────────────────────
@@ -120,77 +160,102 @@ export async function getPipelineSummary(
 ): Promise<PipelineSummaryResponse> {
   const pipeline = await resolvePipeline(tenantId, pipelineId);
 
-  // Fetch all stages for this pipeline
+  // Fetch all stages for this pipeline (include api_name for field_values.stage resolution)
   const stagesResult = await pool.query(
-    'SELECT id, name, stage_type, default_probability, expected_days FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    'SELECT id, name, api_name, stage_type, default_probability, expected_days FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
     [pipelineId, tenantId],
   );
 
   const stages = stagesResult.rows as Array<Record<string, unknown>>;
 
-  // Fetch per-stage aggregates in one query
-  const aggregatesResult = await pool.query(
-    `SELECT
-       r.current_stage_id AS stage_id,
-       COUNT(*)::int AS record_count,
-       COALESCE(SUM((r.field_values->>'value')::numeric), 0) AS total_value,
-       COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400), 0) AS avg_days_in_stage
-     FROM records r
-     WHERE r.pipeline_id = $1
-       AND r.tenant_id = $2
-       AND r.owner_id = $3
-       AND r.current_stage_id IS NOT NULL
-     GROUP BY r.current_stage_id`,
-    [pipelineId, tenantId, ownerId],
-  );
-
-  const aggregatesByStage = new Map<string, Record<string, unknown>>();
-  for (const row of aggregatesResult.rows as Array<Record<string, unknown>>) {
-    aggregatesByStage.set(row.stage_id as string, row);
+  // Build stage lookup maps for resolving field_values.stage (same logic as kanban board)
+  const stageById = new Map<string, Record<string, unknown>>();
+  const stageByName = new Map<string, Record<string, unknown>>();
+  for (const stage of stages) {
+    stageById.set(stage.id as string, stage);
+    if (stage.name) stageByName.set((stage.name as string).toLowerCase(), stage);
+    if (stage.api_name) stageByName.set((stage.api_name as string).toLowerCase(), stage);
   }
+  const firstOpenStage = stages.find((s) => (s.stage_type as string) === 'open') ?? null;
 
-  // Fetch overdue counts per stage
-  const overdueResult = await pool.query(
-    `SELECT
-       r.current_stage_id AS stage_id,
-       COUNT(*)::int AS overdue_count
+  // Fetch all records belonging to this pipeline, including records that
+  // belong to the pipeline's object type but have not yet been explicitly
+  // assigned a pipeline_id (created before auto-assignment was working).
+  const recordsResult = await pool.query(
+    `SELECT r.id, r.field_values, r.current_stage_id, r.stage_entered_at
      FROM records r
-     JOIN stage_definitions sd ON sd.id = r.current_stage_id
-     WHERE r.pipeline_id = $1
-       AND r.tenant_id = $2
-       AND r.owner_id = $3
-       AND r.current_stage_id IS NOT NULL
-       AND sd.expected_days IS NOT NULL
-       AND r.stage_entered_at IS NOT NULL
-       AND EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 > sd.expected_days
-     GROUP BY r.current_stage_id`,
-    [pipelineId, tenantId, ownerId],
+     WHERE r.tenant_id = $1
+       AND r.owner_id = $2
+       AND (r.pipeline_id = $3 OR (r.object_id = $4 AND r.pipeline_id IS NULL))`,
+    [tenantId, ownerId, pipelineId, pipeline.objectId],
   );
 
-  const overdueByStage = new Map<string, number>();
-  for (const row of overdueResult.rows as Array<Record<string, unknown>>) {
-    overdueByStage.set(row.stage_id as string, row.overdue_count as number);
+  const records = recordsResult.rows as Array<Record<string, unknown>>;
+
+  // Calculate per-stage aggregates in application code (mirrors kanban board logic)
+  const stageAggregates = new Map<
+    string,
+    { recordCount: number; totalValue: number; weightedValue: number; totalDays: number; overdueCount: number }
+  >();
+
+  for (const record of records) {
+    const stage = resolveRecordStage(record, stageById, stageByName, firstOpenStage);
+    if (!stage) continue;
+
+    const stageId = stage.id as string;
+    const fv = (record.field_values ?? {}) as Record<string, unknown>;
+    const value = extractRecordValue(fv);
+
+    // Per-record probability with fallback to stage default_probability
+    const recordProb = fv.probability !== null && fv.probability !== undefined
+      ? Number(fv.probability)
+      : NaN;
+    const probability = !isNaN(recordProb)
+      ? recordProb
+      : ((stage.default_probability as number | null) ?? 0);
+    const weighted = value * (probability / 100);
+
+    // Days in stage
+    const enteredAt = record.stage_entered_at
+      ? new Date(record.stage_entered_at as string)
+      : null;
+    const daysInStage = enteredAt
+      ? (Date.now() - enteredAt.getTime()) / (86400 * 1000)
+      : 0;
+
+    // Overdue check
+    const expectedDays = stage.expected_days as number | null;
+    const isOverdue = expectedDays !== null && enteredAt !== null && daysInStage > expectedDays;
+
+    const current = stageAggregates.get(stageId) ?? {
+      recordCount: 0,
+      totalValue: 0,
+      weightedValue: 0,
+      totalDays: 0,
+      overdueCount: 0,
+    };
+    current.recordCount += 1;
+    current.totalValue += value;
+    current.weightedValue += weighted;
+    current.totalDays += daysInStage;
+    if (isOverdue) current.overdueCount += 1;
+    stageAggregates.set(stageId, current);
   }
 
   // Build stage summaries
   const stageSummaries: StageSummary[] = stages.map((stage) => {
-    const agg = aggregatesByStage.get(stage.id as string);
-    const recordCount = agg ? (agg.record_count as number) : 0;
-    const totalValue = agg ? Number(agg.total_value) : 0;
-    const probability = (stage.default_probability as number | null) ?? 0;
-    const weightedValue = Math.round(totalValue * (probability / 100));
-    const avgDaysInStage = agg ? Math.round(Number(agg.avg_days_in_stage)) : 0;
-    const overdueCount = overdueByStage.get(stage.id as string) ?? 0;
-
+    const agg = stageAggregates.get(stage.id as string);
     return {
       id: stage.id as string,
       name: stage.name as string,
       stageType: stage.stage_type as string,
-      recordCount,
-      totalValue,
-      weightedValue,
-      avgDaysInStage,
-      overdueCount,
+      recordCount: agg?.recordCount ?? 0,
+      totalValue: agg?.totalValue ?? 0,
+      weightedValue: Math.round(agg?.weightedValue ?? 0),
+      avgDaysInStage: agg && agg.recordCount > 0
+        ? Math.round(agg.totalDays / agg.recordCount)
+        : 0,
+      overdueCount: agg?.overdueCount ?? 0,
     };
   });
 
@@ -209,7 +274,14 @@ export async function getPipelineSummary(
   const wonThisMonthResult = await pool.query(
     `SELECT
        COUNT(DISTINCT sh.record_id)::int AS won_count,
-       COALESCE(SUM((r.field_values->>'value')::numeric), 0) AS won_value
+       COALESCE(SUM(
+         COALESCE(
+           (r.field_values->>'value')::numeric,
+           (r.field_values->>'amount')::numeric,
+           (r.field_values->>'deal_value')::numeric,
+           0
+         )
+       ), 0) AS won_value
      FROM stage_history sh
      JOIN stage_definitions sd ON sd.id = sh.to_stage_id
      JOIN records r ON r.id = sh.record_id
@@ -434,20 +506,23 @@ export async function getOverdueRecords(
   ownerId: string,
 ): Promise<OverdueRecord[]> {
   const pipeline = await resolvePipeline(tenantId, pipelineId);
-  void pipeline; // used for validation only
 
   const result = await pool.query(
     `SELECT
        r.id,
        r.name,
-       (r.field_values->>'value')::numeric AS value,
+       COALESCE(
+         (r.field_values->>'value')::numeric,
+         (r.field_values->>'amount')::numeric,
+         (r.field_values->>'deal_value')::numeric
+       ) AS value,
        EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 AS days_in_stage,
        sd.expected_days,
        sd.name AS stage_name,
        r.owner_id
      FROM records r
      JOIN stage_definitions sd ON sd.id = r.current_stage_id
-     WHERE r.pipeline_id = $1
+     WHERE (r.pipeline_id = $1 OR (r.object_id = $4 AND r.pipeline_id IS NULL))
        AND r.tenant_id = $2
        AND r.owner_id = $3
        AND r.current_stage_id IS NOT NULL
@@ -455,7 +530,7 @@ export async function getOverdueRecords(
        AND r.stage_entered_at IS NOT NULL
        AND EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 > sd.expected_days
      ORDER BY (EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 - sd.expected_days) DESC`,
-    [pipelineId, tenantId, ownerId],
+    [pipelineId, tenantId, ownerId, pipeline.objectId],
   );
 
   logger.info({ pipelineId, ownerId, count: result.rows.length }, 'Overdue records fetched');
