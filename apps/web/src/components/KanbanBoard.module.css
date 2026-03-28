@@ -96,23 +96,33 @@
 /* ── Columns container ───────────────────────────────────── */
 
 .columnsContainer {
-  display: grid;
-  gap: var(--space-4);
-  padding-bottom: var(--space-4);
+  display: flex;
+  gap: 12px;
+  width: 100%;
   min-height: 400px;
-  flex: 1;
+  overflow-x: hidden;
+  padding-bottom: var(--space-4);
+}
+
+@media (max-width: 1023px) {
+  .columnsContainer {
+    overflow-x: auto;
+  }
 }
 
 /* ── Column ──────────────────────────────────────────────── */
 
 .column {
-  min-width: 0;
+  flex: 1 1 0;
+  min-width: 140px;
   background-color: var(--color-surface-subtle);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 300px);
+  max-height: 70vh;
+  overflow-y: auto;
+  container-type: inline-size;
 }
 
 .columnDragOver {
@@ -148,6 +158,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .columnDot {

@@ -209,6 +209,18 @@ describe('POST /objects/:apiName/records', () => {
       undefined,
       { apiName: 'user' },
     );
+    const res = mockRes();
+
+    await handleCreateRecord(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'User records cannot be created manually. They are synced automatically from Descope on login.',
+      code: 'CREATE_DISABLED',
+    });
+    expect(mockCreateRecord).not.toHaveBeenCalled();
+  });
+
   it('calls linkRecords when linkTo is provided with source direction', async () => {
     const now = new Date();
     const expectedRecord = {
@@ -270,12 +282,7 @@ describe('POST /objects/:apiName/records', () => {
 
     await handleCreateRecord(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith({
-      error: 'User records cannot be created manually. They are synced automatically from Descope on login.',
-      code: 'CREATE_DISABLED',
-    });
-    expect(mockCreateRecord).not.toHaveBeenCalled();
+    expect(mockCreateRecord).toHaveBeenCalled();
     // When parent direction is 'target', new record is the source and parent is the target
     expect(mockLinkRecords).toHaveBeenCalledWith(
       'tenant-abc',
@@ -284,6 +291,8 @@ describe('POST /objects/:apiName/records', () => {
       VALID_UUID,       // target = parent record
       'user-123',
     );
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(expectedRecord);
   });
 
   it('still returns 201 even if linkRecords fails', async () => {
