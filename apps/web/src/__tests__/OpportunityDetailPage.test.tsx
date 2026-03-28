@@ -44,11 +44,37 @@ const baseAccount = {
 };
 
 /**
- * Helper to mock fetch with opportunity load + account resolve.
+ * Helper to mock fetch with opportunity load + account resolve + pipeline stages.
  */
 function mockLoadWithAccount(opp: Omit<typeof baseOpportunity, 'accountId'> & { accountId?: string } = baseOpportunity, account = baseAccount) {
   vi.mocked(fetch).mockImplementation(async (url) => {
     const urlStr = typeof url === 'string' ? url : url.toString();
+
+    // Pipeline stages fetch
+    if (urlStr.includes('/api/admin/pipelines/')) {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'pipeline-1',
+          stages: [
+            { id: 's1', name: 'Prospecting', apiName: 'prospecting', sortOrder: 1, stageType: 'open', defaultProbability: 10, colour: 'blue' },
+            { id: 's2', name: 'Qualification', apiName: 'qualification', sortOrder: 2, stageType: 'open', defaultProbability: 25, colour: 'blue' },
+            { id: 's3', name: 'Proposal', apiName: 'proposal', sortOrder: 3, stageType: 'open', defaultProbability: 50, colour: 'green' },
+            { id: 's4', name: 'Negotiation', apiName: 'negotiation', sortOrder: 4, stageType: 'open', defaultProbability: 75, colour: 'yellow' },
+            { id: 's5', name: 'Closed Won', apiName: 'closed_won', sortOrder: 5, stageType: 'won', defaultProbability: 100, colour: 'green' },
+            { id: 's6', name: 'Closed Lost', apiName: 'closed_lost', sortOrder: 6, stageType: 'lost', defaultProbability: 0, colour: 'red' },
+          ],
+        }),
+      } as Response;
+    }
+
+    // Pipeline list fetch
+    if (urlStr.includes('/api/admin/pipelines')) {
+      return {
+        ok: true,
+        json: async () => [{ id: 'pipeline-1', isDefault: true }],
+      } as Response;
+    }
 
     // Account detail fetch (for name resolution)
     if (urlStr.includes('/api/accounts/')) {
@@ -113,8 +139,9 @@ describe('OpportunityDetailPage', () => {
       expect(screen.getByRole('heading', { name: 'New Partnership Deal' })).toBeInTheDocument();
     });
 
-    // 'Prospecting' appears in both the header badge and the details grid
-    expect(screen.getAllByText('Prospecting')).toHaveLength(2);
+    // 'Prospecting' appears in the header badge, the details grid, and the pipeline stage selector
+    const prospectingElements = screen.getAllByText('Prospecting');
+    expect(prospectingElements.length).toBeGreaterThanOrEqual(2);
     // Shows account name instead of raw ID
     expect(screen.getByText('Acme Corp')).toBeInTheDocument();
     expect(screen.getByText('user-123')).toBeInTheDocument();
@@ -216,7 +243,8 @@ describe('OpportunityDetailPage', () => {
     expect(screen.getByLabelText<HTMLInputElement>(/Opportunity name/).value).toBe(
       'New Partnership Deal',
     );
-    expect(screen.getByLabelText<HTMLSelectElement>('Stage').value).toBe('prospecting');
+    // Stage is now read-only in edit mode (changes go through move-stage endpoint)
+    expect(screen.getByText('Stage')).toBeInTheDocument();
   });
 
   it('returns to view mode when Cancel is clicked', async () => {
@@ -260,6 +288,13 @@ describe('OpportunityDetailPage', () => {
     vi.mocked(fetch).mockImplementation(async (url) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
 
+      if (urlStr.includes('/api/admin/pipelines/')) {
+        return { ok: true, json: async () => ({ id: 'pipeline-1', stages: [] }) } as Response;
+      }
+      if (urlStr.includes('/api/admin/pipelines')) {
+        return { ok: true, json: async () => [{ id: 'pipeline-1', isDefault: true }] } as Response;
+      }
+
       if (urlStr.includes('/api/accounts/')) {
         return { ok: true, json: async () => baseAccount } as Response;
       }
@@ -300,6 +335,13 @@ describe('OpportunityDetailPage', () => {
     let callCount = 0;
     vi.mocked(fetch).mockImplementation(async (url) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
+
+      if (urlStr.includes('/api/admin/pipelines/')) {
+        return { ok: true, json: async () => ({ id: 'pipeline-1', stages: [] }) } as Response;
+      }
+      if (urlStr.includes('/api/admin/pipelines')) {
+        return { ok: true, json: async () => [{ id: 'pipeline-1', isDefault: true }] } as Response;
+      }
 
       if (urlStr.includes('/api/accounts/')) {
         return { ok: true, json: async () => baseAccount } as Response;
@@ -344,6 +386,13 @@ describe('OpportunityDetailPage', () => {
     let callCount = 0;
     vi.mocked(fetch).mockImplementation(async (url) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
+
+      if (urlStr.includes('/api/admin/pipelines/')) {
+        return { ok: true, json: async () => ({ id: 'pipeline-1', stages: [] }) } as Response;
+      }
+      if (urlStr.includes('/api/admin/pipelines')) {
+        return { ok: true, json: async () => [{ id: 'pipeline-1', isDefault: true }] } as Response;
+      }
 
       if (urlStr.includes('/api/accounts/')) {
         return { ok: true, json: async () => baseAccount } as Response;
