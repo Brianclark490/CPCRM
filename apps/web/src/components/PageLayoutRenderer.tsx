@@ -18,6 +18,8 @@ interface PageLayoutRendererProps {
   fields: FieldDefinitionRef[];
   objectDef: ObjectDefinitionRef | null;
   actions?: ReactNode;
+  onRecordCreated?: () => void;
+  sessionToken?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -33,6 +35,8 @@ export function PageLayoutRenderer({
   fields,
   objectDef,
   actions,
+  onRecordCreated,
+  sessionToken,
 }: PageLayoutRendererProps) {
   const [activeTabId, setActiveTabId] = useState(
     layout.tabs[0]?.id ?? '',
@@ -65,6 +69,8 @@ export function PageLayoutRenderer({
               record={record}
               fields={fields}
               objectDef={objectDef}
+              onRecordCreated={onRecordCreated}
+              sessionToken={sessionToken}
             />
           ))}
         </div>
