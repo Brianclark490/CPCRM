@@ -119,4 +119,6 @@ export interface ComponentRendererProps {
   record: RecordData;
   fields: FieldDefinitionRef[];
   objectDef: ObjectDefinitionRef | null;
+  onRecordCreated?: () => void;
+  sessionToken?: string;
 }

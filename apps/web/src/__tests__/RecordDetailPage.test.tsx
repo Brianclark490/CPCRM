@@ -321,6 +321,106 @@ describe('RecordDetailPage', () => {
     });
   });
 
+  it('renders + New button on related list sections', async () => {
+    const record = makeRecordResponse({
+      relationships: [
+        {
+          relationshipId: 'rel-1',
+          label: 'Activities',
+          relationshipType: 'lookup',
+          direction: 'source',
+          relatedObjectApiName: 'activity',
+          records: [],
+        },
+      ],
+    });
+
+    mockFetch(record);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-related-activity')).toBeInTheDocument();
+      expect(screen.getByTestId('new-related-activity')).toHaveTextContent('+ New');
+    });
+  });
+
+  it('opens inline form when + New button is clicked', async () => {
+    const record = makeRecordResponse({
+      relationships: [
+        {
+          relationshipId: 'rel-1',
+          label: 'Activities',
+          relationshipType: 'lookup',
+          direction: 'source',
+          relatedObjectApiName: 'activity',
+          records: [],
+        },
+      ],
+    });
+
+    const fetchMock = mockFetch(record);
+
+    // Add mock for field definitions fetch
+    fetchMock.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts') && !url.includes('/fields')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [
+            { id: 'obj-1', apiName: 'account', label: 'Account', pluralLabel: 'Accounts', isSystem: true },
+            { id: 'obj-2', apiName: 'activity', label: 'Activity', pluralLabel: 'Activities', isSystem: true },
+          ],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/fields')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [
+            { id: 'f1', objectId: 'obj-2', apiName: 'subject', label: 'Subject', fieldType: 'text', required: true, options: {}, sortOrder: 1 },
+          ],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/layouts/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'layout-1', objectId: 'obj-1', name: 'Default Form', layoutType: 'form', isDefault: true,
+            fields: [
+              { fieldId: 'f1', fieldApiName: 'industry', fieldLabel: 'Industry', fieldType: 'text', fieldRequired: false, fieldOptions: {}, sortOrder: 1, section: 0, sectionLabel: 'Details', width: 'half' },
+            ],
+          }),
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/layouts')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ id: 'layout-1', objectId: 'obj-1', name: 'Default Form', layoutType: 'form', isDefault: true }],
+        } as Response);
+      }
+      if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => record,
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-related-activity')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('new-related-activity'));
+
+    await waitFor(() => {
+      const form = screen.queryByTestId('inline-record-form');
+      const loading = screen.queryByTestId('inline-form-loading');
+      expect(form ?? loading).toBeInTheDocument();
+    });
+  });
+
   it('renders layout sections from form layout', async () => {
     mockFetch(makeRecordResponse());
     renderPage();

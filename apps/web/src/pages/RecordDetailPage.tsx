@@ -5,6 +5,7 @@ import { FieldRenderer } from '../components/FieldRenderer.js';
 import { FieldInput } from '../components/FieldInput.js';
 import { StageFieldRenderer } from '../components/StageFieldRenderer.js';
 import { ConvertLeadModal } from '../components/ConvertLeadModal.js';
+import { InlineRecordForm } from '../components/InlineRecordForm.js';
 import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
 import { usePageLayout } from '../usePageLayout.js';
 import { useTenantLocale } from '../useTenantLocale.js';
@@ -219,6 +220,9 @@ export function RecordDetailPage() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
+
+  // Inline create form state (tracks which related list has the form open)
+  const [inlineFormRelId, setInlineFormRelId] = useState<string | null>(null);
 
   // Page layout (new metadata-driven renderer; null = use legacy form)
   const { layout: pageLayout } = usePageLayout(apiName);
@@ -780,6 +784,8 @@ export function RecordDetailPage() {
           fields={record.fields}
           objectDef={objectDef}
           actions={layoutActions}
+          onRecordCreated={() => void loadRecord()}
+          sessionToken={sessionToken ?? undefined}
         />
 
         {showDeleteConfirm && (
@@ -1047,12 +1053,46 @@ export function RecordDetailPage() {
           <div key={rel.relationshipId} className={styles.relatedCard}>
             <div className={styles.relatedHeader}>
               <span className={styles.relatedTitle}>{rel.label}</span>
+              {sessionToken && (
+                <button
+                  className={styles.btnNew}
+                  type="button"
+                  onClick={() =>
+                    setInlineFormRelId(
+                      inlineFormRelId === rel.relationshipId
+                        ? null
+                        : rel.relationshipId,
+                    )
+                  }
+                  data-testid={`new-related-${rel.relatedObjectApiName}`}
+                >
+                  + New
+                </button>
+              )}
             </div>
-            {rel.records.length === 0 ? (
+
+            {inlineFormRelId === rel.relationshipId && sessionToken && (
+              <InlineRecordForm
+                relatedObjectApiName={rel.relatedObjectApiName}
+                relatedObjectLabel={rel.label}
+                parentRecordId={record.id}
+                parentRecordName={record.name}
+                relationshipId={rel.relationshipId}
+                parentDirection={rel.direction}
+                sessionToken={sessionToken}
+                onCreated={() => {
+                  setInlineFormRelId(null);
+                  void loadRecord();
+                }}
+                onCancel={() => setInlineFormRelId(null)}
+              />
+            )}
+
+            {rel.records.length === 0 && inlineFormRelId !== rel.relationshipId ? (
               <div className={styles.relatedEmpty}>
                 No related records
               </div>
-            ) : (
+            ) : rel.records.length > 0 ? (
               <table className={styles.relatedTable}>
                 <thead>
                   <tr>
@@ -1074,7 +1114,7 @@ export function RecordDetailPage() {
                   ))}
                 </tbody>
               </table>
-            )}
+            ) : null}
           </div>
         ))}
 

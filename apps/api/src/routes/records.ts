@@ -10,6 +10,7 @@ import {
   updateRecord,
   deleteRecord,
 } from '../services/recordService.js';
+import { linkRecords } from '../services/recordRelationshipService.js';
 import { convertLead } from '../services/leadConversionService.js';
 import { moveRecordStage } from '../services/stageMovementService.js';
 import type { GateValidationError } from '../services/stageMovementService.js';
@@ -25,11 +26,20 @@ export const recordsRouter = Router({ mergeParams: true });
  * Creates a new record of the specified object type.
  * Field values are validated against the object's field definitions.
  *
+ * Optionally links the new record to a parent record if linkTo is provided.
+ *
  * Request body (JSON):
- *   { "fieldValues": { "field_api_name": value, ... } }
+ *   {
+ *     "fieldValues": { "field_api_name": value, ... },
+ *     "linkTo": {
+ *       "recordId": "parent-record-uuid",
+ *       "relationshipId": "relationship-definition-uuid",
+ *       "direction": "source" | "target"
+ *     }
+ *   }
  *
  * Responses:
- *   201  – record created
+ *   201  – record created (and linked if linkTo was provided)
  *   400  – validation error
  *   401  – missing or invalid Bearer token
  *   403  – no active tenant context
@@ -53,11 +63,41 @@ export async function handleCreateRecord(
 
   const { userId: ownerId, name: ownerName } = req.user!;
 
-  const body = req.body as { fieldValues?: Record<string, unknown> };
+  const body = req.body as {
+    fieldValues?: Record<string, unknown>;
+    linkTo?: { recordId?: string; relationshipId?: string; direction?: 'source' | 'target' };
+  };
   const fieldValues = body.fieldValues ?? {};
 
   try {
     const record = await createRecord(req.user!.tenantId!, apiName, fieldValues, ownerId, ownerName);
+
+    // If linkTo is provided, create the relationship link in the same request
+    if (body.linkTo?.recordId && body.linkTo?.relationshipId) {
+      try {
+        // direction indicates the parent record's role in the relationship
+        // If the parent is the 'source', the new record is the target → source=parent, target=new
+        // If the parent is the 'target', the new record is the source → source=new, target=parent
+        const parentIsSource = body.linkTo.direction === 'source';
+        const sourceId = parentIsSource ? body.linkTo.recordId : record.id;
+        const targetId = parentIsSource ? record.id : body.linkTo.recordId;
+
+        await linkRecords(
+          req.user!.tenantId!,
+          sourceId,
+          body.linkTo.relationshipId,
+          targetId,
+          ownerId,
+        );
+      } catch (linkErr: unknown) {
+        // Log the error but still return the created record
+        logger.warn(
+          { err: linkErr, recordId: record.id, linkTo: body.linkTo },
+          'Record created but failed to link to parent record',
+        );
+      }
+    }
+
     res.status(201).json(record);
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;

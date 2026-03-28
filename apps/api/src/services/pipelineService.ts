@@ -530,72 +530,85 @@ export async function createStage(
     throwConflictError(`A stage with api_name "${params.apiName.trim()}" already exists on this pipeline`);
   }
 
-  // Determine sort_order: insert before terminal stages for open stages
-  const allStages = await pool.query(
-    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
-    [pipelineId, tenantId],
-  );
+  // Use a transaction so sort_order shifting and INSERT are atomic
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  const stageType = params.stageType.trim();
-  let newSortOrder: number;
-
-  if (stageType === 'open') {
-    // Find the first terminal (won/lost) stage and insert before it
-    const firstTerminalIndex = allStages.rows.findIndex(
-      (r: Record<string, unknown>) => r.stage_type === 'won' || r.stage_type === 'lost',
+    // Determine sort_order: insert before terminal stages for open stages
+    const allStages = await client.query(
+      'SELECT * FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+      [pipelineId, tenantId],
     );
 
-    if (firstTerminalIndex >= 0) {
-      newSortOrder = allStages.rows[firstTerminalIndex].sort_order as number;
-      // Shift terminal stages down
-      await pool.query(
-        `UPDATE stage_definitions
-         SET sort_order = sort_order + 1
-         WHERE pipeline_id = $1 AND sort_order >= $2 AND tenant_id = $3`,
-        [pipelineId, newSortOrder, tenantId],
+    const stageType = params.stageType.trim();
+    let newSortOrder: number;
+
+    if (stageType === 'open') {
+      // Find the first terminal (won/lost) stage and insert before it
+      const firstTerminalIndex = allStages.rows.findIndex(
+        (r: Record<string, unknown>) => r.stage_type === 'won' || r.stage_type === 'lost',
       );
+
+      if (firstTerminalIndex >= 0) {
+        newSortOrder = allStages.rows[firstTerminalIndex].sort_order as number;
+        // Shift terminal stages down
+        await client.query(
+          `UPDATE stage_definitions
+           SET sort_order = sort_order + 1
+           WHERE pipeline_id = $1 AND sort_order >= $2 AND tenant_id = $3`,
+          [pipelineId, newSortOrder, tenantId],
+        );
+      } else {
+        // No terminal stages — append at the end
+        const maxSort = allStages.rows.length > 0
+          ? (allStages.rows[allStages.rows.length - 1].sort_order as number) + 1
+          : 0;
+        newSortOrder = maxSort;
+      }
     } else {
-      // No terminal stages — append at the end
+      // Terminal stages go at the end
       const maxSort = allStages.rows.length > 0
         ? (allStages.rows[allStages.rows.length - 1].sort_order as number) + 1
         : 0;
       newSortOrder = maxSort;
     }
-  } else {
-    // Terminal stages go at the end
-    const maxSort = allStages.rows.length > 0
-      ? (allStages.rows[allStages.rows.length - 1].sort_order as number) + 1
-      : 0;
-    newSortOrder = maxSort;
+
+    const stageId = randomUUID();
+    const now = new Date();
+
+    const result = await client.query(
+      `INSERT INTO stage_definitions
+         (id, tenant_id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, expected_days, description, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING *`,
+      [
+        stageId,
+        tenantId,
+        pipelineId,
+        params.name.trim(),
+        params.apiName.trim(),
+        newSortOrder,
+        stageType,
+        params.colour.trim(),
+        params.defaultProbability ?? null,
+        params.expectedDays ?? null,
+        params.description?.trim() ?? null,
+        now,
+      ],
+    );
+
+    await client.query('COMMIT');
+
+    logger.info({ stageId, pipelineId, apiName: params.apiName }, 'Stage created');
+
+    return rowToStage(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-
-  const stageId = randomUUID();
-  const now = new Date();
-
-  const result = await pool.query(
-    `INSERT INTO stage_definitions
-       (id, tenant_id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, expected_days, description, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-     RETURNING *`,
-    [
-      stageId,
-      tenantId,
-      pipelineId,
-      params.name.trim(),
-      params.apiName.trim(),
-      newSortOrder,
-      stageType,
-      params.colour.trim(),
-      params.defaultProbability ?? null,
-      params.expectedDays ?? null,
-      params.description?.trim() ?? null,
-      now,
-    ],
-  );
-
-  logger.info({ stageId, pipelineId, apiName: params.apiName }, 'Stage created');
-
-  return rowToStage(result.rows[0]);
 }
 
 /**
