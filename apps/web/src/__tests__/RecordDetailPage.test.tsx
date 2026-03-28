@@ -415,7 +415,9 @@ describe('RecordDetailPage', () => {
     await user.click(screen.getByTestId('new-related-activity'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('inline-record-form') || screen.getByTestId('inline-form-loading')).toBeInTheDocument();
+      const form = screen.queryByTestId('inline-record-form');
+      const loading = screen.queryByTestId('inline-form-loading');
+      expect(form ?? loading).toBeInTheDocument();
     });
   });
 
