@@ -23,15 +23,15 @@ const {
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
     const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
 
-    // SELECT id, name FROM pipeline_definitions WHERE id = $1
-    if (s.startsWith('SELECT ID, NAME FROM PIPELINE_DEFINITIONS WHERE ID')) {
+    // SELECT id, name, object_id FROM pipeline_definitions WHERE id = $1
+    if (s.startsWith('SELECT ID, NAME, OBJECT_ID FROM PIPELINE_DEFINITIONS WHERE ID')) {
       const id = params![0] as string;
       const row = fakePipelines.get(id);
-      if (row) return { rows: [{ id: row.id, name: row.name }] };
+      if (row) return { rows: [{ id: row.id, name: row.name, object_id: row.object_id ?? 'opp-obj-id' }] };
       return { rows: [] };
     }
 
-    // SELECT id, name, stage_type, default_probability, expected_days FROM stage_definitions WHERE pipeline_id
+    // SELECT id, name, api_name, stage_type, default_probability, expected_days FROM stage_definitions WHERE pipeline_id
     if (s.includes('DEFAULT_PROBABILITY') && s.includes('EXPECTED_DAYS') && s.includes('STAGE_DEFINITIONS WHERE PIPELINE_ID')) {
       const pipelineId = params![0] as string;
       const rows = [...fakeStages.values()]
@@ -40,6 +40,7 @@ const {
         .map((st) => ({
           id: st.id,
           name: st.name,
+          api_name: st.api_name ?? (st.name as string).toLowerCase().replace(/\s+/g, '_'),
           stage_type: st.stage_type,
           default_probability: st.default_probability,
           expected_days: st.expected_days,
@@ -58,57 +59,24 @@ const {
       return { rows };
     }
 
-    // Per-stage aggregates (GROUP BY current_stage_id — first query in summary)
-    if (s.includes('CURRENT_STAGE_ID AS STAGE_ID') && s.includes('RECORD_COUNT') && s.includes('GROUP BY')) {
-      const pipelineId = params![0] as string;
-      const ownerId = params![2] as string;
-      const matching = [...fakeRecords.values()].filter(
-        (r) => r.pipeline_id === pipelineId && r.current_stage_id && r.owner_id === ownerId,
-      );
-      const grouped = new Map<string, { count: number; totalValue: number; totalDays: number }>();
-      for (const r of matching) {
-        const stageId = r.current_stage_id as string;
-        const current = grouped.get(stageId) ?? { count: 0, totalValue: 0, totalDays: 0 };
-        current.count += 1;
-        current.totalValue += Number((r.field_values as Record<string, unknown>)?.value ?? 0);
-        const enteredAt = r.stage_entered_at ? new Date(r.stage_entered_at as string) : new Date();
-        current.totalDays += (Date.now() - enteredAt.getTime()) / (86400 * 1000);
-        grouped.set(stageId, current);
-      }
-      const rows = [...grouped.entries()].map(([stageId, agg]) => ({
-        stage_id: stageId,
-        record_count: agg.count,
-        total_value: agg.totalValue,
-        avg_days_in_stage: agg.count > 0 ? agg.totalDays / agg.count : 0,
-      }));
-      return { rows };
-    }
-
-    // Overdue count per stage
-    if (s.includes('OVERDUE_COUNT') && s.includes('GROUP BY')) {
-      const pipelineId = params![0] as string;
-      const ownerId = params![2] as string;
+    // Fetch all records for summary (new query pattern — fetches individual records)
+    // Exclude overdue/joined queries by checking for absence of STAGE_DEFINITIONS join
+    if (s.includes('R.FIELD_VALUES') && s.includes('R.CURRENT_STAGE_ID') && s.includes('R.STAGE_ENTERED_AT') && s.includes('R.OBJECT_ID') && !s.includes('JOIN STAGE_DEFINITIONS')) {
+      const tenantId = params![0] as string;
+      const ownerId = params![1] as string;
+      const pipelineId = params![2] as string;
+      const objectId = params![3] as string;
+      void tenantId;
       const matching = [...fakeRecords.values()].filter(
         (r) =>
-          r.pipeline_id === pipelineId &&
-          r.current_stage_id &&
-          r.stage_entered_at &&
-          r.owner_id === ownerId,
+          r.owner_id === ownerId &&
+          (r.pipeline_id === pipelineId || (r.object_id === objectId && !r.pipeline_id)),
       );
-      const grouped = new Map<string, number>();
-      for (const r of matching) {
-        const stageId = r.current_stage_id as string;
-        const stage = fakeStages.get(stageId);
-        if (!stage || stage.expected_days == null) continue;
-        const enteredAt = new Date(r.stage_entered_at as string);
-        const daysInStage = (Date.now() - enteredAt.getTime()) / (86400 * 1000);
-        if (daysInStage > (stage.expected_days as number)) {
-          grouped.set(stageId, (grouped.get(stageId) ?? 0) + 1);
-        }
-      }
-      const rows = [...grouped.entries()].map(([stageId, count]) => ({
-        stage_id: stageId,
-        overdue_count: count,
+      const rows = matching.map((r) => ({
+        id: r.id,
+        field_values: r.field_values,
+        current_stage_id: r.current_stage_id ?? null,
+        stage_entered_at: r.stage_entered_at ?? null,
       }));
       return { rows };
     }
@@ -134,7 +102,8 @@ const {
           if (rec && rec.owner_id === ownerId && !seenRecords.has(rec.id as string)) {
             seenRecords.add(rec.id as string);
             wonCount++;
-            wonValue += Number((rec.field_values as Record<string, unknown>)?.value ?? 0);
+            const fv = (rec.field_values as Record<string, unknown>) ?? {};
+            wonValue += Number(fv.value ?? fv.amount ?? fv.deal_value ?? 0);
           }
         }
       }
@@ -219,10 +188,11 @@ const {
     if (s.includes('DAYS_IN_STAGE') && s.includes('STAGE_NAME') && s.includes('RECORDS R')) {
       const pipelineId = params![0] as string;
       const ownerId = params![2] as string;
+      const objectId = params![3] as string;
       const results: Array<Record<string, unknown>> = [];
       for (const r of fakeRecords.values()) {
         if (
-          r.pipeline_id !== pipelineId ||
+          !(r.pipeline_id === pipelineId || (r.object_id === objectId && !r.pipeline_id)) ||
           !r.current_stage_id ||
           !r.stage_entered_at ||
           r.owner_id !== ownerId
@@ -233,10 +203,11 @@ const {
         const enteredAt = new Date(r.stage_entered_at as string);
         const daysInStage = (Date.now() - enteredAt.getTime()) / (86400 * 1000);
         if (daysInStage > (stage.expected_days as number)) {
+          const fv = (r.field_values as Record<string, unknown>) ?? {};
           results.push({
             id: r.id,
             name: r.name,
-            value: (r.field_values as Record<string, unknown>)?.value ?? null,
+            value: fv.value ?? fv.amount ?? fv.deal_value ?? null,
             days_in_stage: daysInStage,
             expected_days: stage.expected_days,
             stage_name: stage.name,
@@ -273,17 +244,18 @@ const {
 
 const PIPELINE_ID = 'pipeline-1';
 const OWNER_ID = 'user-123';
+const OBJECT_ID = 'opp-obj-id';
 
 function seedPipeline(id = PIPELINE_ID) {
-  fakePipelines.set(id, { id, name: 'Sales Pipeline' });
+  fakePipelines.set(id, { id, name: 'Sales Pipeline', object_id: OBJECT_ID });
 }
 
 function seedStages(pipelineId = PIPELINE_ID) {
   const stages = [
-    { id: 'stage-prospecting', pipeline_id: pipelineId, name: 'Prospecting', stage_type: 'open', sort_order: 0, default_probability: 10, expected_days: 14 },
-    { id: 'stage-qualification', pipeline_id: pipelineId, name: 'Qualification', stage_type: 'open', sort_order: 1, default_probability: 25, expected_days: 14 },
-    { id: 'stage-won', pipeline_id: pipelineId, name: 'Closed Won', stage_type: 'won', sort_order: 2, default_probability: 100, expected_days: null },
-    { id: 'stage-lost', pipeline_id: pipelineId, name: 'Closed Lost', stage_type: 'lost', sort_order: 3, default_probability: 0, expected_days: null },
+    { id: 'stage-prospecting', pipeline_id: pipelineId, name: 'Prospecting', api_name: 'prospecting', stage_type: 'open', sort_order: 0, default_probability: 10, expected_days: 14 },
+    { id: 'stage-qualification', pipeline_id: pipelineId, name: 'Qualification', api_name: 'qualification', stage_type: 'open', sort_order: 1, default_probability: 25, expected_days: 14 },
+    { id: 'stage-won', pipeline_id: pipelineId, name: 'Closed Won', api_name: 'closed_won', stage_type: 'won', sort_order: 2, default_probability: 100, expected_days: null },
+    { id: 'stage-lost', pipeline_id: pipelineId, name: 'Closed Lost', api_name: 'closed_lost', stage_type: 'lost', sort_order: 3, default_probability: 0, expected_days: null },
   ];
   for (const stage of stages) {
     fakeStages.set(stage.id, stage);
@@ -296,12 +268,13 @@ function seedRecord(
   value: number,
   daysAgo: number,
   ownerId = OWNER_ID,
-  pipelineId = PIPELINE_ID,
+  pipelineId: string | null = PIPELINE_ID,
 ) {
   const enteredAt = new Date(Date.now() - daysAgo * 86400 * 1000);
   fakeRecords.set(id, {
     id,
     pipeline_id: pipelineId,
+    object_id: OBJECT_ID,
     current_stage_id: stageId,
     stage_entered_at: enteredAt.toISOString(),
     field_values: { value },
@@ -457,6 +430,96 @@ describe('getPipelineSummary', () => {
 
     expect(result.totals.openDeals).toBe(1);
     expect(result.totals.totalOpenValue).toBe(30000);
+  });
+
+  it('includes records without pipeline_id that match the object type', async () => {
+    seedPipeline();
+    seedStages();
+
+    // Record with pipeline_id set
+    seedRecord('rec-assigned', 'stage-prospecting', 10000, 5, OWNER_ID, PIPELINE_ID);
+    // Record without pipeline_id (created before auto-assignment)
+    seedRecord('rec-unassigned', 'stage-prospecting', 20000, 3, OWNER_ID, null);
+
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
+
+    const prospecting = result.stages.find((s) => s.name === 'Prospecting')!;
+    expect(prospecting.recordCount).toBe(2);
+    expect(prospecting.totalValue).toBe(30000);
+    expect(result.totals.openDeals).toBe(2);
+    expect(result.totals.totalOpenValue).toBe(30000);
+  });
+
+  it('resolves stage from field_values.stage when current_stage_id is not set', async () => {
+    seedPipeline();
+    seedStages();
+
+    // Record with no current_stage_id but field_values.stage matching a stage name
+    const enteredAt = new Date(Date.now() - 5 * 86400 * 1000);
+    fakeRecords.set('rec-fv-stage', {
+      id: 'rec-fv-stage',
+      pipeline_id: PIPELINE_ID,
+      object_id: OBJECT_ID,
+      current_stage_id: null,
+      stage_entered_at: enteredAt.toISOString(),
+      field_values: { value: 15000, stage: 'Qualification' },
+      owner_id: OWNER_ID,
+      name: 'Record with stage field',
+    });
+
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
+
+    const qualification = result.stages.find((s) => s.name === 'Qualification')!;
+    expect(qualification.recordCount).toBe(1);
+    expect(qualification.totalValue).toBe(15000);
+  });
+
+  it('uses per-record probability from field_values when available', async () => {
+    seedPipeline();
+    seedStages();
+
+    // Record with per-record probability set to 50 (stage default is 10 for Prospecting)
+    const enteredAt = new Date(Date.now() - 5 * 86400 * 1000);
+    fakeRecords.set('rec-prob', {
+      id: 'rec-prob',
+      pipeline_id: PIPELINE_ID,
+      object_id: OBJECT_ID,
+      current_stage_id: 'stage-prospecting',
+      stage_entered_at: enteredAt.toISOString(),
+      field_values: { value: 20000, probability: 50 },
+      owner_id: OWNER_ID,
+      name: 'Record with probability',
+    });
+
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
+
+    const prospecting = result.stages.find((s) => s.name === 'Prospecting')!;
+    expect(prospecting.totalValue).toBe(20000);
+    // weightedValue = 20000 * (50 / 100) = 10000 (not 2000 from stage default 10%)
+    expect(prospecting.weightedValue).toBe(10000);
+  });
+
+  it('extracts value from alternative field names (amount, deal_value)', async () => {
+    seedPipeline();
+    seedStages();
+
+    // Record using "amount" instead of "value"
+    const enteredAt = new Date(Date.now() - 3 * 86400 * 1000);
+    fakeRecords.set('rec-amount', {
+      id: 'rec-amount',
+      pipeline_id: PIPELINE_ID,
+      object_id: OBJECT_ID,
+      current_stage_id: 'stage-prospecting',
+      stage_entered_at: enteredAt.toISOString(),
+      field_values: { amount: 35000 },
+      owner_id: OWNER_ID,
+      name: 'Record with amount',
+    });
+
+    const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
+
+    const prospecting = result.stages.find((s) => s.name === 'Prospecting')!;
+    expect(prospecting.totalValue).toBe(35000);
   });
 });
 
