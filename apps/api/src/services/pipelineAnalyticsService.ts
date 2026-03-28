@@ -181,13 +181,14 @@ export async function getPipelineSummary(
   // Fetch all records belonging to this pipeline, including records that
   // belong to the pipeline's object type but have not yet been explicitly
   // assigned a pipeline_id (created before auto-assignment was working).
+  // Scoped to tenant — not owner — so analytics match the kanban board
+  // which shows all tenant records.
   const recordsResult = await pool.query(
     `SELECT r.id, r.field_values, r.current_stage_id, r.stage_entered_at
      FROM records r
      WHERE r.tenant_id = $1
-       AND r.owner_id = $2
-       AND (r.pipeline_id = $3 OR (r.object_id = $4 AND r.pipeline_id IS NULL))`,
-    [tenantId, ownerId, pipelineId, pipeline.objectId],
+       AND (r.pipeline_id = $2 OR (r.object_id = $3 AND r.pipeline_id IS NULL))`,
+    [tenantId, pipelineId, pipeline.objectId],
   );
 
   const records = recordsResult.rows as Array<Record<string, unknown>>;
@@ -287,10 +288,9 @@ export async function getPipelineSummary(
      JOIN records r ON r.id = sh.record_id
      WHERE sh.pipeline_id = $1
        AND r.tenant_id = $2
-       AND r.owner_id = $3
        AND sd.stage_type = 'won'
-       AND sh.changed_at >= $4`,
-    [pipelineId, tenantId, ownerId, monthStart],
+       AND sh.changed_at >= $3`,
+    [pipelineId, tenantId, monthStart],
   );
 
   const wonRow = wonThisMonthResult.rows[0] as Record<string, unknown>;
@@ -304,10 +304,9 @@ export async function getPipelineSummary(
      JOIN records r ON r.id = sh.record_id
      WHERE sh.pipeline_id = $1
        AND r.tenant_id = $2
-       AND r.owner_id = $3
        AND sd.stage_type = 'lost'
-       AND sh.changed_at >= $4`,
-    [pipelineId, tenantId, ownerId, monthStart],
+       AND sh.changed_at >= $3`,
+    [pipelineId, tenantId, monthStart],
   );
 
   const lostRow = lostThisMonthResult.rows[0] as Record<string, unknown>;
@@ -522,15 +521,14 @@ export async function getOverdueRecords(
        r.owner_id
      FROM records r
      JOIN stage_definitions sd ON sd.id = r.current_stage_id
-     WHERE (r.pipeline_id = $1 OR (r.object_id = $4 AND r.pipeline_id IS NULL))
+     WHERE (r.pipeline_id = $1 OR (r.object_id = $3 AND r.pipeline_id IS NULL))
        AND r.tenant_id = $2
-       AND r.owner_id = $3
        AND r.current_stage_id IS NOT NULL
        AND sd.expected_days IS NOT NULL
        AND r.stage_entered_at IS NOT NULL
        AND EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 > sd.expected_days
      ORDER BY (EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 - sd.expected_days) DESC`,
-    [pipelineId, tenantId, ownerId, pipeline.objectId],
+    [pipelineId, tenantId, pipeline.objectId],
   );
 
   logger.info({ pipelineId, ownerId, count: result.rows.length }, 'Overdue records fetched');

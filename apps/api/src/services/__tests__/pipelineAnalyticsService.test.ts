@@ -62,14 +62,10 @@ const {
     // Fetch all records for summary (new query pattern — fetches individual records)
     // Exclude overdue/joined queries by checking for absence of STAGE_DEFINITIONS join
     if (s.includes('R.FIELD_VALUES') && s.includes('R.CURRENT_STAGE_ID') && s.includes('R.STAGE_ENTERED_AT') && s.includes('R.OBJECT_ID') && !s.includes('JOIN STAGE_DEFINITIONS')) {
-      const tenantId = params![0] as string;
-      const ownerId = params![1] as string;
-      const pipelineId = params![2] as string;
-      const objectId = params![3] as string;
-      void tenantId;
+      const pipelineId = params![1] as string;
+      const objectId = params![2] as string;
       const matching = [...fakeRecords.values()].filter(
         (r) =>
-          r.owner_id === ownerId &&
           (r.pipeline_id === pipelineId || (r.object_id === objectId && !r.pipeline_id)),
       );
       const rows = matching.map((r) => ({
@@ -84,8 +80,7 @@ const {
     // Won this month (COUNT DISTINCT + SUM)
     if (s.includes('WON_COUNT') && s.includes('WON_VALUE')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![2] as string;
-      const monthStart = params![3] as Date;
+      const monthStart = params![2] as Date;
       const wonStageIds = [...fakeStages.values()]
         .filter((st) => st.stage_type === 'won')
         .map((st) => st.id as string);
@@ -99,7 +94,7 @@ const {
           new Date(h.changed_at as string) >= monthStart
         ) {
           const rec = fakeRecords.get(h.record_id as string);
-          if (rec && rec.owner_id === ownerId && !seenRecords.has(rec.id as string)) {
+          if (rec && !seenRecords.has(rec.id as string)) {
             seenRecords.add(rec.id as string);
             wonCount++;
             const fv = (rec.field_values as Record<string, unknown>) ?? {};
@@ -113,8 +108,7 @@ const {
     // Lost this month
     if (s.includes('LOST_COUNT')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![2] as string;
-      const monthStart = params![3] as Date;
+      const monthStart = params![2] as Date;
       const lostStageIds = [...fakeStages.values()]
         .filter((st) => st.stage_type === 'lost')
         .map((st) => st.id as string);
@@ -127,7 +121,7 @@ const {
           new Date(h.changed_at as string) >= monthStart
         ) {
           const rec = fakeRecords.get(h.record_id as string);
-          if (rec && rec.owner_id === ownerId && !seenRecords.has(rec.id as string)) {
+          if (rec && !seenRecords.has(rec.id as string)) {
             seenRecords.add(rec.id as string);
             lostCount++;
           }
@@ -187,15 +181,13 @@ const {
     // Overdue records (for getOverdueRecords)
     if (s.includes('DAYS_IN_STAGE') && s.includes('STAGE_NAME') && s.includes('RECORDS R')) {
       const pipelineId = params![0] as string;
-      const ownerId = params![2] as string;
-      const objectId = params![3] as string;
+      const objectId = params![2] as string;
       const results: Array<Record<string, unknown>> = [];
       for (const r of fakeRecords.values()) {
         if (
           !(r.pipeline_id === pipelineId || (r.object_id === objectId && !r.pipeline_id)) ||
           !r.current_stage_id ||
-          !r.stage_entered_at ||
-          r.owner_id !== ownerId
+          !r.stage_entered_at
         )
           continue;
         const stage = fakeStages.get(r.current_stage_id as string);
@@ -386,7 +378,7 @@ describe('getPipelineSummary', () => {
     expect(prospecting.overdueCount).toBe(1);
   });
 
-  it('only includes records for the given ownerId', async () => {
+  it('includes all tenant records regardless of ownerId', async () => {
     seedPipeline();
     seedStages();
 
@@ -396,8 +388,8 @@ describe('getPipelineSummary', () => {
     const result = await getPipelineSummary(TENANT_ID, PIPELINE_ID, OWNER_ID);
 
     const prospecting = result.stages.find((s) => s.name === 'Prospecting')!;
-    expect(prospecting.recordCount).toBe(1);
-    expect(prospecting.totalValue).toBe(10000);
+    expect(prospecting.recordCount).toBe(2);
+    expect(prospecting.totalValue).toBe(30000);
   });
 
   it('counts wonThisMonth and lostThisMonth from stage history', async () => {
