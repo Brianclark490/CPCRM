@@ -30,6 +30,14 @@ vi.mock('../../services/recordService.js', () => ({
   deleteRecord: mockDeleteRecord,
 }));
 
+// ─── Mock the record relationship service ────────────────────────────────────
+
+const mockLinkRecords = vi.fn();
+
+vi.mock('../../services/recordRelationshipService.js', () => ({
+  linkRecords: mockLinkRecords,
+}));
+
 // ─── Mock the lead conversion service ────────────────────────────────────────
 
 const mockConvertLead = vi.fn();
@@ -98,6 +106,7 @@ function mockRes() {
 describe('POST /objects/:apiName/records', () => {
   beforeEach(() => {
     mockCreateRecord.mockReset();
+    mockLinkRecords.mockReset();
   });
 
   it('returns 201 with the created record on success', async () => {
@@ -192,6 +201,91 @@ describe('POST /objects/:apiName/records', () => {
     await handleCreateRecord(req, res);
 
     expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', {}, 'user-123', undefined);
+  });
+
+  it('calls linkRecords when linkTo is provided', async () => {
+    const now = new Date();
+    const expectedRecord = {
+      id: 'rec-uuid',
+      objectId: 'obj-id',
+      name: 'Follow-up call',
+      fieldValues: { subject: 'Follow-up call' },
+      ownerId: 'user-123',
+      createdAt: now,
+      updatedAt: now,
+      fields: [],
+    };
+
+    mockCreateRecord.mockResolvedValue(expectedRecord);
+    mockLinkRecords.mockResolvedValue({ id: 'link-uuid' });
+
+    const req = mockReq({
+      fieldValues: { subject: 'Follow-up call' },
+      linkTo: { recordId: VALID_UUID, relationshipId: VALID_UUID_2 },
+    });
+    const res = mockRes();
+
+    await handleCreateRecord(req, res);
+
+    expect(mockCreateRecord).toHaveBeenCalled();
+    expect(mockLinkRecords).toHaveBeenCalledWith(
+      'tenant-abc',
+      'rec-uuid',
+      VALID_UUID_2,
+      VALID_UUID,
+      'user-123',
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(expectedRecord);
+  });
+
+  it('still returns 201 even if linkRecords fails', async () => {
+    const now = new Date();
+    const expectedRecord = {
+      id: 'rec-uuid',
+      objectId: 'obj-id',
+      name: 'Follow-up call',
+      fieldValues: { subject: 'Follow-up call' },
+      ownerId: 'user-123',
+      createdAt: now,
+      updatedAt: now,
+      fields: [],
+    };
+
+    mockCreateRecord.mockResolvedValue(expectedRecord);
+    mockLinkRecords.mockRejectedValue(new Error('Link failed'));
+
+    const req = mockReq({
+      fieldValues: { subject: 'Follow-up call' },
+      linkTo: { recordId: VALID_UUID, relationshipId: VALID_UUID_2 },
+    });
+    const res = mockRes();
+
+    await handleCreateRecord(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(expectedRecord);
+  });
+
+  it('does not call linkRecords when linkTo is not provided', async () => {
+    const now = new Date();
+    mockCreateRecord.mockResolvedValue({
+      id: 'rec-uuid',
+      objectId: 'obj-id',
+      name: 'Test',
+      fieldValues: { name: 'Test' },
+      ownerId: 'user-123',
+      createdAt: now,
+      updatedAt: now,
+      fields: [],
+    });
+
+    const req = mockReq({ fieldValues: { name: 'Test' } });
+    const res = mockRes();
+
+    await handleCreateRecord(req, res);
+
+    expect(mockLinkRecords).not.toHaveBeenCalled();
   });
 });
 
