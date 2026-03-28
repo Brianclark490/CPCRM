@@ -187,6 +187,7 @@ describe('requireTenant middleware', () => {
 
   it('calls next when tenant exists and is active', async () => {
     mockQuery.mockResolvedValue({ rows: [{ id: 'tenant-abc', status: 'active' }] });
+    mockSyncUserRecord.mockResolvedValue({ userRecordId: 'user-record-123', created: false });
 
     const req = {
       path: '/accounts',
@@ -203,6 +204,7 @@ describe('requireTenant middleware', () => {
     expect(next).toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();
+    expect(req.user?.recordId).toBe('user-record-123');
   });
 
   it('returns 503 when the database query fails', async () => {

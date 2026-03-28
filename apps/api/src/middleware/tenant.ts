@@ -82,20 +82,26 @@ export async function requireTenant(
     return;
   }
 
-  // Sync User record (best-effort, non-blocking for the response)
-  // Creates or updates a User record from the Descope JWT claims.
-  syncUserRecord({
-    tenantId: req.user.tenantId!,
-    descopeUserId: req.user.userId,
-    email: req.user.email,
-    displayName: req.user.name,
-    role: req.user.roles?.[0],
-  }).catch((err: unknown) => {
+  // Sync User record (best-effort — errors do not block the request).
+  // Creates or updates a User record from the Descope JWT claims and sets
+  // the CRM record ID on the request for downstream handlers.
+  try {
+    const syncResult = await syncUserRecord({
+      tenantId: req.user.tenantId!,
+      descopeUserId: req.user.userId,
+      email: req.user.email,
+      displayName: req.user.name,
+      role: req.user.roles?.[0],
+    });
+    if (syncResult.userRecordId) {
+      req.user.recordId = syncResult.userRecordId;
+    }
+  } catch (err: unknown) {
     logger.warn(
       { err, userId: req.user?.userId, tenantId: req.user?.tenantId },
       'User sync failed (best-effort)',
     );
-  });
+  }
 
   next();
 }

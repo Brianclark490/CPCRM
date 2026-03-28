@@ -112,6 +112,8 @@ export interface AuthenticatedRequest extends Request {
     roles: string[];
     /** Descope permissions assigned to the user (from the JWT tenant claim) */
     permissions: string[];
+    /** CRM User record ID — set by user sync after JWT validation */
+    recordId?: string;
   };
 }
 

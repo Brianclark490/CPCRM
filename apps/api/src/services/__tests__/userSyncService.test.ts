@@ -12,11 +12,12 @@ vi.mock('../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { syncUserRecord } = await import('../userSyncService.js');
+const { syncUserRecord, clearUserRecordCache } = await import('../userSyncService.js');
 
 describe('syncUserRecord', () => {
   beforeEach(() => {
     mockQuery.mockReset();
+    clearUserRecordCache();
   });
 
   it('returns empty result when User object definition is not found', async () => {
@@ -240,5 +241,42 @@ describe('syncUserRecord', () => {
     const backfillUpdatedBySql = backfillUpdatedByCall[0] as string;
     expect(backfillUpdatedBySql).toContain('updated_by_record_id');
     expect(backfillUpdatedBySql).toContain('updated_by');
+  });
+
+  it('returns cached result on repeated calls with unchanged data', async () => {
+    const objectId = 'obj-user-id';
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: objectId }] }) // object_definitions SELECT
+      .mockResolvedValueOnce({ rows: [] }) // records SELECT (no existing user)
+      .mockResolvedValueOnce({ rows: [{ id: 'new-record-id' }] }) // records INSERT
+      .mockResolvedValueOnce({ rowCount: 0 }) // backfill owner_record_id
+      .mockResolvedValueOnce({ rowCount: 0 }); // backfill updated_by_record_id
+
+    // First call — hits DB and populates cache
+    const first = await syncUserRecord({
+      tenantId: 'tenant-1',
+      descopeUserId: 'descope-abc',
+      email: 'user@example.com',
+      displayName: 'Test User',
+      role: 'admin',
+    });
+
+    expect(first.created).toBe(true);
+    expect(mockQuery).toHaveBeenCalledTimes(5);
+
+    // Second call — same data, should return from cache without DB queries
+    const second = await syncUserRecord({
+      tenantId: 'tenant-1',
+      descopeUserId: 'descope-abc',
+      email: 'user@example.com',
+      displayName: 'Test User',
+      role: 'admin',
+    });
+
+    expect(second.created).toBe(false);
+    expect(second.userRecordId).toBe(first.userRecordId);
+    // No additional DB queries should have been made
+    expect(mockQuery).toHaveBeenCalledTimes(5);
   });
 });

@@ -17,6 +17,29 @@ export interface SyncUserResult {
   created: boolean;
 }
 
+// ─── Cache ────────────────────────────────────────────────────────────────────
+
+/** TTL for cached user record IDs (5 minutes). */
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface CacheEntry {
+  userRecordId: string;
+  displayName?: string;
+  role?: string;
+  expiresAt: number;
+}
+
+const userRecordCache = new Map<string, CacheEntry>();
+
+function cacheKey(tenantId: string, descopeUserId: string): string {
+  return `${tenantId}:${descopeUserId}`;
+}
+
+/** Exported for testing only. */
+export function clearUserRecordCache(): void {
+  userRecordCache.clear();
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 /**
@@ -31,6 +54,18 @@ export interface SyncUserResult {
  */
 export async function syncUserRecord(input: SyncUserInput): Promise<SyncUserResult> {
   const { tenantId, descopeUserId, email, displayName, role } = input;
+
+  // Fast path: if the user record ID is cached and nothing changed, return immediately.
+  const key = cacheKey(tenantId, descopeUserId);
+  const cached = userRecordCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    const nothingChanged =
+      (displayName === undefined || cached.displayName === displayName) &&
+      (role === undefined || cached.role === role);
+    if (nothingChanged) {
+      return { userRecordId: cached.userRecordId, created: false };
+    }
+  }
 
   // Find the User object definition for this tenant
   const objResult = await pool.query(
@@ -82,6 +117,14 @@ export async function syncUserRecord(input: SyncUserInput): Promise<SyncUserResu
     // Backfill owner_record_id on records owned by this user
     await backfillOwnerRecordId(tenantId, descopeUserId, existing.id);
 
+    // Populate cache
+    userRecordCache.set(key, {
+      userRecordId: existing.id,
+      displayName: (existingFieldValues['display_name'] as string | undefined) ?? displayName,
+      role: (existingFieldValues['role'] as string | undefined) ?? role,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
+
     return { userRecordId: existing.id, created: false };
   }
 
@@ -106,6 +149,14 @@ export async function syncUserRecord(input: SyncUserInput): Promise<SyncUserResu
 
   // Backfill owner_record_id on records owned by this user
   await backfillOwnerRecordId(tenantId, descopeUserId, id);
+
+  // Populate cache
+  userRecordCache.set(key, {
+    userRecordId: id,
+    displayName,
+    role,
+    expiresAt: Date.now() + CACHE_TTL_MS,
+  });
 
   return { userRecordId: id, created: true };
 }

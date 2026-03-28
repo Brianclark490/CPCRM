@@ -244,7 +244,7 @@ const FILE_FIELDS: FieldSeed[] = [
 const USER_FIELDS: FieldSeed[] = [
   { objectApiName: 'user', apiName: 'email',            label: 'Email',            fieldType: 'email',    required: true,  options: {}, sortOrder: 1, isSystem: true },
   { objectApiName: 'user', apiName: 'display_name',     label: 'Display Name',     fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 2, isSystem: true },
-  { objectApiName: 'user', apiName: 'role',             label: 'Role',             fieldType: 'dropdown', required: false, options: { choices: ['admin', 'manager', 'user', 'read_only'] }, sortOrder: 3, isSystem: true },
+  { objectApiName: 'user', apiName: 'role',             label: 'Role',             fieldType: 'dropdown', required: false, options: { choices: ['Admin', 'Manager', 'User', 'Read Only'] }, sortOrder: 3, isSystem: true },
   { objectApiName: 'user', apiName: 'descope_user_id',  label: 'Descope User ID',  fieldType: 'text',     required: true,  options: { max_length: 255 }, sortOrder: 4, isSystem: true },
   { objectApiName: 'user', apiName: 'job_title',        label: 'Job Title',        fieldType: 'text',     required: false, options: { max_length: 200 }, sortOrder: 5 },
   { objectApiName: 'user', apiName: 'phone',            label: 'Phone',            fieldType: 'phone',    required: false, options: {}, sortOrder: 6 },
@@ -488,7 +488,6 @@ const LAYOUT_FIELD_SEEDS: LayoutFieldSeed[] = [
   { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'job_title',       section: 1, sectionLabel: 'Details',  sortOrder: 5, width: 'full' },
   { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'phone',           section: 1, sectionLabel: 'Details',  sortOrder: 6, width: 'half' },
   { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'avatar_url',      section: 1, sectionLabel: 'Details',  sortOrder: 7, width: 'full' },
-  { objectApiName: 'user', layoutName: 'Default Form', fieldApiName: 'descope_user_id', section: 2, sectionLabel: 'System',   sortOrder: 8, width: 'full' },
   // ── User "List View" ─────────────────────────────────────────────────
   { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'display_name', section: 0, sectionLabel: null, sortOrder: 1, width: 'full' },
   { objectApiName: 'user', layoutName: 'List View', fieldApiName: 'email',        section: 0, sectionLabel: null, sortOrder: 2, width: 'full' },
