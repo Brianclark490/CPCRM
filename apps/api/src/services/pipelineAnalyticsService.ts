@@ -149,7 +149,8 @@ function resolveRecordStage(
 /**
  * Returns per-stage aggregates and pipeline totals for a given pipeline.
  *
- * Record-level access: only records owned by the specified user are included.
+ * Record-level access: all records in the tenant are included so that
+ * analytics match the kanban board display.
  *
  * @throws {Error} NOT_FOUND — pipeline does not exist
  */
@@ -495,7 +496,8 @@ export async function getPipelineVelocity(
 /**
  * Returns records that have exceeded their stage's expected_days threshold.
  *
- * Record-level access: only records owned by the specified user are included.
+ * Record-level access: all records in the tenant are included so that
+ * analytics match the kanban board display.
  *
  * @throws {Error} NOT_FOUND — pipeline does not exist
  */
