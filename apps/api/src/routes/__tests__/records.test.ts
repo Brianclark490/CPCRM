@@ -203,7 +203,7 @@ describe('POST /objects/:apiName/records', () => {
     expect(mockCreateRecord).toHaveBeenCalledWith('tenant-abc', 'account', {}, 'user-123', undefined);
   });
 
-  it('calls linkRecords when linkTo is provided', async () => {
+  it('calls linkRecords when linkTo is provided with source direction', async () => {
     const now = new Date();
     const expectedRecord = {
       id: 'rec-uuid',
@@ -221,22 +221,57 @@ describe('POST /objects/:apiName/records', () => {
 
     const req = mockReq({
       fieldValues: { subject: 'Follow-up call' },
-      linkTo: { recordId: VALID_UUID, relationshipId: VALID_UUID_2 },
+      linkTo: { recordId: VALID_UUID, relationshipId: VALID_UUID_2, direction: 'source' },
     });
     const res = mockRes();
 
     await handleCreateRecord(req, res);
 
     expect(mockCreateRecord).toHaveBeenCalled();
+    // When parent direction is 'source', parent is the source and new record is the target
     expect(mockLinkRecords).toHaveBeenCalledWith(
       'tenant-abc',
-      'rec-uuid',
-      VALID_UUID_2,
-      VALID_UUID,
+      VALID_UUID,       // source = parent record
+      VALID_UUID_2,     // relationship
+      'rec-uuid',       // target = new record
       'user-123',
     );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(expectedRecord);
+  });
+
+  it('calls linkRecords with new record as source when parent direction is target', async () => {
+    const now = new Date();
+    const expectedRecord = {
+      id: 'rec-uuid',
+      objectId: 'obj-id',
+      name: 'Follow-up call',
+      fieldValues: { subject: 'Follow-up call' },
+      ownerId: 'user-123',
+      createdAt: now,
+      updatedAt: now,
+      fields: [],
+    };
+
+    mockCreateRecord.mockResolvedValue(expectedRecord);
+    mockLinkRecords.mockResolvedValue({ id: 'link-uuid' });
+
+    const req = mockReq({
+      fieldValues: { subject: 'Follow-up call' },
+      linkTo: { recordId: VALID_UUID, relationshipId: VALID_UUID_2, direction: 'target' },
+    });
+    const res = mockRes();
+
+    await handleCreateRecord(req, res);
+
+    // When parent direction is 'target', new record is the source and parent is the target
+    expect(mockLinkRecords).toHaveBeenCalledWith(
+      'tenant-abc',
+      'rec-uuid',       // source = new record
+      VALID_UUID_2,     // relationship
+      VALID_UUID,       // target = parent record
+      'user-123',
+    );
   });
 
   it('still returns 201 even if linkRecords fails', async () => {

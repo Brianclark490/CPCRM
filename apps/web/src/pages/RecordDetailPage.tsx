@@ -1078,6 +1078,7 @@ export function RecordDetailPage() {
                 parentRecordId={record.id}
                 parentRecordName={record.name}
                 relationshipId={rel.relationshipId}
+                parentDirection={rel.direction}
                 sessionToken={sessionToken}
                 onCreated={() => {
                   setInlineFormRelId(null);

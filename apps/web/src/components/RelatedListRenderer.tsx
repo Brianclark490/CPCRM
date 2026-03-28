@@ -54,11 +54,12 @@ export function RelatedListRenderer({
           parentRecordId={record.id}
           parentRecordName={record.name}
           relationshipId={relationshipId}
+          parentDirection={relationship.direction}
           sessionToken={sessionToken}
           onCreated={handleCreated}
           onCancel={() => setShowInlineForm(false)}
         />
-      )}
+      )}}
 
       {relationship.records.length === 0 && !showInlineForm ? (
         <div className={styles.relatedEmpty}>No related records</div>

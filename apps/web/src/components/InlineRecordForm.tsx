@@ -26,6 +26,8 @@ interface InlineRecordFormProps {
   parentRecordName: string;
   /** The relationship definition ID for the link */
   relationshipId: string;
+  /** The parent record's direction in the relationship ('source' or 'target') */
+  parentDirection: 'source' | 'target';
   /** Auth session token */
   sessionToken: string;
   /** Called after a record is successfully created */
@@ -47,6 +49,7 @@ export function InlineRecordForm({
   parentRecordId,
   parentRecordName,
   relationshipId,
+  parentDirection,
   sessionToken,
   onCreated,
   onCancel,
@@ -162,6 +165,7 @@ export function InlineRecordForm({
             linkTo: {
               recordId: parentRecordId,
               relationshipId,
+              direction: parentDirection,
             },
           }),
         },

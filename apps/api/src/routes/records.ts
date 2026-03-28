@@ -33,7 +33,8 @@ export const recordsRouter = Router({ mergeParams: true });
  *     "fieldValues": { "field_api_name": value, ... },
  *     "linkTo": {
  *       "recordId": "parent-record-uuid",
- *       "relationshipId": "relationship-definition-uuid"
+ *       "relationshipId": "relationship-definition-uuid",
+ *       "direction": "source" | "target"
  *     }
  *   }
  *
@@ -54,7 +55,7 @@ export async function handleCreateRecord(
 
   const body = req.body as {
     fieldValues?: Record<string, unknown>;
-    linkTo?: { recordId?: string; relationshipId?: string };
+    linkTo?: { recordId?: string; relationshipId?: string; direction?: 'source' | 'target' };
   };
   const fieldValues = body.fieldValues ?? {};
 
@@ -64,11 +65,18 @@ export async function handleCreateRecord(
     // If linkTo is provided, create the relationship link in the same request
     if (body.linkTo?.recordId && body.linkTo?.relationshipId) {
       try {
+        // direction indicates the parent record's role in the relationship
+        // If the parent is the 'source', the new record is the target → source=parent, target=new
+        // If the parent is the 'target', the new record is the source → source=new, target=parent
+        const parentIsSource = body.linkTo.direction === 'source';
+        const sourceId = parentIsSource ? body.linkTo.recordId : record.id;
+        const targetId = parentIsSource ? record.id : body.linkTo.recordId;
+
         await linkRecords(
           req.user!.tenantId!,
-          record.id,
+          sourceId,
           body.linkTo.relationshipId,
-          body.linkTo.recordId,
+          targetId,
           ownerId,
         );
       } catch (linkErr: unknown) {
