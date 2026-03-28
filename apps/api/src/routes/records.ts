@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
@@ -17,6 +18,13 @@ import { getStagesForObjectType } from '../services/pipelineService.js';
 import { logger } from '../lib/logger.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const recordsRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // limit each IP to 300 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 export const recordsRouter = Router({ mergeParams: true });
 
@@ -441,11 +449,11 @@ export async function handleGetPipelineStages(
   }
 }
 
-recordsRouter.get('/pipeline-stages', requireAuth, requireTenant, handleGetPipelineStages);
-recordsRouter.post('/:id/move-stage', requireAuth, requireTenant, handleMoveStage);
-recordsRouter.post('/:id/convert', requireAuth, requireTenant, handleConvertLead);
-recordsRouter.post('/', requireAuth, requireTenant, handleCreateRecord);
-recordsRouter.get('/', requireAuth, requireTenant, handleListRecords);
-recordsRouter.get('/:id', requireAuth, requireTenant, handleGetRecord);
-recordsRouter.put('/:id', requireAuth, requireTenant, handleUpdateRecord);
-recordsRouter.delete('/:id', requireAuth, requireTenant, handleDeleteRecord);
+recordsRouter.get('/pipeline-stages', recordsRateLimiter, requireAuth, requireTenant, handleGetPipelineStages);
+recordsRouter.post('/:id/move-stage', recordsRateLimiter, requireAuth, requireTenant, handleMoveStage);
+recordsRouter.post('/:id/convert', recordsRateLimiter, requireAuth, requireTenant, handleConvertLead);
+recordsRouter.post('/', recordsRateLimiter, requireAuth, requireTenant, handleCreateRecord);
+recordsRouter.get('/', recordsRateLimiter, requireAuth, requireTenant, handleListRecords);
+recordsRouter.get('/:id', recordsRateLimiter, requireAuth, requireTenant, handleGetRecord);
+recordsRouter.put('/:id', recordsRateLimiter, requireAuth, requireTenant, handleUpdateRecord);
+recordsRouter.delete('/:id', recordsRateLimiter, requireAuth, requireTenant, handleDeleteRecord);
