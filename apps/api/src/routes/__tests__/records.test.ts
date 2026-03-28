@@ -46,6 +46,14 @@ vi.mock('../../services/stageMovementService.js', () => ({
   moveRecordStage: mockMoveRecordStage,
 }));
 
+// ─── Mock the pipeline service ───────────────────────────────────────────────
+
+const mockGetStagesForObjectType = vi.fn();
+
+vi.mock('../../services/pipelineService.js', () => ({
+  getStagesForObjectType: mockGetStagesForObjectType,
+}));
+
 // ─── Mock logger so tests stay silent ────────────────────────────────────────
 
 vi.mock('../../lib/logger.js', () => ({
@@ -60,6 +68,7 @@ const {
   handleDeleteRecord,
   handleConvertLead,
   handleMoveStage,
+  handleGetPipelineStages,
 } = await import('../records.js');
 
 // ─── Constants ───────────────────────────────────────────────────────────────

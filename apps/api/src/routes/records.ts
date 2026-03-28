@@ -13,6 +13,7 @@ import {
 import { convertLead } from '../services/leadConversionService.js';
 import { moveRecordStage } from '../services/stageMovementService.js';
 import type { GateValidationError } from '../services/stageMovementService.js';
+import { getStagesForObjectType } from '../services/pipelineService.js';
 import { logger } from '../lib/logger.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -409,6 +410,38 @@ export async function handleMoveStage(
   }
 }
 
+/**
+ * GET /objects/:apiName/records/pipeline-stages
+ *
+ * Returns the stages for the default pipeline of the specified object type.
+ * Used by the record detail page to populate the pipeline-aware stage selector.
+ *
+ * Responses:
+ *   200  – { pipelineId: string | null, stages: StageDefinition[] }
+ *   401  – missing or invalid Bearer token
+ *   403  – no active tenant context
+ *   500  – unexpected server error
+ */
+export async function handleGetPipelineStages(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const { apiName } = req.params as { apiName: string };
+
+  try {
+    const result = await getStagesForObjectType(req.user!.tenantId!, apiName);
+    if (!result) {
+      res.status(200).json({ pipelineId: null, stages: [] });
+      return;
+    }
+    res.status(200).json(result);
+  } catch (err: unknown) {
+    logger.error({ err, apiName }, 'Unexpected error fetching pipeline stages');
+    res.status(500).json({ error: 'An unexpected error occurred' });
+  }
+}
+
+recordsRouter.get('/pipeline-stages', requireAuth, requireTenant, handleGetPipelineStages);
 recordsRouter.post('/:id/move-stage', requireAuth, requireTenant, handleMoveStage);
 recordsRouter.post('/:id/convert', requireAuth, requireTenant, handleConvertLead);
 recordsRouter.post('/', requireAuth, requireTenant, handleCreateRecord);

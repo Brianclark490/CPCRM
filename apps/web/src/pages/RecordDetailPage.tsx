@@ -4,6 +4,7 @@ import { useSession } from '@descope/react-sdk';
 import { FieldRenderer } from '../components/FieldRenderer.js';
 import { FieldInput } from '../components/FieldInput.js';
 import { ConvertLeadModal } from '../components/ConvertLeadModal.js';
+import { StageSelector } from '../components/StageSelector.js';
 import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
 import { usePageLayout } from '../usePageLayout.js';
 import { useTenantLocale } from '../useTenantLocale.js';
@@ -53,6 +54,8 @@ interface RecordDetail {
   updatedBy?: string;
   updatedByName?: string;
   updatedByRecordId?: string;
+  pipelineId?: string;
+  currentStageId?: string;
   createdAt: string;
   updatedAt: string;
   fields: RecordField[];
@@ -164,6 +167,9 @@ export function RecordDetailPage() {
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
 
+  // Pipeline state — tracks whether this object type has a pipeline
+  const [hasPipeline, setHasPipeline] = useState(false);
+
   // Page layout (new metadata-driven renderer; null = use legacy form)
   const { layout: pageLayout } = usePageLayout(apiName);
 
@@ -270,6 +276,42 @@ export function RecordDetailPage() {
     };
   }, [sessionToken, apiName]);
 
+  // ── Check for pipeline stages ──────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!sessionToken || !apiName) return;
+
+    let cancelled = false;
+
+    const checkPipeline = async () => {
+      try {
+        const response = await fetch(
+          `/api/objects/${apiName}/records/pipeline-stages`,
+          { headers: { Authorization: `Bearer ${sessionToken}` } },
+        );
+        if (cancelled || !response.ok) return;
+
+        const data = (await response.json()) as { pipelineId: string | null; stages: unknown[] };
+        if (!cancelled) {
+          setHasPipeline(
+            data.pipelineId !== null &&
+            data.pipelineId !== undefined &&
+            Array.isArray(data.stages) &&
+            data.stages.length > 0,
+          );
+        }
+      } catch {
+        // Best-effort — default to no pipeline
+      }
+    };
+
+    void checkPipeline();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionToken, apiName]);
+
   // ── Edit handlers ───────────────────────────────────────────────────────────
 
   const handleEditClick = () => {
@@ -302,7 +344,9 @@ export function RecordDetailPage() {
       for (const section of layoutSections) {
         for (const field of section.fields) {
           // Skip formula fields — they are computed, not user-provided
+          // Skip stage field when pipeline is active — stage is managed via move-stage API
           if (field.fieldRequired && field.fieldType !== 'formula') {
+            if (field.fieldApiName === 'stage' && hasPipeline) continue;
             const val = formValues[field.fieldApiName];
             if (val === undefined || val === null || val === '') {
               setSaveError(`Field '${field.fieldLabel}' is required`);
@@ -317,6 +361,14 @@ export function RecordDetailPage() {
     setSaveError(null);
     setSaveSuccess(false);
 
+    // Exclude the stage field from the update when pipeline is active
+    // (stage changes go through the move-stage API)
+    let valuesToSave = formValues;
+    if (hasPipeline && 'stage' in formValues) {
+      const { stage: _stage, ...rest } = formValues;
+      valuesToSave = rest;
+    }
+
     try {
       const response = await fetch(
         `/api/objects/${apiName}/records/${record.id}`,
@@ -326,7 +378,7 @@ export function RecordDetailPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${sessionToken}`,
           },
-          body: JSON.stringify({ fieldValues: formValues }),
+          body: JSON.stringify({ fieldValues: valuesToSave }),
         },
       );
 
@@ -443,6 +495,25 @@ export function RecordDetailPage() {
     fieldType: string,
     width: string,
   ) => {
+    // Replace the standalone stage field with the pipeline-aware stage selector
+    if (fieldApiName === 'stage' && hasPipeline && record) {
+      return (
+        <div
+          key={fieldApiName}
+          className={`${styles.fieldGroup} ${width === 'full' ? styles.fieldFull : ''}`}
+        >
+          <span className={styles.fieldLabel}>{fieldLabel}</span>
+          <StageSelector
+            apiName={apiName!}
+            recordId={record.id}
+            currentStageId={record.currentStageId}
+            currentStageName={record.fieldValues['stage'] as string | undefined}
+            onStageChanged={() => void loadRecord()}
+          />
+        </div>
+      );
+    }
+
     const field = record?.fields.find((f) => f.apiName === fieldApiName);
     const value = field?.value ?? record?.fieldValues[fieldApiName] ?? null;
     const isEmpty =
@@ -468,6 +539,28 @@ export function RecordDetailPage() {
   const renderEditField = (
     field: LayoutFieldWithMetadata,
   ) => {
+    // Replace the standalone stage field with the pipeline-aware stage selector
+    // Stage changes go through the move-stage API, not the regular form save
+    if (field.fieldApiName === 'stage' && hasPipeline && record) {
+      return (
+        <div
+          key={field.fieldApiName}
+          className={`${styles.formField} ${field.width === 'full' ? styles.formFieldFull : ''}`}
+        >
+          <label className={styles.label} htmlFor={`field-${field.fieldApiName}`}>
+            {field.fieldLabel}
+          </label>
+          <StageSelector
+            apiName={apiName!}
+            recordId={record.id}
+            currentStageId={record.currentStageId}
+            currentStageName={record.fieldValues['stage'] as string | undefined}
+            onStageChanged={() => void loadRecord()}
+          />
+        </div>
+      );
+    }
+
     // Formula fields show the computed value from the record, not from formValues
     const value = field.fieldType === 'formula'
       ? (record?.fields.find((f) => f.apiName === field.fieldApiName)?.value ?? null)

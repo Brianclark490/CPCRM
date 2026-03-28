@@ -119,6 +119,14 @@ function mockFetch(recordResponse?: ReturnType<typeof makeRecordResponse>) {
       } as Response);
     }
 
+    // Pipeline stages
+    if (typeof url === 'string' && url.includes('/pipeline-stages')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ pipelineId: null, stages: [] }),
+      } as Response);
+    }
+
     // Single record
     if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
       return Promise.resolve({

@@ -828,3 +828,40 @@ export async function reorderStages(
 
   return result.rows.map((row: Record<string, unknown>) => rowToStage(row));
 }
+
+/**
+ * Returns the stages for the default pipeline of an object type.
+ * Used by the record detail page to populate the stage selector.
+ *
+ * @returns pipeline ID and stages, or null if no default pipeline exists
+ */
+export async function getStagesForObjectType(
+  tenantId: string,
+  objectApiName: string,
+): Promise<{ pipelineId: string; stages: StageDefinition[] } | null> {
+  const objResult = await pool.query(
+    'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
+    [objectApiName, tenantId],
+  );
+  if (objResult.rows.length === 0) return null;
+
+  const objectId = (objResult.rows[0] as Record<string, unknown>).id as string;
+
+  const pipelineResult = await pool.query(
+    'SELECT id FROM pipeline_definitions WHERE object_id = $1 AND is_default = true AND tenant_id = $2',
+    [objectId, tenantId],
+  );
+  if (pipelineResult.rows.length === 0) return null;
+
+  const pipelineId = (pipelineResult.rows[0] as Record<string, unknown>).id as string;
+
+  const stagesResult = await pool.query(
+    'SELECT * FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
+    [pipelineId, tenantId],
+  );
+
+  return {
+    pipelineId,
+    stages: stagesResult.rows.map((r: Record<string, unknown>) => rowToStage(r)),
+  };
+}
