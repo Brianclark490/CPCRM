@@ -124,3 +124,33 @@
   background-color: var(--color-error-subtle);
   color: var(--color-error-text);
 }
+
+/* ── Narrow column adjustments (< 200px) ─────────────────── */
+
+@container (max-width: 200px) {
+  .card {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .cardRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+
+  .cardFooter {
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .ownerAvatar {
+    width: 18px;
+    height: 18px;
+    font-size: 8px;
+  }
+
+  .daysIndicator {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+}
