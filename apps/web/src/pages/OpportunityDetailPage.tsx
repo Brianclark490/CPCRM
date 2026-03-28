@@ -219,8 +219,22 @@ export function OpportunityDetailPage() {
         });
         if (cancelled || !detailResponse.ok) return;
 
+        interface RawStage {
+          id: string;
+          name: string;
+          apiName?: string;
+          api_name?: string;
+          sortOrder?: number;
+          sort_order?: number;
+          stageType?: string;
+          stage_type?: string;
+          defaultProbability?: number | null;
+          default_probability?: number | null;
+          colour?: string | null;
+        }
+
         const detail = (await detailResponse.json()) as {
-          stages: PipelineStage[];
+          stages: RawStage[];
         };
 
         if (!cancelled) {
@@ -229,11 +243,11 @@ export function OpportunityDetailPage() {
               .map((s) => ({
                 id: s.id,
                 name: s.name,
-                apiName: s.apiName ?? (s as Record<string, unknown>).api_name as string,
-                sortOrder: s.sortOrder ?? (s as Record<string, unknown>).sort_order as number,
-                stageType: s.stageType ?? (s as Record<string, unknown>).stage_type as string,
-                defaultProbability: s.defaultProbability ?? (s as Record<string, unknown>).default_probability as number | null,
-                colour: s.colour ?? (s as Record<string, unknown>).colour as string | null,
+                apiName: s.apiName ?? s.api_name ?? '',
+                sortOrder: s.sortOrder ?? s.sort_order ?? 0,
+                stageType: s.stageType ?? s.stage_type ?? 'open',
+                defaultProbability: s.defaultProbability ?? s.default_probability ?? null,
+                colour: s.colour ?? null,
               }))
               .sort((a, b) => a.sortOrder - b.sortOrder),
           );
