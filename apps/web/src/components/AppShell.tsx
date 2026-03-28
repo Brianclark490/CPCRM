@@ -62,6 +62,14 @@ export function AppShell({ children }: AppShellProps) {
           >
             Dashboard
           </NavLink>
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `${styles.headerNavLink} ${isActive ? styles.headerNavLinkActive : ''}`
+            }
+          >
+            Admin
+          </NavLink>
         </div>
 
         <div className={styles.headerActions}>

@@ -1,4 +1,6 @@
-import { useUser } from '@descope/react-sdk';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { useUser, useSession } from '@descope/react-sdk';
 import { StatCard } from '../components/StatCard.js';
 import { ActivityPanel, type ActivityItem } from '../components/ActivityPanel.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
@@ -18,111 +20,61 @@ const ReportsIcon = () => (
   </svg>
 );
 
-const stats = [
-  {
-    label: 'Open Opportunities',
-    value: '—',
-    meta: 'No data yet',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="icon-opp" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#D946EF" />
-            <stop offset="100%" stopColor="#6366F1" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M3 6h18v14H3z"
-          stroke="url(#icon-opp)"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-          fill="none"
-        />
-        <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" stroke="url(#icon-opp)" strokeWidth="1.5" />
-        <path
-          d="M12 11v4M10 13h4"
-          stroke="url(#icon-opp)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    label: 'Pipeline Value',
-    value: '—',
-    meta: 'No data yet',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="icon-pipe" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#F97316" />
-            <stop offset="100%" stopColor="#D946EF" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
-          stroke="url(#icon-pipe)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-        <circle cx="12" cy="12" r="4" stroke="url(#icon-pipe)" strokeWidth="1.5" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Active Accounts',
-    value: '—',
-    meta: 'No data yet',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="icon-acc" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#6366F1" />
-            <stop offset="100%" stopColor="#F97316" />
-          </linearGradient>
-        </defs>
-        <circle cx="9" cy="7" r="3.5" stroke="url(#icon-acc)" strokeWidth="1.5" />
-        <path
-          d="M2 20c0-3.314 3.134-6 7-6s7 2.686 7 6"
-          stroke="url(#icon-acc)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-        <path
-          d="M16 10c1.657 0 3 1.343 3 3"
-          stroke="url(#icon-acc)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-        <path
-          d="M16 16c2.485 0 4.5 1.343 4.5 3"
-          stroke="url(#icon-acc)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    label: 'Tasks to Review',
-    value: '—',
-    meta: 'No data yet',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="icon-task" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#D946EF" />
-            <stop offset="100%" stopColor="#F97316" />
-          </linearGradient>
-        </defs>
-        <rect x="3" y="5" width="18" height="16" rx="2" stroke="url(#icon-task)" strokeWidth="1.5" />
-        <path d="M3 10h18" stroke="url(#icon-task)" strokeWidth="1.5" />
-        <path d="M8 3v4M16 3v4" stroke="url(#icon-task)" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-];
+const statIcons = {
+  opportunity: (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="icon-opp" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#D946EF" />
+          <stop offset="100%" stopColor="#6366F1" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M3 6h18v14H3z"
+        stroke="url(#icon-opp)"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" stroke="url(#icon-opp)" strokeWidth="1.5" />
+      <path
+        d="M12 11v4M10 13h4"
+        stroke="url(#icon-opp)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+  account: (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="icon-acc" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#6366F1" />
+          <stop offset="100%" stopColor="#F97316" />
+        </linearGradient>
+      </defs>
+      <circle cx="9" cy="7" r="3.5" stroke="url(#icon-acc)" strokeWidth="1.5" />
+      <path
+        d="M2 20c0-3.314 3.134-6 7-6s7 2.686 7 6"
+        stroke="url(#icon-acc)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M16 10c1.657 0 3 1.343 3 3"
+        stroke="url(#icon-acc)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M16 16c2.485 0 4.5 1.343 4.5 3"
+        stroke="url(#icon-acc)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+};
 
 const activityItems: ActivityItem[] = [
   { id: '1', text: 'Opportunity created', time: 'Just now', type: 'opportunity' },
@@ -136,8 +88,53 @@ const pipelineStages = [
   { label: 'Close', value: 30, count: 9 },
 ];
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function DashboardPage() {
   const { user } = useUser();
+  const { sessionToken } = useSession();
+
+  const [opportunityCount, setOpportunityCount] = useState<number | null>(null);
+  const [accountCount, setAccountCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!sessionToken) return;
+
+    const headers = { Authorization: `Bearer ${sessionToken}` };
+
+    fetch('/api/objects/opportunity/records?limit=1&page=1', { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { total?: number } | null) => {
+        if (data && typeof data.total === 'number') {
+          setOpportunityCount(data.total);
+        }
+      })
+      .catch(() => { /* best-effort */ });
+
+    fetch('/api/objects/account/records?limit=1&page=1', { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { total?: number } | null) => {
+        if (data && typeof data.total === 'number') {
+          setAccountCount(data.total);
+        }
+      })
+      .catch(() => { /* best-effort */ });
+  }, [sessionToken]);
+
+  const stats = [
+    {
+      label: 'Open Opportunities',
+      value: opportunityCount !== null ? String(opportunityCount) : '—',
+      meta: opportunityCount !== null ? `${opportunityCount} total` : 'Loading…',
+      icon: statIcons.opportunity,
+    },
+    {
+      label: 'Active Accounts',
+      value: accountCount !== null ? String(accountCount) : '—',
+      meta: accountCount !== null ? `${accountCount} total` : 'Loading…',
+      icon: statIcons.account,
+    },
+  ];
 
   return (
     <div className={styles.page}>
@@ -181,18 +178,24 @@ export function DashboardPage() {
       <div className={styles.actionsRow}>
         <span className={styles.actionsLabel}>Quick Actions</span>
         <div className={styles.actionsButtons}>
-          <PrimaryButton size="sm">
-            <PlusIcon />
-            New Opportunity
-          </PrimaryButton>
-          <PrimaryButton size="sm">
-            <PlusIcon />
-            New Account
-          </PrimaryButton>
-          <PrimaryButton variant="outline" size="sm">
-            <ReportsIcon />
-            View Reports
-          </PrimaryButton>
+          <Link to="/objects/opportunity/new">
+            <PrimaryButton size="sm">
+              <PlusIcon />
+              New Opportunity
+            </PrimaryButton>
+          </Link>
+          <Link to="/objects/account/new">
+            <PrimaryButton size="sm">
+              <PlusIcon />
+              New Account
+            </PrimaryButton>
+          </Link>
+          <Link to="/objects/opportunity">
+            <PrimaryButton variant="outline" size="sm">
+              <ReportsIcon />
+              View Reports
+            </PrimaryButton>
+          </Link>
         </div>
       </div>
     </div>
