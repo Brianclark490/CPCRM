@@ -103,6 +103,15 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
+    // All stages for a pipeline (used by assignDefaultPipeline to match stage names)
+    if (s.includes('FROM STAGE_DEFINITIONS') && s.includes('PIPELINE_ID') && s.includes('ORDER BY SORT_ORDER ASC') && !s.includes("STAGE_TYPE = 'OPEN'") && !s.includes('LIMIT 1')) {
+      const pipelineId = params![0] as string;
+      const stages = [...fakeStages.values()]
+        .filter((st) => st.pipeline_id === pipelineId)
+        .sort((a, b) => (a.sort_order as number) - (b.sort_order as number));
+      return { rows: stages };
+    }
+
     // First open stage lookup
     if (s.includes('FROM STAGE_DEFINITIONS') && s.includes("STAGE_TYPE = 'OPEN'") && s.includes('LIMIT 1')) {
       const pipelineId = params![0] as string;
@@ -200,6 +209,7 @@ function seedPipelineAndStages(): void {
     id: 'stage-prospect',
     pipeline_id: 'pipeline-1',
     name: 'Prospecting',
+    api_name: 'prospecting',
     sort_order: 0,
     stage_type: 'open',
     default_probability: 10,
@@ -209,6 +219,7 @@ function seedPipelineAndStages(): void {
     id: 'stage-qualification',
     pipeline_id: 'pipeline-1',
     name: 'Qualification',
+    api_name: 'qualification',
     sort_order: 1,
     stage_type: 'open',
     default_probability: 25,
@@ -218,6 +229,7 @@ function seedPipelineAndStages(): void {
     id: 'stage-proposal',
     pipeline_id: 'pipeline-1',
     name: 'Proposal',
+    api_name: 'proposal',
     sort_order: 2,
     stage_type: 'open',
     default_probability: 60,
@@ -227,6 +239,7 @@ function seedPipelineAndStages(): void {
     id: 'stage-won',
     pipeline_id: 'pipeline-1',
     name: 'Closed Won',
+    api_name: 'closed_won',
     sort_order: 3,
     stage_type: 'won',
     default_probability: 100,
@@ -236,6 +249,7 @@ function seedPipelineAndStages(): void {
     id: 'stage-lost',
     pipeline_id: 'pipeline-1',
     name: 'Closed Lost',
+    api_name: 'closed_lost',
     sort_order: 4,
     stage_type: 'lost',
     default_probability: 0,

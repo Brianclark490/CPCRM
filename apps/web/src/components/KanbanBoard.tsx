@@ -194,21 +194,24 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const [summaryData, setSummaryData] = useState<PipelineSummaryData | null>(null);
   const [overdueRecords, setOverdueRecords] = useState<OverdueRecord[]>([]);
 
-  // ── Fetch pipeline definition ─────────────────────────────
+  // ── Fetch pipeline + records ─────────────────────────────
   useEffect(() => {
-    if (!sessionToken || !objectId) return;
+    if (!sessionToken || !objectId || !apiName) return;
 
     let cancelled = false;
 
-    const loadPipeline = async () => {
+    const loadAll = async () => {
       try {
+        // 1. Find pipeline for this object
         const response = await fetch('/api/admin/pipelines', {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
 
         if (cancelled || !response.ok) {
-          if (!cancelled) setError('Failed to load pipeline configuration.');
-          setLoading(false);
+          if (!cancelled) {
+            setError('Failed to load pipeline configuration.');
+            setLoading(false);
+          }
           return;
         }
 
@@ -225,62 +228,58 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
           return;
         }
 
-        // Fetch full pipeline with stages
-        const detailResponse = await fetch(`/api/admin/pipelines/${match.id}`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        // 2. Fetch pipeline detail AND records in parallel
+        const [detailResponse, recordsResponse] = await Promise.all([
+          fetch(`/api/admin/pipelines/${match.id}`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          }),
+          fetch(`/api/objects/${apiName}/records?limit=100`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          }),
+        ]);
 
-        if (cancelled || !detailResponse.ok) {
-          if (!cancelled) setError('Failed to load pipeline stages.');
+        if (cancelled) return;
+
+        if (!detailResponse.ok) {
+          setError('Failed to load pipeline stages.');
           setLoading(false);
           return;
         }
 
         const detail = (await detailResponse.json()) as PipelineDefinition;
-        if (!cancelled) {
-          setPipeline(detail);
+
+        let records: RecordItem[] = [];
+        if (recordsResponse.ok) {
+          const recordsData = (await recordsResponse.json()) as RecordsResponse;
+          records = Array.isArray(recordsData.data) ? recordsData.data : [];
+        }
+
+        if (cancelled) return;
+
+        // Set both pipeline and records in the same render batch
+        setPipeline(detail);
+        setAllRecords(records);
+
+        if (!recordsResponse.ok) {
+          setError('Failed to load records for the pipeline.');
         }
       } catch {
         if (!cancelled) {
           setError('Failed to connect to the server.');
+        }
+      } finally {
+        if (!cancelled) {
           setLoading(false);
         }
       }
     };
 
-    void loadPipeline();
+    void loadAll();
 
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, objectId]);
-
-  // ── Fetch all records ─────────────────────────────────────
-  const loadRecords = useCallback(async () => {
-    if (!sessionToken || !apiName) return;
-
-    try {
-      const response = await fetch(
-        `/api/objects/${apiName}/records?limit=100`,
-        { headers: { Authorization: `Bearer ${sessionToken}` } },
-      );
-
-      if (response.ok) {
-        const data = (await response.json()) as RecordsResponse;
-        setAllRecords(data.data);
-      }
-    } catch {
-      // Best-effort
-    } finally {
-      setLoading(false);
-    }
-  }, [sessionToken, apiName]);
-
-  useEffect(() => {
-    if (pipeline) {
-      void loadRecords();
-    }
-  }, [pipeline, loadRecords]);
+  }, [sessionToken, objectId, apiName]);
 
   // ── Fetch pipeline analytics ──────────────────────────────
   const loadAnalytics = useCallback(async () => {
@@ -412,13 +411,29 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     const record = allRecords.find((r) => r.id === recordId);
     if (!record) return;
 
-    // Compute effective current stage: for unassigned records, use the first
-    // open stage (where they are visually displayed on the board)
-    const firstOpenStageId = pipeline.stages
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .find((s) => s.stageType === 'open')?.id;
-    const effectiveCurrentStageId = record.currentStageId ?? firstOpenStageId;
+    // Compute effective current stage using the same resolution logic as
+    // the column placement so that dropping onto the same column is a no-op
+    const sortedStages = pipeline.stages.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+    const localStageIds = new Set(sortedStages.map((s) => s.id));
+    const localStageByName = new Map<string, string>();
+    for (const s of sortedStages) {
+      localStageByName.set(s.name.toLowerCase(), s.id);
+      localStageByName.set(s.apiName.toLowerCase(), s.id);
+    }
+
+    let effectiveCurrentStageId: string | undefined;
+    // Match fieldValues.stage first (same priority as column placement)
+    const dropFv = record.fieldValues ?? {};
+    const stageField = dropFv.stage;
+    if (typeof stageField === 'string' && stageField.trim()) {
+      effectiveCurrentStageId = localStageByName.get(stageField.trim().toLowerCase());
+    }
+    if (!effectiveCurrentStageId && record.currentStageId && localStageIds.has(record.currentStageId)) {
+      effectiveCurrentStageId = record.currentStageId;
+    }
+    if (!effectiveCurrentStageId) {
+      effectiveCurrentStageId = sortedStages.find((s) => s.stageType === 'open')?.id;
+    }
 
     if (effectiveCurrentStageId === targetStageId) return;
 
@@ -501,28 +516,59 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const stageIds = new Set(stages.map((s) => s.id));
   const firstOpenStage = stages.find((s) => s.stageType === 'open');
 
-  const stageRecordMap = new Map<string, KanbanCardRecord[]>();
+  // Build a lookup map for matching stage names / api_names (case-insensitive)
+  const stageByName = new Map<string, StageDefinition>();
   for (const stage of stages) {
-    const stageRecords = allRecords
-      .filter((r) => r.currentStageId === stage.id)
-      .map((r) => recordToCard(r, stage.expectedDays ?? null));
-
-    stageRecordMap.set(stage.id, applyFilters(stageRecords, filters));
+    if (stage.name) stageByName.set(stage.name.toLowerCase(), stage);
+    if (stage.apiName) stageByName.set(stage.apiName.toLowerCase(), stage);
   }
 
-  // Place records without a pipeline/stage assignment into the first open stage
-  if (firstOpenStage) {
-    const unassigned = allRecords
-      .filter((r) => !r.currentStageId || !stageIds.has(r.currentStageId))
-      .map((r) => recordToCard(r, firstOpenStage.expectedDays ?? null));
-
-    if (unassigned.length > 0) {
-      const existing = stageRecordMap.get(firstOpenStage.id) ?? [];
-      stageRecordMap.set(firstOpenStage.id, [
-        ...existing,
-        ...applyFilters(unassigned, filters),
-      ]);
+  /**
+   * Resolve which pipeline stage a record belongs to.
+   *
+   * Priority:
+   *   1. fieldValues.stage matches a stage name or api_name → use that stage
+   *      (this keeps the pipeline view in sync with the stage dropdown shown
+   *       in the list view)
+   *   2. currentStageId matches a known stage in this pipeline → use it
+   *   3. Fall back to the first open stage
+   */
+  function resolveStageForRecord(record: RecordItem): StageDefinition | null {
+    // 1. Match fieldValues.stage against stage names / api_names
+    const fv = record.fieldValues ?? {};
+    const stageFieldValue = fv.stage;
+    if (typeof stageFieldValue === 'string' && stageFieldValue.trim()) {
+      const matched = stageByName.get(stageFieldValue.trim().toLowerCase());
+      if (matched) return matched;
     }
+
+    // 2. Explicit pipeline assignment
+    if (record.currentStageId && stageIds.has(record.currentStageId)) {
+      return stages.find((s) => s.id === record.currentStageId) ?? null;
+    }
+
+    // 3. Fall back to the first open stage
+    return firstOpenStage ?? null;
+  }
+
+  const stageRecordMap = new Map<string, KanbanCardRecord[]>();
+  for (const stage of stages) {
+    stageRecordMap.set(stage.id, []);
+  }
+
+  for (const record of allRecords) {
+    const resolved = resolveStageForRecord(record);
+    if (!resolved) continue;
+
+    const card = recordToCard(record, resolved.expectedDays ?? null);
+    const current = stageRecordMap.get(resolved.id) ?? [];
+    current.push(card);
+    stageRecordMap.set(resolved.id, current);
+  }
+
+  // Apply filters to all columns
+  for (const [stageId, cards] of stageRecordMap) {
+    stageRecordMap.set(stageId, applyFilters(cards, filters));
   }
 
   // Compute totals

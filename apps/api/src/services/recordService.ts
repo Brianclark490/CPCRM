@@ -862,12 +862,39 @@ export async function updateRecord(
 
   const now = new Date();
 
+  // If the stage field changed and the record has a pipeline, sync current_stage_id
+  const stageFieldChanged = 'stage' in cleanedValues && cleanedValues.stage !== existingRecord.fieldValues.stage;
+  let stageUpdateClause = '';
+  const updateParams: unknown[] = [name, JSON.stringify(mergedValues), now, ownerId, updatedByName ?? null];
+
+  if (stageFieldChanged && existingRecord.pipelineId && typeof cleanedValues.stage === 'string') {
+    const stageValue = cleanedValues.stage.trim().toLowerCase();
+    const stageResult = await pool.query(
+      `SELECT id FROM stage_definitions
+       WHERE pipeline_id = $1 AND tenant_id = $2
+         AND (LOWER(name) = $3 OR LOWER(api_name) = $3)
+       LIMIT 1`,
+      [existingRecord.pipelineId, tenantId, stageValue],
+    );
+
+    if (stageResult.rows.length > 0) {
+      const matchedStageId = (stageResult.rows[0] as Record<string, unknown>).id as string;
+      stageUpdateClause = `, current_stage_id = $${updateParams.length + 1}, stage_entered_at = $${updateParams.length + 2}`;
+      updateParams.push(matchedStageId, now);
+    }
+  }
+
+  updateParams.push(recordId, objectDef.id, tenantId);
+  const idxRecord = updateParams.length - 2;
+  const idxObject = updateParams.length - 1;
+  const idxTenant = updateParams.length;
+
   const result = await pool.query(
     `UPDATE records
-     SET name = $1, field_values = $2, updated_at = $3, updated_by = $4, updated_by_name = $5
-     WHERE id = $6 AND object_id = $7 AND tenant_id = $8
+     SET name = $1, field_values = $2, updated_at = $3, updated_by = $4, updated_by_name = $5${stageUpdateClause}
+     WHERE id = $${idxRecord} AND object_id = $${idxObject} AND tenant_id = $${idxTenant}
      RETURNING *`,
-    [name, JSON.stringify(mergedValues), now, ownerId, updatedByName ?? null, recordId, objectDef.id, tenantId],
+    updateParams,
   );
 
   logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record updated');

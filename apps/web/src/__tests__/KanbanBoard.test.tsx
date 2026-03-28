@@ -583,4 +583,98 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Deal Value')).toBeInTheDocument();
     expect(screen.getByText('Deal Value is required')).toBeInTheDocument();
   });
+
+  it('places records using fieldValues.stage when present', async () => {
+    const stageRecords = {
+      data: [
+        {
+          id: 'rec-s1',
+          name: 'Qualified Lead',
+          fieldValues: { value: 30000, stage: 'Qualification' },
+          ownerId: 'user-1',
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+        {
+          id: 'rec-s2',
+          name: 'Won Deal',
+          fieldValues: { value: 90000, stage: 'Closed Won' },
+          ownerId: 'user-2',
+          createdAt: '2026-02-20T00:00:00Z',
+        },
+        {
+          id: 'rec-s3',
+          name: 'Lowercase Stage',
+          fieldValues: { value: 10000, stage: 'prospecting' },
+          ownerId: 'user-1',
+          createdAt: '2026-03-05T00:00:00Z',
+        },
+      ],
+      total: 3,
+      page: 1,
+      limit: 100,
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockPipeline,
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/objects/opportunity/records')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => stageRecords,
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockSummary,
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockVelocity,
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [],
+          } as Response);
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }),
+    );
+
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Qualified Lead')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Won Deal')).toBeInTheDocument();
+    expect(screen.getByText('Lowercase Stage')).toBeInTheDocument();
+
+    // Qualified Lead should be in Qualification column
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+    expect(qualColumn).toHaveTextContent('Qualified Lead');
+
+    // Won Deal should be in Closed Won column
+    const wonColumn = screen.getByTestId('kanban-column-closed_won');
+    expect(wonColumn).toHaveTextContent('Won Deal');
+
+    // Lowercase Stage should be in Prospecting column (matches apiName)
+    const prospectingColumn = screen.getByTestId('kanban-column-prospecting');
+    expect(prospectingColumn).toHaveTextContent('Lowercase Stage');
+  });
 });
