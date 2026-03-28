@@ -59,7 +59,7 @@ export function RelatedListRenderer({
           onCreated={handleCreated}
           onCancel={() => setShowInlineForm(false)}
         />
-      )}}
+      )}
 
       {relationship.records.length === 0 && !showInlineForm ? (
         <div className={styles.relatedEmpty}>No related records</div>
