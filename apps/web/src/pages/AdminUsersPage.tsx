@@ -17,6 +17,12 @@ interface UsersResponse {
   total: number;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fieldStr(user: CrmUser, key: string): string {
+  return (user.fieldValues[key] as string) || '—';
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function AdminUsersPage() {
@@ -109,9 +115,9 @@ export function AdminUsersPage() {
                           {user.name || '—'}
                         </Link>
                       </td>
-                      <td>{(user.fieldValues.email as string) || '—'}</td>
-                      <td>{(user.fieldValues.role as string) || '—'}</td>
-                      <td>{(user.fieldValues.job_title as string) || '—'}</td>
+                      <td>{fieldStr(user, 'email')}</td>
+                      <td>{fieldStr(user, 'role')}</td>
+                      <td>{fieldStr(user, 'job_title')}</td>
                       <td>
                         <span
                           className={

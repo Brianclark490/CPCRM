@@ -169,7 +169,6 @@ describe('POST /objects/:apiName/records', () => {
 
     await handleCreateRecord(req, res);
 
-
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'An unexpected error occurred' });
   });
