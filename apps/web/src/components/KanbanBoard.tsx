@@ -194,14 +194,15 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const [summaryData, setSummaryData] = useState<PipelineSummaryData | null>(null);
   const [overdueRecords, setOverdueRecords] = useState<OverdueRecord[]>([]);
 
-  // ── Fetch pipeline definition ─────────────────────────────
+  // ── Fetch pipeline + records ─────────────────────────────
   useEffect(() => {
-    if (!sessionToken || !objectId) return;
+    if (!sessionToken || !objectId || !apiName) return;
 
     let cancelled = false;
 
-    const loadPipeline = async () => {
+    const loadAll = async () => {
       try {
+        // 1. Find pipeline for this object
         const response = await fetch('/api/admin/pipelines', {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
@@ -225,64 +226,58 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
           return;
         }
 
-        // Fetch full pipeline with stages
-        const detailResponse = await fetch(`/api/admin/pipelines/${match.id}`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        // 2. Fetch pipeline detail AND records in parallel
+        const [detailResponse, recordsResponse] = await Promise.all([
+          fetch(`/api/admin/pipelines/${match.id}`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          }),
+          fetch(`/api/objects/${apiName}/records?limit=100`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          }),
+        ]);
 
-        if (cancelled || !detailResponse.ok) {
-          if (!cancelled) setError('Failed to load pipeline stages.');
+        if (cancelled) return;
+
+        if (!detailResponse.ok) {
+          setError('Failed to load pipeline stages.');
           setLoading(false);
           return;
         }
 
         const detail = (await detailResponse.json()) as PipelineDefinition;
-        if (!cancelled) {
-          setPipeline(detail);
+
+        let records: RecordItem[] = [];
+        if (recordsResponse.ok) {
+          const recordsData = (await recordsResponse.json()) as RecordsResponse;
+          records = Array.isArray(recordsData.data) ? recordsData.data : [];
+        }
+
+        if (cancelled) return;
+
+        // Set both pipeline and records in the same render batch
+        setPipeline(detail);
+        setAllRecords(records);
+
+        if (!recordsResponse.ok) {
+          setError('Failed to load records for the pipeline.');
         }
       } catch {
         if (!cancelled) {
           setError('Failed to connect to the server.');
+        }
+      } finally {
+        if (!cancelled) {
           setLoading(false);
         }
       }
     };
 
-    void loadPipeline();
+    void loadAll();
 
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, objectId]);
-
-  // ── Fetch all records ─────────────────────────────────────
-  const loadRecords = useCallback(async () => {
-    if (!sessionToken || !apiName) return;
-
-    try {
-      const response = await fetch(
-        `/api/objects/${apiName}/records?limit=100`,
-        { headers: { Authorization: `Bearer ${sessionToken}` } },
-      );
-
-      if (response.ok) {
-        const data = (await response.json()) as RecordsResponse;
-        setAllRecords(data.data ?? []);
-      } else {
-        setError('Failed to load records for the pipeline.');
-      }
-    } catch {
-      setError('Failed to connect to the server.');
-    } finally {
-      setLoading(false);
-    }
-  }, [sessionToken, apiName]);
-
-  useEffect(() => {
-    if (pipeline) {
-      void loadRecords();
-    }
-  }, [pipeline, loadRecords]);
+  }, [sessionToken, objectId, apiName]);
 
   // ── Fetch pipeline analytics ──────────────────────────────
   const loadAnalytics = useCallback(async () => {
