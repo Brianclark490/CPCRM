@@ -202,6 +202,16 @@ export async function handleUpdateRecord(
   const body = req.body as { fieldValues?: Record<string, unknown> };
   const fieldValues = body.fieldValues ?? {};
 
+  // Reject stage changes in field_values for opportunity records —
+  // stage changes must go through POST .../move-stage instead
+  if (apiName === 'opportunity' && 'stage' in fieldValues) {
+    res.status(400).json({
+      error: 'Stage changes are not permitted via field updates. Use POST /api/objects/opportunity/records/:id/move-stage instead.',
+      code: 'VALIDATION_ERROR',
+    });
+    return;
+  }
+
   try {
     const record = await updateRecord(req.user!.tenantId!, apiName, id, fieldValues, ownerId, userName);
     res.status(200).json(record);

@@ -4,46 +4,13 @@ import { pool } from '../db/client.js';
 
 // ─── Local type aliases ───────────────────────────────────────────────────────
 
-export type OpportunityStage =
-  | 'prospecting'
-  | 'qualification'
-  | 'proposal'
-  | 'negotiation'
-  | 'closed_won'
-  | 'closed_lost';
-
-const VALID_STAGES: readonly OpportunityStage[] = [
-  'prospecting',
-  'qualification',
-  'proposal',
-  'negotiation',
-  'closed_won',
-  'closed_lost',
-];
-
-/**
- * Defines which stage transitions are permitted.
- *
- * The pipeline flows forward (prospecting → qualification → proposal →
- * negotiation → closed_won / closed_lost), but also supports stepping
- * back one stage and reopening closed deals.
- */
-export const ALLOWED_STAGE_TRANSITIONS: Readonly<Record<OpportunityStage, readonly OpportunityStage[]>> = {
-  prospecting:   ['qualification', 'closed_lost'],
-  qualification: ['proposal', 'prospecting', 'closed_lost'],
-  proposal:      ['negotiation', 'qualification', 'closed_lost'],
-  negotiation:   ['closed_won', 'closed_lost', 'proposal'],
-  closed_won:    ['negotiation'],
-  closed_lost:   ['prospecting'],
-};
-
 /**
  * Records a single stage change on an opportunity.
  */
 export interface StageTransition {
   /** The stage before the change, or null when the opportunity was first created. */
-  from: OpportunityStage | null;
-  to: OpportunityStage;
+  from: string | null;
+  to: string;
   changedAt: Date;
   /** Descope userId of the user who made the change. */
   changedBy: string;
@@ -59,7 +26,7 @@ export interface Opportunity {
   /** Descope userId of the team member responsible for this opportunity */
   ownerId: string;
   title: string;
-  stage: OpportunityStage;
+  stage: string;
   value?: number;
   /** ISO 4217 currency code (e.g. "GBP", "USD") */
   currency?: string;
@@ -75,12 +42,14 @@ export interface Opportunity {
 
 /**
  * Input parameters for updating an existing opportunity.
+ *
+ * Note: stage changes are NOT permitted here — they must go through
+ * the move-stage endpoint (stageMovementService).
  */
 export interface UpdateOpportunityParams {
   title?: string;
   accountId?: string | null;
   ownerId?: string;
-  stage?: OpportunityStage;
   value?: number | null;
   currency?: string | null;
   expectedCloseDate?: string | null;
@@ -182,33 +151,6 @@ export function validateExpectedCloseDate(date: unknown): string | null {
   return null;
 }
 
-/**
- * Validates the opportunity stage field.
- * Returns an error message string, or null if valid.
- */
-export function validateStage(stage: unknown): string | null {
-  if (stage === undefined || stage === null) return null;
-  if (!VALID_STAGES.includes(stage as OpportunityStage)) {
-    return `Stage must be one of: ${VALID_STAGES.join(', ')}`;
-  }
-  return null;
-}
-
-/**
- * Validates that a stage transition from `from` to `to` is permitted.
- * Returns an error message string, or null if valid.
- */
-export function validateStageTransition(
-  from: OpportunityStage,
-  to: OpportunityStage,
-): string | null {
-  const allowed = ALLOWED_STAGE_TRANSITIONS[from];
-  if (!allowed.includes(to)) {
-    return `Cannot transition from '${from}' to '${to}'. Allowed next stages: ${allowed.join(', ')}`;
-  }
-  return null;
-}
-
 // ─── Row → domain model ───────────────────────────────────────────────────────
 
 function rowToOpportunity(row: Record<string, unknown>): Opportunity {
@@ -218,7 +160,7 @@ function rowToOpportunity(row: Record<string, unknown>): Opportunity {
     accountId: row.account_id != null ? (row.account_id as string) : undefined,
     ownerId: row.owner_id as string,
     title: row.title as string,
-    stage: row.stage as OpportunityStage,
+    stage: row.stage as string,
     value: row.value != null ? Number(row.value) : undefined,
     currency: (row.currency as string | null) ?? undefined,
     expectedCloseDate: row.expected_close_date != null
@@ -373,8 +315,10 @@ export async function getOpportunity(
  *   1. Validate that the opportunity exists and belongs to the tenant.
  *   2. Validate updated fields.
  *   3. If accountId is provided, verify the account exists and belongs to the user.
- *   4. Persist changes to the database, appending a stage transition entry when
- *      the stage changes.
+ *   4. Persist changes to the database.
+ *
+ * Note: stage changes must go through the move-stage endpoint
+ * (stageMovementService), not through this function.
  *
  * Tenant isolation: the tenantId is always taken from the authenticated session.
  *
@@ -447,30 +391,11 @@ export async function updateOpportunity(
     }
   }
 
-  if (params.stage !== undefined) {
-    const stageError = validateStage(params.stage);
-    if (stageError) {
-      const err = new Error(stageError) as Error & { code: string };
-      err.code = 'VALIDATION_ERROR';
-      throw err;
-    }
-
-    if (params.stage !== existing.stage) {
-      const transitionError = validateStageTransition(existing.stage, params.stage);
-      if (transitionError) {
-        const err = new Error(transitionError) as Error & { code: string };
-        err.code = 'INVALID_STAGE_TRANSITION';
-        throw err;
-      }
-    }
-  }
-
   // Step 3 — compute updated values
   const changedFields: string[] = [];
   if (params.title !== undefined && params.title.trim() !== existing.title) changedFields.push('title');
   if (params.accountId !== undefined && (params.accountId?.trim() ?? null) !== (existing.accountId ?? null)) changedFields.push('accountId');
   if (params.ownerId !== undefined && params.ownerId !== existing.ownerId) changedFields.push('ownerId');
-  if (params.stage !== undefined && params.stage !== existing.stage) changedFields.push('stage');
   if (params.value !== undefined && params.value !== existing.value) changedFields.push('value');
   if (params.currency !== undefined && (params.currency?.trim() || undefined) !== existing.currency) changedFields.push('currency');
   if (params.expectedCloseDate !== undefined) {
@@ -482,18 +407,9 @@ export async function updateOpportunity(
 
   const now = new Date();
 
-  const newStageHistory: StageTransition[] =
-    params.stage !== undefined && params.stage !== existing.stage
-      ? [
-          ...existing.stageHistory,
-          { from: existing.stage, to: params.stage, changedAt: now, changedBy: requestingUserId },
-        ]
-      : existing.stageHistory;
-
   const newTitle = params.title !== undefined ? params.title.trim() : existing.title;
   const newAccountId = params.accountId !== undefined ? (params.accountId?.trim() ?? null) : (existing.accountId ?? null);
   const newOwnerId = params.ownerId !== undefined ? params.ownerId : existing.ownerId;
-  const newStage = params.stage !== undefined ? params.stage : existing.stage;
   const newValue = params.value !== undefined ? (params.value ?? null) : (existing.value ?? null);
   const newCurrency = params.currency !== undefined
     ? (params.currency?.trim() || null)
@@ -505,19 +421,17 @@ export async function updateOpportunity(
     ? (params.description?.trim() || null)
     : (existing.description ?? null);
 
-  // Step 4 — persist update
+  // Step 4 — persist update (stage is NOT updated here — use move-stage endpoint)
   const result = await pool.query(
     `UPDATE opportunities
      SET title               = $3,
          account_id          = $4,
          owner_id            = $5,
-         stage               = $6,
-         value               = $7,
-         currency            = $8,
-         expected_close_date = $9,
-         description         = $10,
-         stage_history       = $11,
-         updated_at          = $12
+         value               = $6,
+         currency            = $7,
+         expected_close_date = $8,
+         description         = $9,
+         updated_at          = $10
      WHERE id = $1 AND tenant_id = $2
      RETURNING *`,
     [
@@ -526,12 +440,10 @@ export async function updateOpportunity(
       newTitle,
       newAccountId,
       newOwnerId,
-      newStage,
       newValue,
       newCurrency,
       newExpectedCloseDate,
       newDescription,
-      JSON.stringify(newStageHistory),
       now,
     ],
   );

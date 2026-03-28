@@ -386,7 +386,7 @@ describe('PUT /opportunities/:id', () => {
       accountId: 'account-uuid',
       ownerId: 'user-123',
       title: 'Updated Deal',
-      stage: 'qualification',
+      stage: 'prospecting',
       createdAt: now,
       updatedAt: now,
       createdBy: 'user-123',
@@ -395,7 +395,7 @@ describe('PUT /opportunities/:id', () => {
     mockUpdateOpportunity.mockResolvedValue(updatedOpportunity);
 
     const req = mockReq(
-      { title: 'Updated Deal', stage: 'qualification' },
+      { title: 'Updated Deal' },
       { userId: 'user-123', tenantId: 'tenant-abc' },
       { id: 'opp-uuid' },
     );
@@ -406,11 +406,28 @@ describe('PUT /opportunities/:id', () => {
     expect(mockUpdateOpportunity).toHaveBeenCalledWith(
       'opp-uuid',
       'tenant-abc',
-      expect.objectContaining({ title: 'Updated Deal', stage: 'qualification' }),
+      expect.objectContaining({ title: 'Updated Deal' }),
       'user-123',
     );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(updatedOpportunity);
+  });
+
+  it('returns 400 when the request includes a stage change', async () => {
+    const req = mockReq(
+      { title: 'Updated Deal', stage: 'qualification' },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { id: 'opp-uuid' },
+    );
+    const res = mockRes();
+
+    await handleUpdateOpportunity(req, res);
+
+    expect(mockUpdateOpportunity).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+    );
   });
 
   it('returns 400 when the service throws a VALIDATION_ERROR', async () => {
@@ -472,15 +489,15 @@ describe('PUT /opportunities/:id', () => {
       tenantId: 'tenant-abc',
       accountId: 'account-uuid',
       ownerId: 'user-123',
-      title: 'Unchanged',
-      stage: 'proposal',
+      title: 'New Title',
+      stage: 'prospecting',
       createdAt: now,
       updatedAt: now,
       createdBy: 'user-123',
     });
 
     const req = mockReq(
-      { stage: 'proposal' },
+      { title: 'New Title' },
       { userId: 'user-123', tenantId: 'tenant-abc' },
       { id: 'opp-uuid' },
     );
@@ -491,7 +508,7 @@ describe('PUT /opportunities/:id', () => {
     expect(mockUpdateOpportunity).toHaveBeenCalledWith(
       'opp-uuid',
       'tenant-abc',
-      { stage: 'proposal' },
+      { title: 'New Title' },
       'user-123',
     );
   });
