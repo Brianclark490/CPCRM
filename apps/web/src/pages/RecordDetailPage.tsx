@@ -7,6 +7,7 @@ import { ConvertLeadModal } from '../components/ConvertLeadModal.js';
 import { PageLayoutRenderer } from '../components/PageLayoutRenderer.js';
 import { usePageLayout } from '../usePageLayout.js';
 import { useTenantLocale } from '../useTenantLocale.js';
+import type { PageLayout } from '../components/layoutTypes.js';
 import styles from './RecordDetailPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -127,6 +128,57 @@ function groupFieldsBySection(
       ...section,
       fields: [...section.fields].sort((a, b) => a.sortOrder - b.sortOrder),
     }));
+
+  return sections;
+}
+
+/**
+ * Derives edit-mode sections from a PageLayout.
+ * Extracts field components from each tab/section, preserving the layout
+ * ordering and section grouping. Falls back to record.fields metadata.
+ */
+function sectionsFromPageLayout(
+  layout: PageLayout,
+  recordFields: RecordField[],
+): LayoutSection[] {
+  const sections: LayoutSection[] = [];
+
+  for (const tab of layout.tabs) {
+    for (const section of tab.sections) {
+      const fields: LayoutFieldWithMetadata[] = [];
+      let sortOrder = 0;
+
+      for (const component of section.components) {
+        if (component.type === 'field' && component.config.fieldApiName) {
+          const apiName = component.config.fieldApiName;
+          const recordField = recordFields.find(
+            (f) => f.apiName === apiName,
+          );
+          const span = typeof component.config.span === 'number'
+            ? component.config.span
+            : 1;
+
+          fields.push({
+            fieldId: component.id,
+            fieldApiName: apiName,
+            fieldLabel: recordField?.label ?? apiName,
+            fieldType: recordField?.fieldType ?? 'text',
+            fieldRequired: false,
+            fieldOptions: {},
+            sortOrder,
+            section: 0,
+            sectionLabel: section.label,
+            width: span >= (section.columns || 2) ? 'full' : 'half',
+          });
+          sortOrder += 1;
+        }
+      }
+
+      if (fields.length > 0) {
+        sections.push({ label: section.label, fields });
+      }
+    }
+  }
 
   return sections;
 }
@@ -526,24 +578,31 @@ export function RecordDetailPage() {
     );
   }
 
-  // Decide field layout: use layout sections if available, otherwise fall back
-  // to record fields in a single section.
-  const sections: LayoutSection[] = layoutSections ?? [
-    {
-      label: `${singularLabel} details`,
-      fields: record.fields.map((f, i) => ({
-        fieldId: '',
-        fieldApiName: f.apiName,
-        fieldLabel: f.label,
-        fieldType: f.fieldType,
-        fieldRequired: false,
-        fieldOptions: {},
-        sortOrder: i,
-        section: 0,
-        width: f.fieldType === 'textarea' ? 'full' : 'half',
-      })),
-    },
-  ];
+  // Decide field layout: when a page_layout exists prefer its field list and
+  // ordering (for both view and edit mode); otherwise fall back to the old
+  // layout_fields, and finally to record fields in a single section.
+  const pageLayoutSections = pageLayout
+    ? sectionsFromPageLayout(pageLayout, record.fields)
+    : null;
+
+  const sections: LayoutSection[] =
+    (pageLayoutSections && pageLayoutSections.length > 0 ? pageLayoutSections : null) ??
+    layoutSections ?? [
+      {
+        label: `${singularLabel} details`,
+        fields: record.fields.map((f, i) => ({
+          fieldId: '',
+          fieldApiName: f.apiName,
+          fieldLabel: f.label,
+          fieldType: f.fieldType,
+          fieldRequired: false,
+          fieldOptions: {},
+          sortOrder: i,
+          section: 0,
+          width: f.fieldType === 'textarea' ? 'full' : 'half',
+        })),
+      },
+    ];
 
   // ── Page Layout Renderer (metadata-driven) ──────────────────────────────────
   // When a page layout exists and we're not editing, use the new renderer.

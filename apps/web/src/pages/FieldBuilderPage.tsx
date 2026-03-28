@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
-import { LayoutBuilderTab } from '../components/LayoutBuilderTab.js';
 import { slugify, resolveIcon } from '../utils.js';
 import styles from './FieldBuilderPage.module.css';
 
@@ -85,6 +84,17 @@ interface FieldForm {
 
 interface ApiError {
   error: string;
+}
+
+interface PageLayoutListItem {
+  id: string;
+  objectId: string;
+  name: string;
+  role: string | null;
+  isDefault: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 type TabName = 'fields' | 'relationships' | 'page_layout';
@@ -252,6 +262,7 @@ function formFromField(field: FieldDefinition): FieldForm {
 export function FieldBuilderPage() {
   const { id: objectId } = useParams<{ id: string }>();
   const { sessionToken } = useSession();
+  const navigate = useNavigate();
 
   // Object + fields state
   const [objectDef, setObjectDef] = useState<ObjectDefinitionDetail | null>(null);
@@ -290,6 +301,12 @@ export function FieldBuilderPage() {
   const [deleteRelTarget, setDeleteRelTarget] = useState<RelationshipDefinition | null>(null);
   const [deletingRel, setDeletingRel] = useState(false);
   const [deleteRelError, setDeleteRelError] = useState<string | null>(null);
+
+  // Page layout state
+  const [pageLayouts, setPageLayouts] = useState<PageLayoutListItem[]>([]);
+  const [pageLayoutsLoading, setPageLayoutsLoading] = useState(false);
+  const [pageLayoutsError, setPageLayoutsError] = useState<string | null>(null);
+  const [creatingLayout, setCreatingLayout] = useState(false);
 
   // ── Fetch object definition ──────────────────────────────
 
@@ -365,12 +382,70 @@ export function FieldBuilderPage() {
     }
   }, [sessionToken]);
 
+  // ── Fetch page layouts ─────────────────────────────────
+
+  const fetchPageLayouts = useCallback(async () => {
+    if (!sessionToken || !objectId) return;
+
+    setPageLayoutsLoading(true);
+    setPageLayoutsError(null);
+
+    try {
+      const response = await fetch(`/api/admin/objects/${objectId}/page-layouts`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as PageLayoutListItem[];
+        setPageLayouts(data);
+      } else {
+        setPageLayoutsError('Failed to load page layouts.');
+      }
+    } catch {
+      setPageLayoutsError('Failed to connect to the server. Please try again.');
+    } finally {
+      setPageLayoutsLoading(false);
+    }
+  }, [sessionToken, objectId]);
+
   useEffect(() => {
     if (activeTab === 'relationships') {
       void fetchRelationships();
       void fetchAllObjects();
     }
-  }, [activeTab, fetchRelationships, fetchAllObjects]);
+    if (activeTab === 'page_layout') {
+      void fetchPageLayouts();
+    }
+  }, [activeTab, fetchRelationships, fetchAllObjects, fetchPageLayouts]);
+
+  const handleCreateDefaultLayout = async () => {
+    if (!sessionToken || !objectId || !objectDef) return;
+
+    setCreatingLayout(true);
+
+    try {
+      const response = await fetch(`/api/admin/objects/${objectId}/page-layouts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({
+          name: `${objectDef.label} - Default`,
+        }),
+      });
+
+      if (response.ok) {
+        void navigate(`/admin/objects/${objectId}/page-builder`);
+      } else {
+        setPageLayoutsError('Failed to create layout.');
+      }
+    } catch {
+      setPageLayoutsError('Failed to connect to the server. Please try again.');
+    } finally {
+      setCreatingLayout(false);
+    }
+  };
 
   // ── Relationship helpers ────────────────────────────────
 
@@ -1102,11 +1177,81 @@ export function FieldBuilderPage() {
 
       {/* Page Layout tab */}
       {activeTab === 'page_layout' && sessionToken && objectId && (
-        <LayoutBuilderTab
-          objectId={objectId}
-          sessionToken={sessionToken}
-          fields={fields}
-        />
+        <div className={styles.pageLayoutTab}>
+          <p className={styles.pageLayoutDescription}>
+            Configure how record pages look for this object using the page builder.
+          </p>
+
+          {pageLayoutsError && (
+            <p role="alert" className={styles.errorAlert}>
+              {pageLayoutsError}
+            </p>
+          )}
+
+          {pageLayoutsLoading && <p>Loading page layouts…</p>}
+
+          {!pageLayoutsLoading && !pageLayoutsError && pageLayouts.length === 0 && (
+            <div className={styles.emptyState}>
+              <h3 className={styles.emptyTitle}>No page layouts yet</h3>
+              <p className={styles.emptyText}>
+                Create a default layout to start customising how record pages appear.
+              </p>
+              <PrimaryButton
+                size="sm"
+                onClick={() => void handleCreateDefaultLayout()}
+                disabled={creatingLayout}
+              >
+                {creatingLayout ? 'Creating…' : 'Create default layout'}
+              </PrimaryButton>
+            </div>
+          )}
+
+          {!pageLayoutsLoading && pageLayouts.length > 0 && (
+            <>
+              <div className={styles.tableCard}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th className={styles.th}>Name</th>
+                      <th className={styles.th}>Status</th>
+                      <th className={styles.th}>Version</th>
+                      <th className={`${styles.th} ${styles.thActions}`}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageLayouts.map((pl) => (
+                      <tr key={pl.id} className={styles.tr}>
+                        <td className={styles.td}>
+                          <span className={styles.fieldLabel}>{pl.name}</span>
+                        </td>
+                        <td className={styles.td}>
+                          <span className={pl.version > 0 ? styles.requiredBadge : styles.typeBadge}>
+                            {pl.version > 0 ? 'Published' : 'Draft'}
+                          </span>
+                        </td>
+                        <td className={styles.td}>{pl.version}</td>
+                        <td className={styles.td}>
+                          <Link
+                            to={`/admin/objects/${objectId}/page-builder`}
+                            className={styles.breadcrumbLink}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Edit in page builder →
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ marginTop: 'var(--space-4)' }}>
+                <Link to={`/admin/objects/${objectId}/page-builder`} className={styles.breadcrumbLink}>
+                  Open page builder →
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* ── Add/Edit Field Modal ─────────────────────────────── */}
