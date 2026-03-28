@@ -408,6 +408,24 @@ describe('validateFieldValue', () => {
         "Field 'Status' must be one of: active, inactive",
       );
     });
+
+    it('skips choice validation when pipeline_managed is true', () => {
+      const fd = makeFieldDef({
+        fieldType: 'dropdown',
+        label: 'Stage',
+        options: { pipeline_managed: true, choices: ['Prospecting', 'Qualification'] },
+      });
+      expect(validateFieldValue(fd, 'Custom Stage')).toBeNull();
+    });
+
+    it('still validates type for pipeline_managed dropdown', () => {
+      const fd = makeFieldDef({
+        fieldType: 'dropdown',
+        label: 'Stage',
+        options: { pipeline_managed: true },
+      });
+      expect(validateFieldValue(fd, 123)).toBe("Field 'Stage' must be a string");
+    });
   });
 
   describe('multi_select', () => {
