@@ -9,8 +9,11 @@ import { logger } from '../lib/logger.js';
 
 export const adminTenantSettingsRouter = Router();
 
-// All tenant settings routes require authentication, active tenant, and admin role
-const auth = [requireAuth, requireTenant, requireRole('admin')];
+// Read-only routes require authentication and active tenant (no role check)
+const readAuth = [requireAuth, requireTenant];
+
+// Write routes additionally require the admin role
+const writeAuth = [requireAuth, requireTenant, requireRole('admin')];
 
 /** Shape of the settings JSONB column. */
 interface TenantSettings {
@@ -263,5 +266,5 @@ export async function handleUpdateTenantSettings(
 
 // ─── Route bindings ───────────────────────────────────────────────────────────
 
-adminTenantSettingsRouter.get('/', ...auth, handleGetTenantSettings);
-adminTenantSettingsRouter.put('/', ...auth, handleUpdateTenantSettings);
+adminTenantSettingsRouter.get('/', ...readAuth, handleGetTenantSettings);
+adminTenantSettingsRouter.put('/', ...writeAuth, handleUpdateTenantSettings);

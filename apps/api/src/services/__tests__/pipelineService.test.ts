@@ -263,7 +263,13 @@ const {
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: {
+    query: mockQuery,
+    connect: vi.fn(async () => ({
+      query: mockQuery,
+      release: vi.fn(),
+    })),
+  },
 }));
 
 const {
