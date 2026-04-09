@@ -14,6 +14,8 @@ function makeRecord(overrides: Partial<KanbanCardRecord> = {}): KanbanCardRecord
     ownerInitials: 'AB',
     stageEnteredAt: '2026-03-01T00:00:00Z',
     expectedDays: 30,
+    accountName: null,
+    accountId: null,
     ...overrides,
   };
 }
