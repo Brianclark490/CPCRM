@@ -9,13 +9,19 @@ import rateLimit from 'express-rate-limit';
 
 export const pageLayoutsRouter = Router({ mergeParams: true });
 
-// Rate limiter for page layout lookups to mitigate DoS via excessive DB queries
+/**
+ * Stricter rate limiter for page layout lookups.
+ * This endpoint queries the database and should be protected against DoS via
+ * excessive lookups. The global limiter (100/min) is too permissive for this
+ * expensive operation, so we apply a dedicated limit of 100 req/15 min.
+ */
 const pageLayoutsRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs for this route
+  max: 100, // limit each IP to 100 requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
 });
+
 /**
  * GET /objects/:apiName/page-layout
  *
@@ -101,8 +107,8 @@ export async function handleGetEffectivePageLayout(
 
 pageLayoutsRouter.get(
   '/',
+  pageLayoutsRateLimiter,
   requireAuth,
   requireTenant,
-  pageLayoutsRateLimiter,
   handleGetEffectivePageLayout,
 );
