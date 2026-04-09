@@ -265,11 +265,32 @@ export async function handleReorderFields(
   const { objectId } = req.params as { objectId: string };
 
   const body = req.body as {
-    field_ids?: string[];
-    fieldIds?: string[];
+    field_ids?: unknown;
+    fieldIds?: unknown;
   };
 
-  const fieldIds = body.field_ids ?? body.fieldIds ?? [];
+  const rawFieldIds = body.field_ids ?? body.fieldIds;
+  const MAX_REORDER_FIELDS = 1000;
+
+  if (!Array.isArray(rawFieldIds) || rawFieldIds.length === 0) {
+    res.status(400).json({ error: 'field_ids must be a non-empty array', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  if (rawFieldIds.length > MAX_REORDER_FIELDS) {
+    res.status(400).json({
+      error: `field_ids cannot contain more than ${MAX_REORDER_FIELDS} items`,
+      code: 'VALIDATION_ERROR',
+    });
+    return;
+  }
+
+  if (!rawFieldIds.every((id) => typeof id === 'string')) {
+    res.status(400).json({ error: 'field_ids must be an array of strings', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  const fieldIds = rawFieldIds.slice(0, MAX_REORDER_FIELDS);
 
   try {
     const fields = await reorderFieldDefinitions(req.user!.tenantId!, objectId, fieldIds);
