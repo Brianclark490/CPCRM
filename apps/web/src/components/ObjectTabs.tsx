@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { resolveIcon } from '../utils.js';
+import { ObjectIcon } from './ObjectIcon.js';
 import styles from './ObjectTabs.module.css';
 
 interface ObjectDefinitionNavItem {
@@ -176,8 +176,8 @@ export function ObjectTabs({ sessionToken }: ObjectTabsProps) {
             }
           >
             {icon && (
-              <span className={styles.tabIcon} aria-hidden="true">
-                {resolveIcon(icon)}
+              <span className={styles.tabIcon}>
+                <ObjectIcon icon={icon} size={16} />
               </span>
             )}
             {pluralLabel}

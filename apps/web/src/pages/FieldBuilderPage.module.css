@@ -39,14 +39,9 @@
 
 .objectHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-4);
   margin-bottom: var(--space-8);
-}
-
-.objectIcon {
-  font-size: var(--font-size-3xl);
-  line-height: 1;
 }
 
 .objectMeta {
@@ -54,21 +49,11 @@
 }
 
 .objectLabel {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
   font-size: var(--font-size-2xl);
   font-weight: 700;
   color: var(--color-text-primary);
   letter-spacing: -0.025em;
   margin-bottom: var(--space-1);
-}
-
-.objectApiName {
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: var(--font-size-xs);
-  font-weight: 400;
-  color: var(--color-text-muted);
 }
 
 .objectDescription {
