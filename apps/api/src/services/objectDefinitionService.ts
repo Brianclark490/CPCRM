@@ -560,6 +560,8 @@ export async function reorderObjectDefinitions(tenantId: string, orderedIds: str
     );
   }
 
+  const safeLength = Math.min(orderedIds.length, MAX_REORDER_IDS);
+
   // Validate all entries are non-empty strings
   for (const id of orderedIds) {
     if (typeof id !== 'string' || id.trim().length === 0) {
@@ -570,7 +572,7 @@ export async function reorderObjectDefinitions(tenantId: string, orderedIds: str
   // Build a single UPDATE using a VALUES list for efficiency
   const values: unknown[] = [];
   const placeholders: string[] = [];
-  for (let i = 0; i < orderedIds.length; i++) {
+  for (let i = 0; i < safeLength; i++) {
     const paramId = i * 2 + 1;
     const paramOrder = i * 2 + 2;
     placeholders.push(`($${paramId}::uuid, $${paramOrder}::integer)`);
@@ -588,5 +590,5 @@ export async function reorderObjectDefinitions(tenantId: string, orderedIds: str
     values,
   );
 
-  logger.info({ count: orderedIds.length }, 'Object definitions reordered');
+  logger.info({ count: safeLength }, 'Object definitions reordered');
 }
