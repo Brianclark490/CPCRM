@@ -69,4 +69,12 @@ export const config = {
    * Store in Azure Key Vault; do not commit to source control.
    */
   appInsightsConnectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING,
+
+  /**
+   * Trust proxy setting for Express.
+   * When deployed behind Azure's reverse proxy, we need to trust the X-Forwarded-*
+   * headers to get the correct client IP for rate limiting.
+   * Set to true in production, false in development.
+   */
+  trustProxy: nodeEnv === 'production',
 } as const;
