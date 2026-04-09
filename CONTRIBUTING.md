@@ -67,6 +67,24 @@ Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`.
 - Tenant-specific data must always be scoped in queries (never fetch cross-tenant data).
 - Shared packages (`packages/types`, `packages/config`) must remain tenant-agnostic.
 
+## Security Advisory Exceptions
+
+CI runs `npm audit --audit-level=high` on every pull request and fails the build
+on any high or critical advisory (direct or transitive). Dependabot opens weekly
+update PRs for `npm` and `github-actions` — merge those promptly.
+
+If a PR must merge with an unavoidable high/critical advisory:
+
+1. Confirm there is no upstream fix and no viable alternative package.
+2. Add an entry to `docs/security-exceptions.md` with the advisory ID (GHSA or
+   CVE), affected package, severity, rationale, and an expected resolution date.
+3. Apply the `npm-audit-exception` label to the PR and request review from a
+   security reviewer before merging.
+4. Re-audit quarterly; remove the exception as soon as a fix is available.
+
+CodeQL runs on every PR via GitHub's default code-scanning setup. PRs that
+introduce new high or critical alerts must be resolved before merging.
+
 ## Pull Request Checklist
 
 Before requesting a review:
