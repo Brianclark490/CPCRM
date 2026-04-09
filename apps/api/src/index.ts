@@ -28,6 +28,7 @@ import { componentRegistryRouter } from './routes/adminPageLayouts.js';
 import { pageLayoutsRouter } from './routes/pageLayouts.js';
 import { adminTargetsRouter } from './routes/adminTargets.js';
 import { targetsRouter } from './routes/targets.js';
+import { globalLimiter, writeMethodLimiter, authLimiter } from './middleware/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -53,6 +54,9 @@ app.get('/favicon.ico', (_req, res) => {
 
 // All API routes are mounted under /api so they co-exist with the frontend on
 // the same origin without path conflicts.
+app.use('/api', globalLimiter);
+app.use('/api', writeMethodLimiter);
+app.use('/api/me', authLimiter);
 app.use('/api/health', healthRouter);
 app.use('/api/me', meRouter);
 app.use('/api/organisations', organisationsRouter);

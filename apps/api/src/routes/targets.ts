@@ -8,16 +8,8 @@ import {
   getUserTarget,
 } from '../services/salesTargetService.js';
 import { logger } from '../lib/logger.js';
-import rateLimit from 'express-rate-limit';
 
 export const targetsRouter = Router();
-
-const targetsRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // limit each IP to 300 requests per windowMs for targets routes
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -89,5 +81,5 @@ export async function handleGetUserTarget(
 
 // ─── Route registration ──────────────────────────────────────────────────────
 
-targetsRouter.get('/summary', requireAuth, requireTenant, targetsRateLimiter, handleGetTargetSummary);
-targetsRouter.get('/user/:userId', requireAuth, requireTenant, targetsRateLimiter, handleGetUserTarget);
+targetsRouter.get('/summary', requireAuth, requireTenant, handleGetTargetSummary);
+targetsRouter.get('/user/:userId', requireAuth, requireTenant, handleGetUserTarget);
