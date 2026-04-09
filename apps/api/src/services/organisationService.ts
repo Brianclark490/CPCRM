@@ -83,9 +83,6 @@ function validateName(name: unknown): string | null {
  * provision an organisation into a tenant they do not belong to.
  *
  * @throws {Error} with a `code` property of "VALIDATION_ERROR" when input is invalid.
- *
- * TODO: Replace the in-memory stub below with real database writes once a
- * database client is configured (see apps/api/src/db/).
  */
 export async function provisionOrganisation(
   params: ProvisionOrganisationParams,
