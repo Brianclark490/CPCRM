@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git log:*)",
+      "Bash(grep -n \"relationship_definitions\\\\|CREATE TABLE.*relationship\" /c/Dev/CPCRM/apps/api/src/db/migrations/*.sql)"
+    ]
+  }
+}
