@@ -817,6 +817,11 @@ describe('escapeLikePattern', () => {
 // ─── Tests: prototype pollution protection ──────────────────────────────────
 
 describe('prototype pollution protection', () => {
+  beforeEach(() => {
+    fakeRecords.clear();
+    mockQuery.mockClear();
+  });
+
   it('strips __proto__ from field values on create', async () => {
     // JSON.parse produces a real enumerable __proto__ property, matching
     // what express.json() would deliver from malicious input.
