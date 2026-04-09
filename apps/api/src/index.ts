@@ -35,6 +35,10 @@ const __dirname = dirname(__filename);
 
 const app = express();
 
+// Trust proxy headers when behind Azure's load balancer so rate limiters
+// can identify individual clients instead of seeing the proxy's IP
+app.set('trust proxy', config.trustProxy);
+
 // pino-http is a CommonJS module; NodeNext moduleResolution requires an explicit
 // cast to resolve the CJS/ESM interop type mismatch at compile time.
 type PinoHttpFactory = (opts: Options) => HttpLogger;

@@ -38,10 +38,7 @@ describe('writeMethodLimiter', () => {
     expect(nextCalled).toBe(true);
   });
 
-  it('invokes the rate limiter for POST requests', () => {
-    // For POST requests, writeMethodLimiter delegates to the underlying
-    // express-rate-limit instance which requires a full req/res — we just
-    // verify it does NOT call next() synchronously (the real limiter is async).
+  it('delegates POST requests to the underlying write limiter', async () => {
     let nextCalled = false;
     const req = { method: 'POST', ip: '127.0.0.1', app: { get: () => false } } as unknown as Parameters<typeof writeMethodLimiter>[0];
     const res = {
@@ -54,14 +51,15 @@ describe('writeMethodLimiter', () => {
 
     writeMethodLimiter(req, res, next);
 
-    // The write limiter was invoked (either called next or handled the response)
-    // We just verify the wrapper didn't short-circuit like it does for GET.
-    // The actual rate-limit behaviour is tested via integration tests.
-    expect(true).toBe(true);
+    // Allow async execution to complete
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    // The underlying limiter should have been invoked and called next()
+    expect(nextCalled).toBe(true);
   });
 
-  it('invokes the rate limiter for PUT requests', () => {
-    let nextCalledDirectly = false;
+  it('delegates PUT requests to the underlying write limiter', async () => {
+    let nextCalled = false;
     const req = { method: 'PUT', ip: '127.0.0.1', app: { get: () => false } } as unknown as Parameters<typeof writeMethodLimiter>[0];
     const res = {
       setHeader: () => res,
@@ -70,12 +68,15 @@ describe('writeMethodLimiter', () => {
       send: () => res,
     } as unknown as Parameters<typeof writeMethodLimiter>[1];
 
-    // We can't easily detect async next, so just confirm no error thrown
-    writeMethodLimiter(req, res, () => { nextCalledDirectly = true; });
-    expect(true).toBe(true);
+    writeMethodLimiter(req, res, () => { nextCalled = true; });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(nextCalled).toBe(true);
   });
 
-  it('invokes the rate limiter for DELETE requests', () => {
+  it('delegates DELETE requests to the underlying write limiter', async () => {
+    let nextCalled = false;
     const req = { method: 'DELETE', ip: '127.0.0.1', app: { get: () => false } } as unknown as Parameters<typeof writeMethodLimiter>[0];
     const res = {
       setHeader: () => res,
@@ -84,11 +85,15 @@ describe('writeMethodLimiter', () => {
       send: () => res,
     } as unknown as Parameters<typeof writeMethodLimiter>[1];
 
-    writeMethodLimiter(req, res, () => {});
-    expect(true).toBe(true);
+    writeMethodLimiter(req, res, () => { nextCalled = true; });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(nextCalled).toBe(true);
   });
 
-  it('invokes the rate limiter for PATCH requests', () => {
+  it('delegates PATCH requests to the underlying write limiter', async () => {
+    let nextCalled = false;
     const req = { method: 'PATCH', ip: '127.0.0.1', app: { get: () => false } } as unknown as Parameters<typeof writeMethodLimiter>[0];
     const res = {
       setHeader: () => res,
@@ -97,7 +102,10 @@ describe('writeMethodLimiter', () => {
       send: () => res,
     } as unknown as Parameters<typeof writeMethodLimiter>[1];
 
-    writeMethodLimiter(req, res, () => {});
-    expect(true).toBe(true);
+    writeMethodLimiter(req, res, () => { nextCalled = true; });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(nextCalled).toBe(true);
   });
 });
