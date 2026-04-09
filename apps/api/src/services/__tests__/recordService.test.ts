@@ -818,10 +818,13 @@ describe('escapeLikePattern', () => {
 
 describe('prototype pollution protection', () => {
   it('strips __proto__ from field values on create', async () => {
+    // JSON.parse produces a real enumerable __proto__ property, matching
+    // what express.json() would deliver from malicious input.
+    const maliciousInput = JSON.parse('{"name":"Acme Corp","__proto__":{"polluted":true}}') as Record<string, unknown>;
     const result = await createRecord(
       TENANT_ID,
       'account',
-      { name: 'Acme Corp', __proto__: { polluted: true } } as Record<string, unknown>,
+      maliciousInput,
       'user-123',
     );
 
