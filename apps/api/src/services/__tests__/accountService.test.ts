@@ -234,8 +234,12 @@ describe('validateWebsite', () => {
     expect(validateWebsite('')).toBeNull();
   });
 
-  it('returns null for a valid URL', () => {
+  it('returns null for a valid https URL', () => {
     expect(validateWebsite('https://acme.com')).toBeNull();
+  });
+
+  it('returns null for a valid http URL', () => {
+    expect(validateWebsite('http://acme.com')).toBeNull();
   });
 
   it('returns an error for an invalid URL', () => {
@@ -244,6 +248,18 @@ describe('validateWebsite', () => {
 
   it('returns an error for non-string values', () => {
     expect(validateWebsite(42)).toBe('Website must be a string');
+  });
+
+  it('rejects javascript: protocol', () => {
+    expect(validateWebsite('javascript:alert(1)')).toBe('Website must use http or https protocol');
+  });
+
+  it('rejects data: protocol', () => {
+    expect(validateWebsite('data:text/html,<h1>hi</h1>')).toBe('Website must use http or https protocol');
+  });
+
+  it('rejects ftp: protocol', () => {
+    expect(validateWebsite('ftp://files.example.com')).toBe('Website must use http or https protocol');
   });
 });
 

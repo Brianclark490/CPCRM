@@ -109,6 +109,34 @@ function isSafeIdentifier(value: string): boolean {
   return SAFE_IDENTIFIER_RE.test(value);
 }
 
+/**
+ * Escapes special characters in a string before embedding it in a SQL LIKE
+ * pattern.  Without this, user-supplied `%` and `_` characters would act as
+ * wildcards and `\` could escape the surrounding pattern delimiters.
+ */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, '\\$&');
+}
+
+/**
+ * Keys that must never appear in user-supplied field value objects.
+ * Prevents prototype pollution when merging field_values.
+ */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Removes unsafe keys from an object to prevent prototype pollution.
+ */
+function stripUnsafeKeys(obj: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (!UNSAFE_KEYS.has(key)) {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
 // ─── Row → domain model ──────────────────────────────────────────────────────
 
 function rowToRecord(row: Record<string, unknown>): RecordRow {
@@ -480,7 +508,10 @@ export function validateFieldValue(
         return `Field '${label}' must be a valid URL`;
       }
       try {
-        new URL(value);
+        const parsed = new URL(value);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          return `Field '${label}' must use http or https protocol`;
+        }
       } catch {
         return `Field '${label}' must be a valid URL`;
       }
@@ -596,10 +627,11 @@ export async function createRecord(
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
-  // Filter field_values to only include known fields
+  // Filter field_values to only include known fields and strip unsafe keys
+  const safeFieldValues = stripUnsafeKeys(fieldValues);
   const knownFieldNames = new Set(fieldDefs.map((fd) => fd.apiName));
   const cleanedValues: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(fieldValues)) {
+  for (const [key, value] of Object.entries(safeFieldValues)) {
     if (knownFieldNames.has(key)) {
       cleanedValues[key] = value;
     }
@@ -672,7 +704,7 @@ export async function listRecords(params: {
   let whereClause = 'WHERE r.object_id = $1 AND r.tenant_id = $2';
 
   if (search && search.trim().length > 0) {
-    const searchTerm = `%${search.trim()}%`;
+    const searchTerm = `%${escapeLikePattern(search.trim())}%`;
     queryParams.push(searchTerm);
     const paramIdx = queryParams.length;
 
@@ -684,7 +716,9 @@ export async function listRecords(params: {
     const searchConditions = [`r.name ILIKE $${paramIdx}`];
     for (const tf of textFields) {
       if (isSafeIdentifier(tf.apiName)) {
-        searchConditions.push(`r.field_values->>'${tf.apiName}' ILIKE $${paramIdx}`);
+        // Use parameterised JSONB key access to avoid SQL string interpolation
+        queryParams.push(tf.apiName);
+        searchConditions.push(`r.field_values->>$${queryParams.length} ILIKE $${paramIdx}`);
       }
     }
 
@@ -709,10 +743,11 @@ export async function listRecords(params: {
     } else if (sortBy === 'updated_at') {
       orderClause = `ORDER BY r.updated_at ${direction}`;
     } else {
-      // Sort by a JSONB field
+      // Sort by a JSONB field — use parameterised key access
       const fieldDef = fieldDefs.find((fd) => fd.apiName === sortBy);
       if (fieldDef && isSafeIdentifier(fieldDef.apiName)) {
-        orderClause = `ORDER BY r.field_values->>'${fieldDef.apiName}' ${direction}`;
+        queryParams.push(fieldDef.apiName);
+        orderClause = `ORDER BY r.field_values->>$${queryParams.length} ${direction}`;
       }
     }
   }
@@ -897,10 +932,11 @@ export async function updateRecord(
     throwNotFoundError('Record not found');
   }
 
-  // Filter field_values to only include known fields
+  // Filter field_values to only include known fields and strip unsafe keys
+  const safeFieldValues = stripUnsafeKeys(fieldValues);
   const knownFieldNames = new Set(fieldDefs.map((fd) => fd.apiName));
   const cleanedValues: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(fieldValues)) {
+  for (const [key, value] of Object.entries(safeFieldValues)) {
     if (knownFieldNames.has(key)) {
       cleanedValues[key] = value;
     }
