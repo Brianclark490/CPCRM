@@ -575,6 +575,8 @@ export async function reorderFieldDefinitions(
     throwValidationError(`field_ids cannot contain more than ${MAX_REORDER_FIELDS} items`);
   }
 
+  const sanitizedFieldIds = fieldIds.slice(0, MAX_REORDER_FIELDS);
+
   // Verify all field IDs belong to this object
   const existingFields = await pool.query(
     'SELECT id FROM field_definitions WHERE object_id = $1 AND tenant_id = $2',
@@ -582,7 +584,7 @@ export async function reorderFieldDefinitions(
   );
   const existingIds = new Set(existingFields.rows.map((r: Record<string, unknown>) => r.id as string));
 
-  for (const id of fieldIds) {
+  for (const id of sanitizedFieldIds) {
     if (!existingIds.has(id)) {
       throwValidationError(`Field ID "${id}" does not belong to this object`);
     }
@@ -590,14 +592,14 @@ export async function reorderFieldDefinitions(
 
   // Update sort_order for each field
   const now = new Date();
-  for (let i = 0; i < fieldIds.length; i++) {
+  for (let i = 0; i < sanitizedFieldIds.length; i++) {
     await pool.query(
       'UPDATE field_definitions SET sort_order = $1, updated_at = $2 WHERE id = $3 AND object_id = $4',
-      [i + 1, now, fieldIds[i], objectId],
+      [i + 1, now, sanitizedFieldIds[i], objectId],
     );
   }
 
-  logger.info({ objectId, fieldCount: fieldIds.length }, 'Field definitions reordered');
+  logger.info({ objectId, fieldCount: sanitizedFieldIds.length }, 'Field definitions reordered');
 
   // Return the updated list
   const result = await pool.query(
