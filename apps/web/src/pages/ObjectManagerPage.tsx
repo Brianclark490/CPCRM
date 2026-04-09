@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { PrimaryButton } from '../components/PrimaryButton.js';
-import { slugify, resolveIcon } from '../utils.js';
+import { ObjectIcon } from '../components/ObjectIcon.js';
+import { slugify } from '../utils.js';
 import styles from './ObjectManagerPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -347,7 +348,7 @@ export function ObjectManagerPage() {
                   onClick={() => void navigate(`/admin/objects/${obj.id}`)}
                 >
                   <td className={styles.td}>
-                    <span className={styles.objectIcon}>{resolveIcon(obj.icon ?? 'package')}</span>
+                    <ObjectIcon icon={obj.icon ?? ''} size={20} />
                   </td>
                   <td className={styles.td}>
                     <Link

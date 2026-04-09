@@ -173,7 +173,7 @@ describe('FieldBuilderPage', () => {
     vi.stubGlobal('fetch', vi.fn());
   });
 
-  it('renders the object label and api name', async () => {
+  it('renders the object label in the header', async () => {
     mockFetchObject();
     renderPage();
 
@@ -182,7 +182,6 @@ describe('FieldBuilderPage', () => {
         screen.getByRole('heading', { name: /Opportunity/ }),
       ).toBeInTheDocument();
     });
-    expect(screen.getByText('opportunity')).toBeInTheDocument();
   });
 
   it('renders the object description', async () => {

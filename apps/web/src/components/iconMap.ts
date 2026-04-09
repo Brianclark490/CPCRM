@@ -26,7 +26,12 @@ const ICON_MAP: Record<string, string> = {
 /**
  * Resolves an icon identifier string to a displayable emoji character.
  * If the identifier is already an emoji (not in the map), it is returned as-is.
+ * Unknown text identifiers fall back to 📦.
  */
 export function resolveIcon(icon: string): string {
-  return ICON_MAP[icon] ?? (icon || '📦');
+  if (!icon) return '📦';
+  if (ICON_MAP[icon]) return ICON_MAP[icon];
+  // If the string contains non-ASCII characters it is likely already an emoji
+  if (/[\u0080-\uFFFF]/.test(icon)) return icon;
+  return '📦';
 }

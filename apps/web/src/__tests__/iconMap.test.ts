@@ -35,7 +35,7 @@ describe('resolveIcon', () => {
     expect(resolveIcon('')).toBe('📦');
   });
 
-  it('returns unknown identifiers as-is', () => {
-    expect(resolveIcon('unknown-icon')).toBe('unknown-icon');
+  it('returns generic fallback for unknown text identifiers', () => {
+    expect(resolveIcon('unknown-icon')).toBe('📦');
   });
 });
