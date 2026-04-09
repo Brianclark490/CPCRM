@@ -32,6 +32,6 @@ export function resolveIcon(icon: string): string {
   if (!icon) return '📦';
   if (ICON_MAP[icon]) return ICON_MAP[icon];
   // If the string contains non-ASCII characters it is likely already an emoji
-  if (/[^\x00-\x7F]/.test(icon)) return icon;
+  if (/[\u0080-\uFFFF]/.test(icon)) return icon;
   return '📦';
 }
