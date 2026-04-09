@@ -163,7 +163,10 @@ export function validateWebsite(website: unknown): string | null {
   if (website === undefined || website === null || website === '') return null;
   if (typeof website !== 'string') return 'Website must be a string';
   try {
-    new URL(website.trim());
+    const parsed = new URL(website.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return 'Website must use http or https protocol';
+    }
   } catch {
     return 'Website must be a valid URL';
   }
@@ -214,6 +217,15 @@ function throwNotFoundError(message: string): never {
   const err = new Error(message) as Error & { code: string };
   err.code = 'NOT_FOUND';
   throw err;
+}
+
+/**
+ * Escapes special characters in a string before embedding it in a SQL LIKE
+ * pattern.  Without this, user-supplied `%` and `_` characters would act as
+ * wildcards and `\` could escape the surrounding pattern delimiters.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, '\\$&');
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────
@@ -300,7 +312,7 @@ export async function listAccounts(
   let whereClause = 'WHERE a.tenant_id = $1 AND a.owner_id = $2';
 
   if (search && search.trim().length > 0) {
-    const searchTerm = `%${search.trim()}%`;
+    const searchTerm = `%${escapeLikePattern(search.trim())}%`;
     queryParams.push(searchTerm);
     whereClause += ` AND (a.name ILIKE $${queryParams.length} OR a.email ILIKE $${queryParams.length})`;
   }

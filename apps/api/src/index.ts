@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import type { Options, HttpLogger } from 'pino-http';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +45,7 @@ app.set('trust proxy', config.trustProxy);
 type PinoHttpFactory = (opts: Options) => HttpLogger;
 const httpLogger = pinoHttp as unknown as PinoHttpFactory;
 
+app.use(helmet());
 app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json());
 app.use(httpLogger({ logger }));

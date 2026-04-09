@@ -3,6 +3,7 @@ import {
   validateFieldValue,
   validateFieldValues,
   evaluateFormula,
+  escapeLikePattern,
   createRecord,
   listRecords,
   getRecord,
@@ -366,9 +367,29 @@ describe('validateFieldValue', () => {
       expect(validateFieldValue(fd, 'https://example.com')).toBeNull();
     });
 
+    it('accepts http URL', () => {
+      const fd = makeFieldDef({ fieldType: 'url' });
+      expect(validateFieldValue(fd, 'http://example.com')).toBeNull();
+    });
+
     it('rejects invalid URL', () => {
       const fd = makeFieldDef({ fieldType: 'url', label: 'Website' });
       expect(validateFieldValue(fd, 'not-a-url')).toBe("Field 'Website' must be a valid URL");
+    });
+
+    it('rejects javascript: protocol', () => {
+      const fd = makeFieldDef({ fieldType: 'url', label: 'Website' });
+      expect(validateFieldValue(fd, 'javascript:alert(1)')).toBe("Field 'Website' must use http or https protocol");
+    });
+
+    it('rejects data: protocol', () => {
+      const fd = makeFieldDef({ fieldType: 'url', label: 'Link' });
+      expect(validateFieldValue(fd, 'data:text/html,<h1>hi</h1>')).toBe("Field 'Link' must use http or https protocol");
+    });
+
+    it('rejects ftp: protocol', () => {
+      const fd = makeFieldDef({ fieldType: 'url', label: 'Ref' });
+      expect(validateFieldValue(fd, 'ftp://files.example.com/doc')).toBe("Field 'Ref' must use http or https protocol");
     });
   });
 
@@ -762,5 +783,68 @@ describe('deleteRecord', () => {
     ).resolves.toBeUndefined();
 
     expect(fakeRecords.has('rec-1')).toBe(false);
+  });
+});
+
+// ─── Tests: escapeLikePattern ───────────────────────────────────────────────
+
+describe('escapeLikePattern', () => {
+  it('returns the input unchanged when no special chars', () => {
+    expect(escapeLikePattern('hello world')).toBe('hello world');
+  });
+
+  it('escapes % characters', () => {
+    expect(escapeLikePattern('100%')).toBe('100\\%');
+  });
+
+  it('escapes _ characters', () => {
+    expect(escapeLikePattern('user_name')).toBe('user\\_name');
+  });
+
+  it('escapes \\ characters', () => {
+    expect(escapeLikePattern('back\\slash')).toBe('back\\\\slash');
+  });
+
+  it('escapes multiple special characters', () => {
+    expect(escapeLikePattern('50%_off\\deal')).toBe('50\\%\\_off\\\\deal');
+  });
+
+  it('handles empty string', () => {
+    expect(escapeLikePattern('')).toBe('');
+  });
+});
+
+// ─── Tests: prototype pollution protection ──────────────────────────────────
+
+describe('prototype pollution protection', () => {
+  beforeEach(() => {
+    fakeRecords.clear();
+    mockQuery.mockClear();
+  });
+
+  it('strips __proto__ from field values on create', async () => {
+    // JSON.parse produces a real enumerable __proto__ property, matching
+    // what express.json() would deliver from malicious input.
+    const maliciousInput = JSON.parse('{"name":"Acme Corp","__proto__":{"polluted":true}}') as Record<string, unknown>;
+    const result = await createRecord(
+      TENANT_ID,
+      'account',
+      maliciousInput,
+      'user-123',
+    );
+
+    expect(result.fieldValues).not.toHaveProperty('__proto__');
+    expect(Object.getPrototypeOf(result.fieldValues)).toBe(Object.prototype);
+  });
+
+  it('strips constructor key from field values on create', async () => {
+    const result = await createRecord(
+      TENANT_ID,
+      'account',
+      { name: 'Acme Corp', constructor: 'attack' },
+      'user-123',
+    );
+
+    expect(result.fieldValues).not.toHaveProperty('constructor');
   });
 });
