@@ -551,9 +551,13 @@ export async function deleteObjectDefinition(tenantId: string, id: string): Prom
  *
  * @throws {Error} VALIDATION_ERROR — empty or invalid list
  */
+const MAX_REORDER_IDS = 500;
+
 export async function reorderObjectDefinitions(tenantId: string, orderedIds: string[]): Promise<void> {
-  if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
-    throwValidationError('orderedIds must be a non-empty array of object definition IDs');
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0 || orderedIds.length > MAX_REORDER_IDS) {
+    throwValidationError(
+      `orderedIds must be a non-empty array of object definition IDs (max ${MAX_REORDER_IDS})`,
+    );
   }
 
   // Validate all entries are non-empty strings
