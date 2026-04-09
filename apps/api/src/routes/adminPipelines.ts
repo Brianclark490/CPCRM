@@ -473,11 +473,32 @@ export async function handleReorderStages(
   const { pipelineId } = req.params as { pipelineId: string };
 
   const body = req.body as {
-    stage_ids?: string[];
-    stageIds?: string[];
+    stage_ids?: unknown;
+    stageIds?: unknown;
   };
 
-  const stageIds = body.stage_ids ?? body.stageIds ?? [];
+  const MAX_STAGE_REORDER_COUNT = 1000;
+  const rawStageIds = body.stage_ids ?? body.stageIds;
+
+  if (!Array.isArray(rawStageIds)) {
+    res.status(400).json({ error: 'stage_ids must be a non-empty array', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  if (rawStageIds.length === 0 || rawStageIds.length > MAX_STAGE_REORDER_COUNT) {
+    res.status(400).json({
+      error: `stage_ids must contain between 1 and ${MAX_STAGE_REORDER_COUNT} items`,
+      code: 'VALIDATION_ERROR',
+    });
+    return;
+  }
+
+  if (!rawStageIds.every((id) => typeof id === 'string' && id.trim().length > 0)) {
+    res.status(400).json({ error: 'stage_ids must contain only non-empty strings', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  const stageIds = rawStageIds as string[];
 
   try {
     const stages = await reorderStages(req.user!.tenantId!, pipelineId, stageIds);
