@@ -17,8 +17,8 @@ export function slugify(value: string): string {
 
 /**
  * Maps Lucide-style icon names to emoji equivalents.
- * Falls back to the raw value when no mapping exists (e.g. if the value is
- * already an emoji).
+ * Used by the ObjectIcon component and resolveIcon function
+ * to ensure icon names are always rendered as visual icons.
  */
 const TEXT_ICON_MAP: Record<string, string> = {
   building: '🏢',
