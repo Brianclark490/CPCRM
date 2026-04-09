@@ -13,6 +13,8 @@ export interface KanbanCardRecord {
   ownerInitials: string;
   stageEnteredAt: string | null;
   expectedDays: number | null;
+  accountName: string | null;
+  accountId: string | null;
 }
 
 interface KanbanCardProps {
@@ -90,6 +92,12 @@ export function KanbanCard({
       >
         {record.name}
       </div>
+
+      {record.accountName && (
+        <div className={styles.cardAccount} data-testid={`card-account-${record.id}`}>
+          {record.accountName}
+        </div>
+      )}
 
       <div className={styles.cardRow}>
         {record.value !== null && (

@@ -44,6 +44,12 @@ export interface RecordRow {
   updatedAt: Date;
 }
 
+export interface LinkedParentRecord {
+  objectApiName: string;
+  recordId: string;
+  recordName: string;
+}
+
 export interface RecordWithLabels extends RecordRow {
   fields: Array<{
     apiName: string;
@@ -52,6 +58,7 @@ export interface RecordWithLabels extends RecordRow {
     value: unknown;
     options: Record<string, unknown>;
   }>;
+  linkedParent?: LinkedParentRecord;
 }
 
 export interface RecordDetail extends RecordWithLabels {
@@ -722,6 +729,47 @@ export async function listRecords(params: {
     const record = rowToRecord(row);
     return resolveFieldLabels(record, fieldDefs);
   });
+
+  // Batch-fetch linked parent account names for all records in the page.
+  // This resolves the first account linked via any lookup relationship
+  // where this object type is the source and account is the target.
+  if (data.length > 0) {
+    const recordIds = data.map((r) => r.id);
+
+    const linkedResult = await pool.query(
+      `SELECT rr.source_record_id, acct.id AS account_id, acct.name AS account_name
+       FROM record_relationships rr
+       JOIN relationship_definitions rd ON rd.id = rr.relationship_id
+       JOIN object_definitions tgt_obj ON tgt_obj.id = rd.target_object_id
+       JOIN records acct ON acct.id = rr.target_record_id
+       WHERE rr.source_record_id = ANY($1)
+         AND rd.source_object_id = $2
+         AND tgt_obj.api_name = 'account'
+         AND rd.tenant_id = $3`,
+      [recordIds, objectDef.id, tenantId],
+    );
+
+    const linkedMap = new Map<string, LinkedParentRecord>();
+    for (const row of linkedResult.rows) {
+      const r = row as Record<string, unknown>;
+      const sourceId = r.source_record_id as string;
+      // Keep the first match per source record
+      if (!linkedMap.has(sourceId)) {
+        linkedMap.set(sourceId, {
+          objectApiName: 'account',
+          recordId: r.account_id as string,
+          recordName: r.account_name as string,
+        });
+      }
+    }
+
+    for (const record of data) {
+      const linked = linkedMap.get(record.id);
+      if (linked) {
+        record.linkedParent = linked;
+      }
+    }
+  }
 
   return { data, total, page, limit, object: objectDef };
 }

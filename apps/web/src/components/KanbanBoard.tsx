@@ -41,6 +41,7 @@ interface RecordItem {
   pipelineId?: string;
   currentStageId?: string;
   stageEnteredAt?: string;
+  linkedParent?: { objectApiName: string; recordId: string; recordName: string };
   createdAt: string;
 }
 
@@ -138,6 +139,8 @@ function recordToCard(
     ownerInitials: getOwnerInitials(record.ownerId),
     stageEnteredAt: record.stageEnteredAt ?? null,
     expectedDays,
+    accountName: record.linkedParent?.recordName ?? null,
+    accountId: record.linkedParent?.recordId ?? null,
   };
 }
 

@@ -24,6 +24,12 @@ interface RecordField {
   value: unknown;
 }
 
+interface LinkedParentRecord {
+  objectApiName: string;
+  recordId: string;
+  recordName: string;
+}
+
 interface RecordItem {
   id: string;
   name: string;
@@ -31,6 +37,7 @@ interface RecordItem {
   fields: RecordField[];
   ownerId: string;
   ownerName?: string;
+  linkedParent?: LinkedParentRecord;
   createdAt: string;
   updatedAt: string;
 }
@@ -346,6 +353,9 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   // Show a standalone "Name" column only when the name field is not already in the layout
   const showStandaloneNameColumn = !nameColumnApiName;
 
+  // Show an "Account" column when any record has a linked parent account
+  const showAccountColumn = records.some((r) => r.linkedParent != null);
+
   const pluralLabel = objectDef?.pluralLabel ?? apiName ?? 'Records';
   const singularLabel = objectDef?.label ?? apiName ?? 'Record';
 
@@ -475,6 +485,11 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
                     </button>
                   </th>
                 )}
+                {showAccountColumn && (
+                  <th className={styles.th}>
+                    <span className={styles.sortButton}>Account</span>
+                  </th>
+                )}
                 {columns.map((col) => (
                   <th key={col.apiName} className={styles.th}>
                     <button
@@ -520,6 +535,19 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
                         >
                           {record.name}
                         </Link>
+                      </td>
+                    )}
+                    {showAccountColumn && (
+                      <td className={styles.td}>
+                        {record.linkedParent ? (
+                          <Link
+                            to={`/objects/${record.linkedParent.objectApiName}/${record.linkedParent.recordId}`}
+                            className={styles.nameLink}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {record.linkedParent.recordName}
+                          </Link>
+                        ) : '—'}
                       </td>
                     )}
                     {columns.map((col) => {

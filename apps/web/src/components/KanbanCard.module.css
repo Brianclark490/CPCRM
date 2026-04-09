@@ -46,6 +46,15 @@
   color: var(--color-primary-text);
 }
 
+.cardAccount {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cardRow {
   display: flex;
   align-items: center;
