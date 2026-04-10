@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useApiClient } from '../lib/apiClient.js';
 import { FieldInput } from './FieldInput.js';
 import styles from './InlineRecordForm.module.css';
 
@@ -28,8 +29,6 @@ interface InlineRecordFormProps {
   relationshipId: string;
   /** The parent record's direction in the relationship ('source' or 'target') */
   parentDirection: 'source' | 'target';
-  /** Auth session token */
-  sessionToken: string;
   /** Called after a record is successfully created */
   onCreated: () => void;
   /** Called when the user cancels the form */
@@ -50,10 +49,10 @@ export function InlineRecordForm({
   parentRecordName,
   relationshipId,
   parentDirection,
-  sessionToken,
   onCreated,
   onCancel,
 }: InlineRecordFormProps) {
+  const api = useApiClient();
   const [fields, setFields] = useState<FieldDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
@@ -69,9 +68,7 @@ export function InlineRecordForm({
       setLoading(true);
       try {
         // Get the object definition to find the ID
-        const objRes = await fetch('/api/admin/objects', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const objRes = await api.request('/api/admin/objects');
         if (cancelled || !objRes.ok) {
           setLoading(false);
           return;
@@ -88,9 +85,8 @@ export function InlineRecordForm({
         }
 
         // Fetch field definitions
-        const fieldsRes = await fetch(
+        const fieldsRes = await api.request(
           `/api/admin/objects/${obj.id}/fields`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
         if (cancelled || !fieldsRes.ok) {
           setLoading(false);
@@ -125,7 +121,7 @@ export function InlineRecordForm({
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, relatedObjectApiName]);
+  }, [api, relatedObjectApiName]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -152,13 +148,12 @@ export function InlineRecordForm({
     }
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/objects/${relatedObjectApiName}/records`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({
             fieldValues: formValues,

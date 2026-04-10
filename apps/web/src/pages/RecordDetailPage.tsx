@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { FieldRenderer } from '../components/FieldRenderer.js';
 import { FieldInput } from '../components/FieldInput.js';
 import { StageFieldRenderer } from '../components/StageFieldRenderer.js';
@@ -194,6 +195,7 @@ export function RecordDetailPage() {
   const { apiName, id } = useParams<{ apiName: string; id: string }>();
   const navigate = useNavigate();
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const { formatDate, formatRelativeTime } = useTenantLocale();
 
   // Data state
@@ -236,9 +238,8 @@ export function RecordDetailPage() {
     setLoadError(null);
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/objects/${apiName}/records/${id}`,
-        { headers: { Authorization: `Bearer ${sessionToken}` } },
       );
 
       if (response.ok) {
@@ -246,9 +247,7 @@ export function RecordDetailPage() {
         setRecord(data);
 
         // Extract the object definition from admin API for full metadata
-        const objResponse = await fetch('/api/admin/objects', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const objResponse = await api.request('/api/admin/objects');
         if (objResponse.ok) {
           const allObjects = (await objResponse.json()) as ObjectDefinition[];
           const obj = allObjects.find((o) => o.apiName === apiName);
@@ -264,7 +263,7 @@ export function RecordDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, apiName, id]);
+  }, [sessionToken, api, apiName, id]);
 
   useEffect(() => {
     void loadRecord();
@@ -280,9 +279,7 @@ export function RecordDetailPage() {
     const loadLayout = async () => {
       try {
         // Find the object ID
-        const objResponse = await fetch('/api/admin/objects', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const objResponse = await api.request('/api/admin/objects');
         if (cancelled || !objResponse.ok) return;
 
         const allObjects = (await objResponse.json()) as Array<{
@@ -293,9 +290,8 @@ export function RecordDetailPage() {
         if (!obj || cancelled) return;
 
         // Fetch layouts for this object
-        const layoutsResponse = await fetch(
+        const layoutsResponse = await api.request(
           `/api/admin/objects/${obj.id}/layouts`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
         if (cancelled || !layoutsResponse.ok) return;
 
@@ -307,9 +303,8 @@ export function RecordDetailPage() {
         if (!formLayout || cancelled) return;
 
         // Fetch the layout detail with fields
-        const layoutDetailResponse = await fetch(
+        const layoutDetailResponse = await api.request(
           `/api/admin/objects/${obj.id}/layouts/${formLayout.id}`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
         if (cancelled || !layoutDetailResponse.ok) return;
 
@@ -328,7 +323,7 @@ export function RecordDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, apiName]);
+  }, [sessionToken, api, apiName]);
 
   // ── Edit handlers ───────────────────────────────────────────────────────────
 
@@ -403,13 +398,12 @@ export function RecordDetailPage() {
     }
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/objects/${apiName}/records/${record.id}`,
         {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({ fieldValues: saveValues }),
         },
@@ -444,11 +438,10 @@ export function RecordDetailPage() {
     setDeleting(true);
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/objects/${apiName}/records/${record.id}`,
         {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${sessionToken}` },
         },
       );
 
@@ -486,13 +479,12 @@ export function RecordDetailPage() {
     setConvertError(null);
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/objects/lead/records/${record.id}/convert`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify(options),
         },
@@ -785,7 +777,6 @@ export function RecordDetailPage() {
           objectDef={objectDef}
           actions={layoutActions}
           onRecordCreated={() => void loadRecord()}
-          sessionToken={sessionToken ?? undefined}
         />
 
         {showDeleteConfirm && (
@@ -818,11 +809,10 @@ export function RecordDetailPage() {
           </div>
         )}
 
-        {showConvertModal && sessionToken && (
+        {showConvertModal && (
           <ConvertLeadModal
             leadName={record.name}
             fieldValues={record.fieldValues}
-            sessionToken={sessionToken}
             onConvert={handleConvert}
             onClose={() => setShowConvertModal(false)}
             converting={converting}
@@ -1053,25 +1043,23 @@ export function RecordDetailPage() {
           <div key={rel.relationshipId} className={styles.relatedCard}>
             <div className={styles.relatedHeader}>
               <span className={styles.relatedTitle}>{rel.label}</span>
-              {sessionToken && (
-                <button
-                  className={styles.btnNew}
-                  type="button"
-                  onClick={() =>
-                    setInlineFormRelId(
-                      inlineFormRelId === rel.relationshipId
-                        ? null
-                        : rel.relationshipId,
-                    )
-                  }
-                  data-testid={`new-related-${rel.relatedObjectApiName}`}
-                >
-                  + New
-                </button>
-              )}
+              <button
+                className={styles.btnNew}
+                type="button"
+                onClick={() =>
+                  setInlineFormRelId(
+                    inlineFormRelId === rel.relationshipId
+                      ? null
+                      : rel.relationshipId,
+                  )
+                }
+                data-testid={`new-related-${rel.relatedObjectApiName}`}
+              >
+                + New
+              </button>
             </div>
 
-            {inlineFormRelId === rel.relationshipId && sessionToken && (
+            {inlineFormRelId === rel.relationshipId && (
               <InlineRecordForm
                 relatedObjectApiName={rel.relatedObjectApiName}
                 relatedObjectLabel={rel.label}
@@ -1079,7 +1067,6 @@ export function RecordDetailPage() {
                 parentRecordName={record.name}
                 relationshipId={rel.relationshipId}
                 parentDirection={rel.direction}
-                sessionToken={sessionToken}
                 onCreated={() => {
                   setInlineFormRelId(null);
                   void loadRecord();
@@ -1150,11 +1137,10 @@ export function RecordDetailPage() {
       )}
 
       {/* Lead conversion modal */}
-      {showConvertModal && sessionToken && (
+      {showConvertModal && (
         <ConvertLeadModal
           leadName={record.name}
           fieldValues={record.fieldValues}
-          sessionToken={sessionToken}
           onConvert={handleConvert}
           onClose={() => setShowConvertModal(false)}
           converting={converting}

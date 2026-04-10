@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { FieldRenderer } from '../components/FieldRenderer.js';
 import { KanbanBoard } from '../components/KanbanBoard.js';
@@ -121,6 +122,7 @@ interface RecordListPageProps {
 export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   const { apiName } = useParams<{ apiName: string }>();
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   const [records, setRecords] = useState<RecordItem[]>([]);
@@ -184,9 +186,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
     const loadLayout = async () => {
       try {
         // First get the object definitions to find the object ID
-        const objResponse = await fetch('/api/admin/objects', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const objResponse = await api.request('/api/admin/objects');
 
         if (cancelled) return;
 
@@ -203,9 +203,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
         setResolvedObjectId(obj.id);
 
         // Check for pipeline existence (best-effort)
-        fetch('/api/admin/pipelines', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        })
+        api.request('/api/admin/pipelines')
           .then((resp) => {
             if (cancelled || !resp.ok) return null;
             return resp.json();
@@ -220,9 +218,8 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
           .catch(() => { /* best-effort */ });
 
         // Fetch layouts for this object
-        const layoutsResponse = await fetch(
+        const layoutsResponse = await api.request(
           `/api/admin/objects/${obj.id}/layouts`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
 
         if (cancelled || !layoutsResponse.ok) return;
@@ -235,9 +232,8 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
         if (!listLayout || cancelled) return;
 
         // Fetch the layout detail with fields
-        const layoutDetailResponse = await fetch(
+        const layoutDetailResponse = await api.request(
           `/api/admin/objects/${obj.id}/layouts/${listLayout.id}`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
 
         if (cancelled || !layoutDetailResponse.ok) return;
@@ -256,7 +252,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, apiName]);
+  }, [sessionToken, api, apiName]);
 
   // Fetch records
   useEffect(() => {
@@ -281,9 +277,8 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
       }
 
       try {
-        const response = await fetch(
+        const response = await api.request(
           `/api/objects/${apiName}/records?${params.toString()}`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
 
         if (cancelled) return;
@@ -313,7 +308,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, apiName, page, debouncedSearch, sortBy, sortDir]);
+  }, [sessionToken, api, apiName, page, debouncedSearch, sortBy, sortDir]);
 
   const handleSort = (fieldApiName: string) => {
     if (sortBy === fieldApiName) {

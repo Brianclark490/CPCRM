@@ -13,7 +13,6 @@ export function RelatedListRenderer({
   component,
   record,
   onRecordCreated,
-  sessionToken,
 }: ComponentRendererProps) {
   const [showInlineForm, setShowInlineForm] = useState(false);
 
@@ -35,19 +34,17 @@ export function RelatedListRenderer({
     <div className={styles.relatedCard} data-testid={`related-list-${relationshipId}`}>
       <div className={styles.relatedHeader}>
         <span className={styles.relatedTitle}>{relationship.label}</span>
-        {sessionToken && (
-          <button
-            className={styles.btnNew}
-            type="button"
-            onClick={() => setShowInlineForm(!showInlineForm)}
-            data-testid={`new-related-${relationship.relatedObjectApiName}`}
-          >
-            + New
-          </button>
-        )}
+        <button
+          className={styles.btnNew}
+          type="button"
+          onClick={() => setShowInlineForm(!showInlineForm)}
+          data-testid={`new-related-${relationship.relatedObjectApiName}`}
+        >
+          + New
+        </button>
       </div>
 
-      {showInlineForm && sessionToken && (
+      {showInlineForm && (
         <InlineRecordForm
           relatedObjectApiName={relationship.relatedObjectApiName}
           relatedObjectLabel={relationship.label}
@@ -55,7 +52,6 @@ export function RelatedListRenderer({
           parentRecordName={record.name}
           relationshipId={relationshipId}
           parentDirection={relationship.direction}
-          sessionToken={sessionToken}
           onCreated={handleCreated}
           onCancel={() => setShowInlineForm(false)}
         />

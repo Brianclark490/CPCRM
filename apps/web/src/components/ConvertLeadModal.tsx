@@ -7,7 +7,6 @@ import styles from './ConvertLeadModal.module.css';
 interface ConvertLeadModalProps {
   leadName: string;
   fieldValues: Record<string, unknown>;
-  sessionToken: string;
   onConvert: (options: {
     create_account: boolean;
     account_id: string | null;
@@ -30,7 +29,6 @@ function fieldDisplay(value: unknown): string {
 export function ConvertLeadModal({
   leadName,
   fieldValues,
-  sessionToken,
   onConvert,
   onClose,
   converting,
@@ -102,7 +100,6 @@ export function ConvertLeadModal({
             </table>
           ) : (
             <AccountSearchDropdown
-              sessionToken={sessionToken}
               value={existingAccountId}
               valueName={existingAccountName ?? undefined}
               onChange={(id, name) => {

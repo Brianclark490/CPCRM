@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useApiClient } from '../lib/apiClient.js';
 import styles from './AccountSearchDropdown.module.css';
 
 interface AccountOption {
@@ -7,7 +8,6 @@ interface AccountOption {
 }
 
 interface AccountSearchDropdownProps {
-  sessionToken: string;
   value: string | null;
   valueName?: string;
   onChange: (accountId: string | null, accountName: string | null) => void;
@@ -17,7 +17,6 @@ interface AccountSearchDropdownProps {
 }
 
 export function AccountSearchDropdown({
-  sessionToken,
   value,
   valueName,
   onChange,
@@ -25,6 +24,7 @@ export function AccountSearchDropdown({
   placeholder = 'Search accounts…',
   id,
 }: AccountSearchDropdownProps) {
+  const api = useApiClient();
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<AccountOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,14 +54,11 @@ export function AccountSearchDropdown({
 
   const fetchAccounts = useCallback(
     async (search: string) => {
-      if (!sessionToken) return;
       setLoading(true);
       try {
         const params = new URLSearchParams({ limit: '10' });
         if (search.trim()) params.set('search', search.trim());
-        const response = await fetch(`/api/accounts?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request(`/api/accounts?${params.toString()}`);
         if (response.ok) {
           const data = (await response.json()) as { data: AccountOption[] };
           setOptions(data.data);
@@ -72,7 +69,7 @@ export function AccountSearchDropdown({
         setLoading(false);
       }
     },
-    [sessionToken],
+    [api],
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
