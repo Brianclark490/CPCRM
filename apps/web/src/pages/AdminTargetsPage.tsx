@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import styles from './AdminTargetsPage.module.css';
 
 /* ── Types ────────────────────────────────────────────────── */
@@ -204,6 +205,7 @@ function findCurrentPeriodIndex(options: PeriodOption[]): number {
 
 export function AdminTargetsPage() {
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   // Period selection
   const [periodType, setPeriodType] = useState<PeriodType>('quarterly');
@@ -259,9 +261,7 @@ export function AdminTargetsPage() {
         period_end: selectedPeriod.periodEnd,
       });
 
-      const response = await fetch(`/api/admin/targets?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/admin/targets?${params.toString()}`);
 
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as ApiError;
@@ -312,7 +312,7 @@ export function AdminTargetsPage() {
       setLoading(false);
       setInitialFetchDone(true);
     }
-  }, [sessionToken, selectedPeriod]);
+  }, [sessionToken, api, selectedPeriod]);
 
   useEffect(() => {
     void fetchTargets();
@@ -419,7 +419,6 @@ export function AdminTargetsPage() {
     const allDrafts = [businessTarget, ...teamTargets, ...userTargets];
     const headers = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${sessionToken}`,
     };
 
     try {
@@ -432,7 +431,7 @@ export function AdminTargetsPage() {
 
         // If value is 0 but we have an existing id, delete it
         if (value === 0 && draft.id) {
-          const deleteRes = await fetch(`/api/admin/targets/${draft.id}`, {
+          const deleteRes = await api.request(`/api/admin/targets/${draft.id}`, {
             method: 'DELETE',
             headers,
           });
@@ -453,7 +452,7 @@ export function AdminTargetsPage() {
           currency: DEFAULT_CURRENCY,
         };
 
-        const res = await fetch('/api/admin/targets', {
+        const res = await api.request('/api/admin/targets', {
           method: 'POST',
           headers,
           body: JSON.stringify(body),

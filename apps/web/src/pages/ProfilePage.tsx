@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import styles from './ProfilePage.module.css';
 
 interface UserProfile {
@@ -23,6 +24,7 @@ interface ApiError {
 
 export function ProfilePage() {
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [form, setForm] = useState<FormState>({ displayName: '', jobTitle: '' });
@@ -39,9 +41,7 @@ export function ProfilePage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const response = await fetch('/api/profile', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request('/api/profile');
         if (!response.ok) {
           const data = (await response.json()) as ApiError;
           if (!cancelled) setLoadError(data.error ?? 'Failed to load profile');
@@ -64,7 +64,7 @@ export function ProfilePage() {
 
     void fetchProfile();
     return () => { cancelled = true; };
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -83,11 +83,10 @@ export function ProfilePage() {
     if (form.jobTitle.trim()) body.jobTitle = form.jobTitle.trim();
 
     try {
-      const response = await fetch('/api/profile', {
+      const response = await api.request('/api/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify(body),
       });

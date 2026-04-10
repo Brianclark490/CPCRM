@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import styles from './AdminTenantSettingsPage.module.css';
 
 /* ── Types ────────────────────────────────────────────────── */
@@ -76,6 +77,7 @@ const RECORD_OWNER_OPTIONS = [
 
 export function AdminTenantSettingsPage() {
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -110,12 +112,8 @@ export function AdminTenantSettingsPage() {
       setLoadError(null);
       try {
         const [settingsRes, pipelinesRes] = await Promise.all([
-          fetch('/api/admin/tenant-settings', {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          }),
-          fetch('/api/admin/pipelines', {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          }),
+          api.request('/api/admin/tenant-settings'),
+          api.request('/api/admin/pipelines'),
         ]);
 
         if (!settingsRes.ok) {
@@ -152,7 +150,7 @@ export function AdminTenantSettingsPage() {
 
     void fetchSettings();
     return () => { cancelled = true; };
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   // ── Submit ───────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -171,11 +169,10 @@ export function AdminTenantSettingsPage() {
     settings.leadAutoConversion = leadAutoConversion;
 
     try {
-      const response = await fetch('/api/admin/tenant-settings', {
+      const response = await api.request('/api/admin/tenant-settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ name: name.trim(), settings }),
       });

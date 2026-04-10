@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useDescope, useSession } from '@descope/react-sdk';
+import { useDescope } from '@descope/react-sdk';
 import { useNavigate } from 'react-router-dom';
+import { useApiClient } from '../lib/apiClient.js';
 import styles from './OrganisationProvisioningPage.module.css';
 
 interface FormState {
@@ -13,7 +14,7 @@ interface ApiError {
 }
 
 export function OrganisationProvisioningPage() {
-  const { sessionToken } = useSession();
+  const api = useApiClient();
   const { logout } = useDescope();
   const navigate = useNavigate();
 
@@ -40,11 +41,10 @@ export function OrganisationProvisioningPage() {
     setSubmitting(true);
 
     try {
-      const response = await fetch('/api/organisations', {
+      const response = await api.request('/api/organisations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           name: trimmedName,
