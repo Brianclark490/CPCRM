@@ -8,9 +8,9 @@ vi.mock('@descope/react-sdk', () => ({
 
 const { useSession } = await import('@descope/react-sdk');
 
-function mockSession(sessionToken: string | undefined) {
+function mockSession(sessionToken: string) {
   vi.mocked(useSession).mockReturnValue({
-    isAuthenticated: sessionToken !== undefined,
+    isAuthenticated: sessionToken !== '',
     isSessionLoading: false,
     sessionToken,
     claims: {},
@@ -34,7 +34,7 @@ describe('useApiClient', () => {
   });
 
   it('does not set an Authorization header when no session token is present', async () => {
-    mockSession(undefined);
+    mockSession('');
     const { result } = renderHook(() => useApiClient());
 
     await result.current.request('/api/accounts');

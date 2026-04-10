@@ -125,15 +125,17 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
         '/api/profile',
-        expect.objectContaining({
-          method: 'PUT',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-token',
-            'Content-Type': 'application/json',
-          }),
-        }),
+        expect.objectContaining({ method: 'PUT' }),
       );
     });
+
+    const putCall = vi
+      .mocked(fetch)
+      .mock.calls.find(([, init]) => init?.method === 'PUT');
+    expect(putCall).toBeDefined();
+    const putHeaders = new Headers(putCall![1]?.headers);
+    expect(putHeaders.get('Authorization')).toBe('Bearer test-token');
+    expect(putHeaders.get('Content-Type')).toBe('application/json');
 
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('Profile saved successfully.');
