@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { GateFailureModal } from './GateFailureModal.js';
 import type { GateFailure } from './GateFailureModal.js';
 import styles from './StageFieldRenderer.module.css';
@@ -103,6 +104,7 @@ export function StageFieldRenderer({
   onStageChanged,
 }: StageFieldRendererProps) {
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   const [stages, setStages] = useState<StageDefinition[]>([]);
   const [loadingStages, setLoadingStages] = useState(true);
@@ -128,9 +130,7 @@ export function StageFieldRenderer({
       setLoadingStages(true);
 
       try {
-        const response = await fetch('/api/admin/pipelines', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request('/api/admin/pipelines');
 
         if (cancelled || !response.ok) {
           if (!cancelled) setLoadingStages(false);
@@ -150,9 +150,8 @@ export function StageFieldRenderer({
         }
 
         // Fetch pipeline detail for stages
-        const detailResponse = await fetch(
+        const detailResponse = await api.request(
           `/api/admin/pipelines/${match.id}`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
 
         if (cancelled) return;
@@ -175,7 +174,7 @@ export function StageFieldRenderer({
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, objectId]);
+  }, [sessionToken, api, objectId]);
 
   // ── Move stage (for existing records) ──────────────────────
 
@@ -187,13 +186,12 @@ export function StageFieldRenderer({
       setMoveError(null);
 
       try {
-        const response = await fetch(
+        const response = await api.request(
           `/api/objects/${objectApiName}/records/${recordId}/move-stage`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${sessionToken}`,
             },
             body: JSON.stringify({ target_stage_id: targetStageId }),
           },
@@ -224,7 +222,7 @@ export function StageFieldRenderer({
         setMoving(false);
       }
     },
-    [sessionToken, recordId, objectApiName, stages, onStageChanged],
+    [sessionToken, api, recordId, objectApiName, stages, onStageChanged],
   );
 
   // ── Gate failure: fill fields and retry move ───────────────
@@ -237,13 +235,12 @@ export function StageFieldRenderer({
 
       try {
         // First update the record with the filled field values
-        const updateResponse = await fetch(
+        const updateResponse = await api.request(
           `/api/objects/${objectApiName}/records/${recordId}`,
           {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${sessionToken}`,
             },
             body: JSON.stringify({ fieldValues }),
           },
@@ -254,13 +251,12 @@ export function StageFieldRenderer({
         }
 
         // Now retry the stage move
-        const moveResponse = await fetch(
+        const moveResponse = await api.request(
           `/api/objects/${objectApiName}/records/${recordId}/move-stage`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${sessionToken}`,
             },
             body: JSON.stringify({ target_stage_id: gateModal.targetStageId }),
           },
@@ -289,7 +285,7 @@ export function StageFieldRenderer({
         setGateLoading(false);
       }
     },
-    [sessionToken, recordId, objectApiName, gateModal, onStageChanged],
+    [sessionToken, api, recordId, objectApiName, gateModal, onStageChanged],
   );
 
   // ── Handle dropdown change ─────────────────────────────────

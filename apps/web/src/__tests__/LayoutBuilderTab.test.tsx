@@ -3,6 +3,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LayoutBuilderTab } from '../components/LayoutBuilderTab.js';
 
+vi.mock('@descope/react-sdk', () => ({
+  useSession: vi.fn(() => ({ sessionToken: 'test-token' })),
+}));
+
 // ─── Test data ──────────────────────────────────────────────────────────────
 
 const sampleFields = [
@@ -173,13 +177,11 @@ function mockFetch(overrides?: {
 
 function renderComponent(props?: Partial<{
   objectId: string;
-  sessionToken: string;
   fields: typeof sampleFields;
 }>) {
   return render(
     <LayoutBuilderTab
       objectId={props?.objectId ?? 'obj-1'}
-      sessionToken={props?.sessionToken ?? 'test-token'}
       fields={props?.fields ?? sampleFields}
     />,
   );
