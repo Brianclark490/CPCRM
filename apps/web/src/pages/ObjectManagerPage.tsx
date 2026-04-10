@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { ObjectIcon } from '../components/ObjectIcon.js';
 import { slugify } from '../utils.js';
@@ -86,6 +87,7 @@ const LockIcon = () => (
 
 export function ObjectManagerPage() {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   // List state
@@ -120,9 +122,7 @@ export function ObjectManagerPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/admin/objects', {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request('/api/admin/objects');
 
       if (response.ok) {
         const data = (await response.json()) as ObjectDefinitionListItem[];
@@ -135,7 +135,7 @@ export function ObjectManagerPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   useEffect(() => {
     void fetchObjects();
@@ -208,11 +208,10 @@ export function ObjectManagerPage() {
     setCreating(true);
 
     try {
-      const response = await fetch('/api/admin/objects', {
+      const response = await api.request('/api/admin/objects', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           label: trimmedLabel,
@@ -256,9 +255,8 @@ export function ObjectManagerPage() {
     setDeleteError(null);
 
     try {
-      const response = await fetch(`/api/admin/objects/${deleteTarget.id}`, {
+      const response = await api.request(`/api/admin/objects/${deleteTarget.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${sessionToken}` },
       });
 
       if (response.ok || response.status === 204) {

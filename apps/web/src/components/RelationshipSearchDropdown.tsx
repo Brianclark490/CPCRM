@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useApiClient } from '../lib/apiClient.js';
 import styles from './RelationshipSearchDropdown.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -9,7 +10,6 @@ interface RecordOption {
 }
 
 interface RelationshipSearchDropdownProps {
-  sessionToken: string;
   objectApiName: string;
   value: string | null;
   valueName?: string;
@@ -26,7 +26,6 @@ interface RelationshipSearchDropdownProps {
  * Used on create/edit forms for relationship (lookup) fields.
  */
 export function RelationshipSearchDropdown({
-  sessionToken,
   objectApiName,
   value,
   valueName,
@@ -35,6 +34,7 @@ export function RelationshipSearchDropdown({
   placeholder = 'Search records…',
   id,
 }: RelationshipSearchDropdownProps) {
+  const api = useApiClient();
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<RecordOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,14 +64,13 @@ export function RelationshipSearchDropdown({
 
   const fetchRecords = useCallback(
     async (search: string) => {
-      if (!sessionToken || !objectApiName) return;
+      if (!objectApiName) return;
       setLoading(true);
       try {
         const params = new URLSearchParams({ limit: '10' });
         if (search.trim()) params.set('search', search.trim());
-        const response = await fetch(
+        const response = await api.request(
           `/api/objects/${objectApiName}/records?${params.toString()}`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
         if (response.ok) {
           const data = (await response.json()) as { data: RecordOption[] };
@@ -83,7 +82,7 @@ export function RelationshipSearchDropdown({
         setLoading(false);
       }
     },
-    [sessionToken, objectApiName],
+    [api, objectApiName],
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

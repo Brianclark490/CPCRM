@@ -817,11 +817,10 @@ export function PageBuilderPage() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(
+      const res = await api.request(
         `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}`,
         {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${sessionToken}` },
         },
       );
 
@@ -844,9 +843,8 @@ export function PageBuilderPage() {
     if (!sessionToken || !objectId || !selectedLayoutId) return;
 
     try {
-      const res = await fetch(
+      const res = await api.request(
         `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/versions`,
-        { headers: { Authorization: `Bearer ${sessionToken}` } },
       );
 
       if (res.ok) {
@@ -865,13 +863,12 @@ export function PageBuilderPage() {
 
     setReverting(true);
     try {
-      const res = await fetch(
+      const res = await api.request(
         `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/revert`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({ version }),
         },
