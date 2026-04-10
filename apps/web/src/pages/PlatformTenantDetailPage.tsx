@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import styles from './PlatformTenantDetailPage.module.css';
 
@@ -78,6 +79,7 @@ function statusClass(status: string): string {
 export function PlatformTenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   // Tenant state
@@ -123,9 +125,7 @@ export function PlatformTenantDetailPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/platform/tenants/${id}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/platform/tenants/${id}`);
 
       if (response.ok) {
         const data = (await response.json()) as TenantDetail;
@@ -141,7 +141,7 @@ export function PlatformTenantDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, id]);
+  }, [sessionToken, api, id]);
 
   // ── Fetch users ─────────────────────────────────────────────
 
@@ -151,9 +151,7 @@ export function PlatformTenantDetailPage() {
     setUsersLoading(true);
 
     try {
-      const response = await fetch(`/api/platform/tenants/${id}/users`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/platform/tenants/${id}/users`);
 
       if (response.ok) {
         const data = (await response.json()) as TenantUser[];
@@ -164,7 +162,7 @@ export function PlatformTenantDetailPage() {
     } finally {
       setUsersLoading(false);
     }
-  }, [sessionToken, id]);
+  }, [sessionToken, api, id]);
 
   useEffect(() => {
     void fetchTenant();
@@ -181,11 +179,10 @@ export function PlatformTenantDetailPage() {
     setSaveSuccess(false);
 
     try {
-      const response = await fetch(`/api/platform/tenants/${id}`, {
+      const response = await api.request(`/api/platform/tenants/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ name: editName.trim() }),
       });
@@ -214,11 +211,10 @@ export function PlatformTenantDetailPage() {
     setSaveError(null);
 
     try {
-      const response = await fetch(`/api/platform/tenants/${id}`, {
+      const response = await api.request(`/api/platform/tenants/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -247,9 +243,8 @@ export function PlatformTenantDetailPage() {
     setDeleteError(null);
 
     try {
-      const response = await fetch(`/api/platform/tenants/${id}?cascade=true`, {
+      const response = await api.request(`/api/platform/tenants/${id}?cascade=true`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${sessionToken}` },
       });
 
       if (response.ok || response.status === 204) {
@@ -306,11 +301,10 @@ export function PlatformTenantDetailPage() {
     setInviting(true);
 
     try {
-      const response = await fetch(`/api/platform/tenants/${id}/users/invite`, {
+      const response = await api.request(`/api/platform/tenants/${id}/users/invite`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           email: trimmedEmail,

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { slugify } from '../utils.js';
 import styles from './PipelineManagerPage.module.css';
@@ -61,6 +62,7 @@ const LockIcon = () => (
 
 export function PipelineManagerPage() {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   // List state
@@ -92,9 +94,7 @@ export function PipelineManagerPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/admin/pipelines', {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request('/api/admin/pipelines');
 
       if (response.ok) {
         const data = (await response.json()) as PipelineListItem[];
@@ -107,7 +107,7 @@ export function PipelineManagerPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   // ── Fetch objects for create form ──────────────────────────
 
@@ -115,9 +115,7 @@ export function PipelineManagerPage() {
     if (!sessionToken) return;
 
     try {
-      const response = await fetch('/api/admin/objects', {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request('/api/admin/objects');
 
       if (response.ok) {
         const data = (await response.json()) as ObjectOption[];
@@ -126,7 +124,7 @@ export function PipelineManagerPage() {
     } catch {
       // Object fetch is best-effort
     }
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   useEffect(() => {
     void fetchPipelines();
@@ -198,11 +196,10 @@ export function PipelineManagerPage() {
     setCreating(true);
 
     try {
-      const response = await fetch('/api/admin/pipelines', {
+      const response = await api.request('/api/admin/pipelines', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           name: trimmedName,

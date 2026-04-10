@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import styles from './PlatformTenantsPage.module.css';
 
@@ -89,6 +90,7 @@ function statusClass(status: string): string {
 
 export function PlatformTenantsPage() {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   // List state
@@ -119,9 +121,7 @@ export function PlatformTenantsPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/platform/tenants', {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request('/api/platform/tenants');
 
       if (response.ok) {
         const data = (await response.json()) as TenantListResponse;
@@ -134,7 +134,7 @@ export function PlatformTenantsPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   useEffect(() => {
     void fetchTenants();
@@ -221,11 +221,10 @@ export function PlatformTenantsPage() {
       await new Promise((resolve) => setTimeout(resolve, 500));
       setProvisionStep('seeding');
 
-      const response = await fetch('/api/platform/tenants', {
+      const response = await api.request('/api/platform/tenants', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           name: trimmedName,
