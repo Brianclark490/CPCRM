@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import styles from './AccountsPage.module.css';
 
@@ -40,6 +41,7 @@ const PlusIcon = () => (
 
 export function AccountsPage() {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
@@ -87,9 +89,7 @@ export function AccountsPage() {
       }
 
       try {
-        const response = await fetch(`/api/accounts?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request(`/api/accounts?${params.toString()}`);
 
         if (cancelled) return;
 
@@ -114,7 +114,7 @@ export function AccountsPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, page, debouncedSearch]);
+  }, [sessionToken, api, page, debouncedSearch]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useUser, useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { StatCard } from '../components/StatCard.js';
 import { ActivityPanel, type ActivityItem } from '../components/ActivityPanel.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
@@ -93,6 +94,7 @@ const pipelineStages = [
 export function DashboardPage() {
   const { user } = useUser();
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   const [opportunityCount, setOpportunityCount] = useState<number | null>(null);
   const [accountCount, setAccountCount] = useState<number | null>(null);
@@ -100,9 +102,7 @@ export function DashboardPage() {
   useEffect(() => {
     if (!sessionToken) return;
 
-    const headers = { Authorization: `Bearer ${sessionToken}` };
-
-    fetch('/api/objects/opportunity/records?limit=1&page=1', { headers })
+    api.request('/api/objects/opportunity/records?limit=1&page=1')
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { total?: number } | null) => {
         if (data && typeof data.total === 'number') {
@@ -111,7 +111,7 @@ export function DashboardPage() {
       })
       .catch(() => { /* best-effort */ });
 
-    fetch('/api/objects/account/records?limit=1&page=1', { headers })
+    api.request('/api/objects/account/records?limit=1&page=1')
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { total?: number } | null) => {
         if (data && typeof data.total === 'number') {
@@ -119,7 +119,7 @@ export function DashboardPage() {
         }
       })
       .catch(() => { /* best-effort */ });
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   const stats = [
     {

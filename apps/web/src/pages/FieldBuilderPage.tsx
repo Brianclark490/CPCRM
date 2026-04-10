@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { ObjectIcon } from '../components/ObjectIcon.js';
 import { slugify } from '../utils.js';
@@ -263,6 +264,7 @@ function formFromField(field: FieldDefinition): FieldForm {
 export function FieldBuilderPage() {
   const { id: objectId } = useParams<{ id: string }>();
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   // Object + fields state
@@ -318,9 +320,7 @@ export function FieldBuilderPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/admin/objects/${objectId}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/admin/objects/${objectId}`);
 
       if (response.ok) {
         const data = (await response.json()) as ObjectDefinitionDetail;
@@ -334,7 +334,7 @@ export function FieldBuilderPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, objectId]);
+  }, [sessionToken, api, objectId]);
 
   useEffect(() => {
     void fetchObject();
@@ -349,9 +349,7 @@ export function FieldBuilderPage() {
     setRelationshipsError(null);
 
     try {
-      const response = await fetch(`/api/admin/objects/${objectId}/relationships`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/admin/objects/${objectId}/relationships`);
 
       if (response.ok) {
         const data = (await response.json()) as RelationshipDefinition[];
@@ -364,15 +362,13 @@ export function FieldBuilderPage() {
     } finally {
       setRelationshipsLoading(false);
     }
-  }, [sessionToken, objectId]);
+  }, [sessionToken, api, objectId]);
 
   const fetchAllObjects = useCallback(async () => {
     if (!sessionToken) return;
 
     try {
-      const response = await fetch('/api/admin/objects', {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request('/api/admin/objects');
 
       if (response.ok) {
         const data = (await response.json()) as ObjectDefinitionListItem[];
@@ -381,7 +377,7 @@ export function FieldBuilderPage() {
     } catch {
       // Silently fail — the dropdown will just be empty
     }
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   // ── Fetch page layouts ─────────────────────────────────
 
@@ -392,9 +388,7 @@ export function FieldBuilderPage() {
     setPageLayoutsError(null);
 
     try {
-      const response = await fetch(`/api/admin/objects/${objectId}/page-layouts`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/admin/objects/${objectId}/page-layouts`);
 
       if (response.ok) {
         const data = (await response.json()) as PageLayoutListItem[];
@@ -407,7 +401,7 @@ export function FieldBuilderPage() {
     } finally {
       setPageLayoutsLoading(false);
     }
-  }, [sessionToken, objectId]);
+  }, [sessionToken, api, objectId]);
 
   useEffect(() => {
     if (activeTab === 'relationships') {
@@ -425,11 +419,10 @@ export function FieldBuilderPage() {
     setCreatingLayout(true);
 
     try {
-      const response = await fetch(`/api/admin/objects/${objectId}/page-layouts`, {
+      const response = await api.request(`/api/admin/objects/${objectId}/page-layouts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           name: `${objectDef.label} - Default`,
@@ -536,11 +529,10 @@ export function FieldBuilderPage() {
     };
 
     try {
-      const response = await fetch('/api/admin/relationships', {
+      const response = await api.request('/api/admin/relationships', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify(payload),
       });
@@ -578,9 +570,8 @@ export function FieldBuilderPage() {
     setDeleteRelError(null);
 
     try {
-      const response = await fetch(`/api/admin/relationships/${deleteRelTarget.id}`, {
+      const response = await api.request(`/api/admin/relationships/${deleteRelTarget.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${sessionToken}` },
       });
 
       if (response.ok || response.status === 204) {
@@ -611,11 +602,10 @@ export function FieldBuilderPage() {
 
     setReordering(true);
     try {
-      const response = await fetch(`/api/admin/objects/${objectId}/fields/reorder`, {
+      const response = await api.request(`/api/admin/objects/${objectId}/fields/reorder`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ fieldIds: newFields.map((f) => f.id) }),
       });
@@ -781,13 +771,12 @@ export function FieldBuilderPage() {
     try {
       if (editingField) {
         // Update existing field
-        const response = await fetch(
+        const response = await api.request(
           `/api/admin/objects/${objectId}/fields/${editingField.id}`,
           {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${sessionToken}`,
             },
             body: JSON.stringify(payload),
           },
@@ -804,11 +793,10 @@ export function FieldBuilderPage() {
         // Create new field
         payload.apiName = trimmedApiName;
 
-        const response = await fetch(`/api/admin/objects/${objectId}/fields`, {
+        const response = await api.request(`/api/admin/objects/${objectId}/fields`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify(payload),
         });
@@ -847,11 +835,10 @@ export function FieldBuilderPage() {
     setDeleteError(null);
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/admin/objects/${objectId}/fields/${deleteTarget.id}`,
         {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${sessionToken}` },
         },
       );
 

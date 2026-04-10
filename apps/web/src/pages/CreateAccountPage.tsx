@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { useNavigate } from 'react-router-dom';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import styles from './CreateAccountPage.module.css';
@@ -44,6 +45,7 @@ const PHONE_REGEX = /^[+]?[\d\s()-]{7,}$/;
 
 export function CreateAccountPage() {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   const [form, setForm] = useState<FormState>({
@@ -104,11 +106,10 @@ export function CreateAccountPage() {
       const industry =
         form.industry === 'Other' ? form.customIndustry.trim() : form.industry || undefined;
 
-      const response = await fetch('/api/accounts', {
+      const response = await api.request('/api/accounts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           name: trimmedName,

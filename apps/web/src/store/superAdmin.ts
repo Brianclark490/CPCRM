@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 
 /**
  * Checks whether the current authenticated user is a platform super-admin.
@@ -9,6 +10,7 @@ import { useSession } from '@descope/react-sdk';
  */
 export function useSuperAdmin(): { isSuperAdmin: boolean; loading: boolean } {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -23,9 +25,7 @@ export function useSuperAdmin(): { isSuperAdmin: boolean; loading: boolean } {
 
     const check = async () => {
       try {
-        const response = await fetch('/api/me', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request('/api/me');
 
         if (cancelled) return;
 
@@ -45,7 +45,7 @@ export function useSuperAdmin(): { isSuperAdmin: boolean; loading: boolean } {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   return { isSuperAdmin, loading };
 }

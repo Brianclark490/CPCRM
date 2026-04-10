@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import {
   DndContext,
   DragOverlay,
@@ -125,6 +126,7 @@ function findSection(
 export function PageBuilderPage() {
   const { objectId } = useParams<{ objectId: string }>();
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   // Data state
   const [objectDef, setObjectDef] = useState<ObjectDefinitionDetail | null>(null);
@@ -174,18 +176,10 @@ export function PageBuilderPage() {
 
     try {
       const [objRes, relRes, regRes, layoutsRes] = await Promise.all([
-        fetch(`/api/admin/objects/${objectId}`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        }),
-        fetch(`/api/admin/objects/${objectId}/relationships`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        }),
-        fetch('/api/admin/component-registry', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        }),
-        fetch(`/api/admin/objects/${objectId}/page-layouts`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        }),
+        api.request(`/api/admin/objects/${objectId}`),
+        api.request(`/api/admin/objects/${objectId}/relationships`),
+        api.request('/api/admin/component-registry'),
+        api.request(`/api/admin/objects/${objectId}/page-layouts`),
       ]);
 
       if (!objRes.ok) {
@@ -215,9 +209,7 @@ export function PageBuilderPage() {
 
         const relatedObjResults = await Promise.all(
           uniqueTargetIds.map((targetId) =>
-            fetch(`/api/admin/objects/${targetId}`, {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-            })
+            api.request(`/api/admin/objects/${targetId}`)
               .then(async (res) => {
                 if (!res.ok) return null;
                 return (await res.json()) as RelatedObjectFields;
@@ -279,15 +271,14 @@ export function PageBuilderPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, objectId]);
+  }, [sessionToken, api, objectId]);
 
   const loadLayoutDetail = async (layoutId: string) => {
     if (!sessionToken || !objectId) return;
 
     try {
-      const res = await fetch(
+      const res = await api.request(
         `/api/admin/objects/${objectId}/page-layouts/${layoutId}`,
-        { headers: { Authorization: `Bearer ${sessionToken}` } },
       );
 
       if (res.ok) {
@@ -662,13 +653,12 @@ export function PageBuilderPage() {
     try {
       if (selectedLayoutId) {
         // Update existing
-        const res = await fetch(
+        const res = await api.request(
           `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}`,
           {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${sessionToken}`,
             },
             body: JSON.stringify({ layout }),
           },
@@ -681,13 +671,12 @@ export function PageBuilderPage() {
         }
       } else {
         // Create new
-        const res = await fetch(
+        const res = await api.request(
           `/api/admin/objects/${objectId}/page-layouts`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${sessionToken}`,
             },
             body: JSON.stringify({
               name: layout.name,
@@ -723,11 +712,10 @@ export function PageBuilderPage() {
     setPublishing(true);
     setSaveError(null);
     try {
-      const res = await fetch(
+      const res = await api.request(
         `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/publish`,
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${sessionToken}` },
         },
       );
       if (!res.ok) {
@@ -754,13 +742,12 @@ export function PageBuilderPage() {
     } else if (role !== null) {
       // No layout for this role — create one
       try {
-        const res = await fetch(
+        const res = await api.request(
           `/api/admin/objects/${objectId}/page-layouts`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${sessionToken}`,
             },
             body: JSON.stringify({
               name: `${objectDef?.label ?? 'Object'} - ${role}`,
@@ -796,13 +783,12 @@ export function PageBuilderPage() {
     if (!sessionToken || !objectId || !selectedLayoutId) return;
 
     try {
-      const res = await fetch(
+      const res = await api.request(
         `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/copy`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({ sourceLayoutId }),
         },
