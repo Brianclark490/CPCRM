@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from './PrimaryButton.js';
 import styles from './LayoutBuilderTab.module.css';
 
@@ -64,7 +65,6 @@ interface ApiError {
 
 interface LayoutBuilderTabProps {
   objectId: string;
-  sessionToken: string;
   fields: FieldDefinition[];
 }
 
@@ -152,7 +152,9 @@ function sectionsToPayload(sections: LayoutSection[]) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuilderTabProps) {
+export function LayoutBuilderTab({ objectId, fields }: LayoutBuilderTabProps) {
+  const api = useApiClient();
+
   // Layout list
   const [layouts, setLayouts] = useState<LayoutDefinition[]>([]);
   const [layoutsLoading, setLayoutsLoading] = useState(true);
@@ -197,9 +199,7 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
     setLayoutsError(null);
 
     try {
-      const response = await fetch(`/api/admin/objects/${objectId}/layouts`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/admin/objects/${objectId}/layouts`);
 
       if (response.ok) {
         const data = (await response.json()) as LayoutDefinition[];
@@ -217,7 +217,7 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
     } finally {
       setLayoutsLoading(false);
     }
-  }, [objectId, sessionToken]);
+  }, [objectId, api]);
 
   useEffect(() => {
     void fetchLayouts();
@@ -233,9 +233,8 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
     setSaveSuccess(false);
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/admin/objects/${objectId}/layouts/${selectedLayoutId}`,
-        { headers: { Authorization: `Bearer ${sessionToken}` } },
       );
 
       if (response.ok) {
@@ -249,7 +248,7 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
     } finally {
       setDetailLoading(false);
     }
-  }, [objectId, sessionToken, selectedLayoutId]);
+  }, [objectId, api, selectedLayoutId]);
 
   useEffect(() => {
     if (selectedLayoutId) {
@@ -294,11 +293,10 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
     setCreating(true);
 
     try {
-      const response = await fetch(`/api/admin/objects/${objectId}/layouts`, {
+      const response = await api.request(`/api/admin/objects/${objectId}/layouts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           name: createName.trim(),
@@ -332,11 +330,10 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
     if (!selectedLayoutId) return;
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/admin/objects/${objectId}/layouts/${selectedLayoutId}`,
         {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${sessionToken}` },
         },
       );
 
@@ -362,13 +359,12 @@ export function LayoutBuilderTab({ objectId, sessionToken, fields }: LayoutBuild
     setSaveSuccess(false);
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/admin/objects/${objectId}/layouts/${selectedLayoutId}/fields`,
         {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({ sections: sectionsToPayload(sections) }),
         },

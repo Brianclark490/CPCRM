@@ -81,14 +81,18 @@ describe('OrganisationProvisioningPage', () => {
         '/api/organisations',
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-token',
-            'Content-Type': 'application/json',
-          }),
           body: JSON.stringify({ name: 'Acme Corp', description: 'Our main org' }),
         }),
       );
     });
+
+    const postCall = vi
+      .mocked(fetch)
+      .mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(postCall).toBeDefined();
+    const postHeaders = new Headers(postCall![1]?.headers);
+    expect(postHeaders.get('Authorization')).toBe('Bearer test-token');
+    expect(postHeaders.get('Content-Type')).toBe('application/json');
 
     expect(screen.getByText('Organisation created')).toBeInTheDocument();
   });

@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { ObjectIcon } from './ObjectIcon.js';
 import styles from './ObjectTabs.module.css';
 
@@ -10,11 +12,9 @@ interface ObjectDefinitionNavItem {
   icon?: string;
 }
 
-interface ObjectTabsProps {
-  sessionToken: string | undefined;
-}
-
-export function ObjectTabs({ sessionToken }: ObjectTabsProps) {
+export function ObjectTabs() {
+  const { sessionToken } = useSession();
+  const api = useApiClient();
   const [items, setItems] = useState<ObjectDefinitionNavItem[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -27,9 +27,7 @@ export function ObjectTabs({ sessionToken }: ObjectTabsProps) {
 
     const loadObjects = async () => {
       try {
-        const response = await fetch('/api/admin/objects', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request('/api/admin/objects');
 
         if (cancelled || !response.ok) return;
 
@@ -63,16 +61,15 @@ export function ObjectTabs({ sessionToken }: ObjectTabsProps) {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   const persistOrder = useCallback(
     async (orderedItems: ObjectDefinitionNavItem[]) => {
       if (!sessionToken) return;
       try {
-        await fetch('/api/admin/objects/reorder', {
+        await api.request('/api/admin/objects/reorder', {
           method: 'PUT',
           headers: {
-            Authorization: `Bearer ${sessionToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ orderedIds: orderedItems.map((item) => item.id) }),
@@ -81,7 +78,7 @@ export function ObjectTabs({ sessionToken }: ObjectTabsProps) {
         // Reorder persist is best-effort
       }
     },
-    [sessionToken],
+    [sessionToken, api],
   );
 
   const handleDragStart = useCallback((index: number, e: React.DragEvent) => {

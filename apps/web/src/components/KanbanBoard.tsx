@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { useTenantLocale } from '../useTenantLocale.js';
 import { KanbanCard } from './KanbanCard.js';
 import type { KanbanCardRecord } from './KanbanCard.js';
@@ -175,6 +176,7 @@ function applyFilters(
 
 export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const { formatCurrencyCompact } = useTenantLocale();
 
   const [pipeline, setPipeline] = useState<PipelineDefinition | null>(null);
@@ -227,9 +229,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     const loadAll = async () => {
       try {
         // 1. Find pipeline for this object
-        const response = await fetch('/api/admin/pipelines', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request('/api/admin/pipelines');
 
         if (cancelled || !response.ok) {
           if (!cancelled) {
@@ -254,12 +254,8 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
         // 2. Fetch pipeline detail AND records in parallel
         const [detailResponse, recordsResponse] = await Promise.all([
-          fetch(`/api/admin/pipelines/${match.id}`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          }),
-          fetch(`/api/objects/${apiName}/records?limit=100`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          }),
+          api.request(`/api/admin/pipelines/${match.id}`),
+          api.request(`/api/objects/${apiName}/records?limit=100`),
         ]);
 
         if (cancelled) return;
@@ -303,7 +299,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, objectId, apiName]);
+  }, [sessionToken, api, objectId, apiName]);
 
   // ── Fetch pipeline analytics ──────────────────────────────
   const loadAnalytics = useCallback(async () => {
@@ -311,15 +307,9 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
     try {
       const [summaryResp, velocityResp, overdueResp] = await Promise.all([
-        fetch(`/api/pipelines/${pipeline.id}/summary`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        }),
-        fetch(`/api/pipelines/${pipeline.id}/velocity?period=30d`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        }),
-        fetch(`/api/pipelines/${pipeline.id}/overdue`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        }),
+        api.request(`/api/pipelines/${pipeline.id}/summary`),
+        api.request(`/api/pipelines/${pipeline.id}/velocity?period=30d`),
+        api.request(`/api/pipelines/${pipeline.id}/overdue`),
       ]);
 
       if (summaryResp.ok && velocityResp.ok) {
@@ -338,7 +328,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     } catch {
       // Analytics fetch is best-effort
     }
-  }, [sessionToken, pipeline]);
+  }, [sessionToken, api, pipeline]);
 
   useEffect(() => {
     if (pipeline) {
@@ -374,12 +364,11 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     if (!sessionToken) return false;
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/objects/${apiName}/records/${recordId}/move-stage`,
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${sessionToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ target_stage_id: targetStageId }),
@@ -491,12 +480,11 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
     try {
       // First update the record fields
-      const updateResponse = await fetch(
+      const updateResponse = await api.request(
         `/api/objects/${apiName}/records/${gateModal.recordId}`,
         {
           method: 'PUT',
           headers: {
-            Authorization: `Bearer ${sessionToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ fieldValues }),

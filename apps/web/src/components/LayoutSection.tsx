@@ -17,7 +17,6 @@ interface LayoutSectionProps {
   fields: FieldDefinitionRef[];
   objectDef: ObjectDefinitionRef | null;
   onRecordCreated?: () => void;
-  sessionToken?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -32,7 +31,6 @@ export function LayoutSection({
   fields,
   objectDef,
   onRecordCreated,
-  sessionToken,
 }: LayoutSectionProps) {
   const [collapsed, setCollapsed] = useState(section.collapsed ?? false);
 
@@ -69,7 +67,6 @@ export function LayoutSection({
                 fields={fields}
                 objectDef={objectDef}
                 onRecordCreated={onRecordCreated}
-                sessionToken={sessionToken}
               />
             </div>
           ))}

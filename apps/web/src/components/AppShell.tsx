@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useUser, useDescope, useSession } from '@descope/react-sdk';
+import { useUser, useDescope } from '@descope/react-sdk';
 import { sessionHistory } from '../store/sessionHistory.js';
 import { useTenant, clearStoredTenant } from '../store/tenant.js';
 import { useSuperAdmin } from '../store/superAdmin.js';
@@ -28,7 +28,6 @@ function getInitials(name: string | undefined, email: string | undefined): strin
 export function AppShell({ children }: AppShellProps) {
   const { user } = useUser();
   const { logout } = useDescope();
-  const { sessionToken } = useSession();
   const navigate = useNavigate();
   const { tenantName } = useTenant();
   const { isSuperAdmin } = useSuperAdmin();
@@ -104,7 +103,7 @@ export function AppShell({ children }: AppShellProps) {
         </div>
       </header>
 
-      <ObjectTabs sessionToken={sessionToken} />
+      <ObjectTabs />
 
       <main className={styles.content}>
         <div className={styles.contentContainer}>{children}</div>

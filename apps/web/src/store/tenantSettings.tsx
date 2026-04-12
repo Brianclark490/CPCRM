@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 
 /* ── Types ────────────────────────────────────────────────── */
 
@@ -32,6 +33,7 @@ interface TenantSettingsProviderProps {
 
 export function TenantSettingsProvider({ children }: TenantSettingsProviderProps) {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const [settings, setSettings] = useState<TenantLocaleSettings>(DEFAULT_LOCALE_SETTINGS);
 
   useEffect(() => {
@@ -41,9 +43,7 @@ export function TenantSettingsProvider({ children }: TenantSettingsProviderProps
 
     const fetchSettings = async () => {
       try {
-        const response = await fetch('/api/admin/tenant-settings', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request('/api/admin/tenant-settings');
 
         if (!response.ok || cancelled) return;
 
@@ -72,7 +72,7 @@ export function TenantSettingsProvider({ children }: TenantSettingsProviderProps
     return () => {
       cancelled = true;
     };
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   return (
     <TenantSettingsContext.Provider value={settings}>

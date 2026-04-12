@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { FieldInput } from '../components/FieldInput.js';
 import { StageFieldRenderer } from '../components/StageFieldRenderer.js';
 import { RelationshipSearchDropdown } from '../components/RelationshipSearchDropdown.js';
@@ -226,6 +227,7 @@ export function RecordCreatePage() {
   const { apiName } = useParams<{ apiName: string }>();
   const navigate = useNavigate();
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   // Metadata state
   const [objectDef, setObjectDef] = useState<ObjectDefinition | null>(null);
@@ -256,9 +258,7 @@ export function RecordCreatePage() {
 
       try {
         // 1. Get object definitions to find the object ID
-        const objResponse = await fetch('/api/admin/objects', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const objResponse = await api.request('/api/admin/objects');
 
         if (cancelled) return;
         if (!objResponse.ok) {
@@ -280,12 +280,8 @@ export function RecordCreatePage() {
 
         // 2. Fetch layouts + relationships in parallel
         const [layoutsResponse, relsResponse] = await Promise.all([
-          fetch(`/api/admin/objects/${obj.id}/layouts`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          }),
-          fetch(`/api/admin/objects/${obj.id}/relationships`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          }),
+          api.request(`/api/admin/objects/${obj.id}/layouts`),
+          api.request(`/api/admin/objects/${obj.id}/relationships`),
         ]);
 
         if (cancelled) return;
@@ -299,9 +295,8 @@ export function RecordCreatePage() {
             layouts.find((l) => l.layoutType === 'form');
 
           if (formLayout && !cancelled) {
-            const layoutDetailResponse = await fetch(
+            const layoutDetailResponse = await api.request(
               `/api/admin/objects/${obj.id}/layouts/${formLayout.id}`,
-              { headers: { Authorization: `Bearer ${sessionToken}` } },
             );
 
             if (cancelled) return;
@@ -321,9 +316,8 @@ export function RecordCreatePage() {
         // definitions and render them in a single section so the user can
         // still create a record.
         if (!layoutResolved && !cancelled) {
-          const fieldsResponse = await fetch(
+          const fieldsResponse = await api.request(
             `/api/admin/objects/${obj.id}/fields`,
-            { headers: { Authorization: `Bearer ${sessionToken}` } },
           );
 
           if (cancelled) return;
@@ -366,7 +360,7 @@ export function RecordCreatePage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, apiName]);
+  }, [sessionToken, api, apiName]);
 
   // ── Form handlers ──────────────────────────────────────────────────────────
 
@@ -454,11 +448,10 @@ export function RecordCreatePage() {
 
     try {
       // Create the record
-      const response = await fetch(`/api/objects/${apiName}/records`, {
+      const response = await api.request(`/api/objects/${apiName}/records`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           fieldValues: formValues,
@@ -477,11 +470,10 @@ export function RecordCreatePage() {
       // Link relationships
       const relLinks = relationshipSelections.filter((s) => s.recordId);
       for (const link of relLinks) {
-        await fetch(`/api/records/${created.id}/relationships`, {
+        await api.request(`/api/records/${created.id}/relationships`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({
             relationship_id: link.relationshipId,
@@ -653,7 +645,6 @@ export function RecordCreatePage() {
                         )}
                       </label>
                       <RelationshipSearchDropdown
-                        sessionToken={sessionToken ?? ''}
                         objectApiName={targetApiName}
                         value={selection?.recordId ?? null}
                         valueName={selection?.recordName ?? undefined}

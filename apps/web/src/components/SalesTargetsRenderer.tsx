@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import type { ComponentRendererProps } from './layoutTypes.js';
 import styles from './SalesTargetsRenderer.module.css';
 
@@ -199,6 +200,7 @@ function TeamBlock({ team, currency, expanded, onToggle }: TeamBlockProps) {
 
 export function SalesTargetsRenderer({ component }: ComponentRendererProps) {
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   const [data, setData] = useState<TargetSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -224,9 +226,7 @@ export function SalesTargetsRenderer({ component }: ComponentRendererProps) {
       const qs = params.toString();
       const url = `/api/targets/summary${qs ? `?${qs}` : ''}`;
 
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(url);
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({})) as { error?: string };
@@ -241,7 +241,7 @@ export function SalesTargetsRenderer({ component }: ComponentRendererProps) {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, periodStart, periodEnd]);
+  }, [sessionToken, api, periodStart, periodEnd]);
 
   useEffect(() => {
     void fetchSummary();

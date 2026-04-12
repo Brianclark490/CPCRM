@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import styles from './AccountDetailPage.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -101,6 +102,7 @@ export function AccountDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,9 +130,7 @@ export function AccountDetailPage() {
       setLoadError(null);
 
       try {
-        const response = await fetch(`/api/accounts/${id}`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request(`/api/accounts/${id}`);
 
         if (cancelled) return;
 
@@ -154,7 +154,7 @@ export function AccountDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, sessionToken]);
+  }, [id, sessionToken, api]);
 
   // ── Edit handlers ─────────────────────────────────────────────────────────
 
@@ -220,11 +220,10 @@ export function AccountDetailPage() {
     setSaveSuccess(false);
 
     try {
-      const response = await fetch(`/api/accounts/${account.id}`, {
+      const response = await api.request(`/api/accounts/${account.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           name: trimmedName,
@@ -278,9 +277,8 @@ export function AccountDetailPage() {
     setDeleteError(null);
 
     try {
-      const response = await fetch(`/api/accounts/${account.id}`, {
+      const response = await api.request(`/api/accounts/${account.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${sessionToken}` },
       });
 
       if (response.ok || response.status === 204) {

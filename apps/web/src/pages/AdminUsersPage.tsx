@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { UserManagement, useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { useTenant } from '../store/tenant.js';
 import styles from './AdminUsersPage.module.css';
 
@@ -28,6 +29,7 @@ function fieldStr(user: CrmUser, key: string): string {
 export function AdminUsersPage() {
   const { tenantId } = useTenant();
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const [users, setUsers] = useState<CrmUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,9 +44,7 @@ export function AdminUsersPage() {
 
     const loadUsers = async () => {
       try {
-        const response = await fetch('/api/objects/user/records?limit=100', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const response = await api.request('/api/objects/user/records?limit=100');
 
         if (cancelled) return;
 
@@ -70,7 +70,7 @@ export function AdminUsersPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, tenantId]);
+  }, [sessionToken, api, tenantId]);
 
   return (
     <div className={styles.page}>

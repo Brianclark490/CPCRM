@@ -31,7 +31,6 @@ export function LayoutComponent({
   fields,
   objectDef,
   onRecordCreated,
-  sessionToken,
 }: ComponentRendererProps) {
   if (!evaluateVisibility(component.visibility, record.fieldValues)) {
     return null;
@@ -53,7 +52,6 @@ export function LayoutComponent({
       fields={fields}
       objectDef={objectDef}
       onRecordCreated={onRecordCreated}
-      sessionToken={sessionToken}
     />
   );
 }

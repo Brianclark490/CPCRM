@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { FieldInput } from '../components/FieldInput.js';
 import { StageFieldRenderer } from '../components/StageFieldRenderer.js';
 import styles from './CreateRecordPage.module.css';
@@ -96,6 +97,7 @@ function groupFieldsBySection(
 export function CreateRecordPage() {
   const { apiName } = useParams<{ apiName: string }>();
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const navigate = useNavigate();
 
   const [objectDef, setObjectDef] = useState<ObjectDefinition | null>(null);
@@ -119,9 +121,7 @@ export function CreateRecordPage() {
 
       try {
         // Fetch all object definitions to find our object
-        const objResponse = await fetch('/api/admin/objects', {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
+        const objResponse = await api.request('/api/admin/objects');
 
         if (cancelled) return;
 
@@ -143,9 +143,8 @@ export function CreateRecordPage() {
         if (!cancelled) setObjectDef(obj);
 
         // Fetch field definitions
-        const fieldsResponse = await fetch(
+        const fieldsResponse = await api.request(
           `/api/admin/objects/${obj.id}/fields`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
 
         if (cancelled) return;
@@ -156,9 +155,8 @@ export function CreateRecordPage() {
         }
 
         // Fetch layouts
-        const layoutsResponse = await fetch(
+        const layoutsResponse = await api.request(
           `/api/admin/objects/${obj.id}/layouts`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
 
         if (cancelled) return;
@@ -172,9 +170,8 @@ export function CreateRecordPage() {
             layouts.find((l) => l.layoutType === 'form');
 
           if (formLayout) {
-            const layoutDetailResponse = await fetch(
+            const layoutDetailResponse = await api.request(
               `/api/admin/objects/${obj.id}/layouts/${formLayout.id}`,
-              { headers: { Authorization: `Bearer ${sessionToken}` } },
             );
 
             if (!cancelled && layoutDetailResponse.ok) {
@@ -226,7 +223,7 @@ export function CreateRecordPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, apiName]);
+  }, [sessionToken, api, apiName]);
 
   // ── Form handlers ───────────────────────────────────────────────────────────
 
@@ -262,11 +259,10 @@ export function CreateRecordPage() {
     setSubmitting(true);
 
     try {
-      const response = await fetch(`/api/objects/${apiName}/records`, {
+      const response = await api.request(`/api/objects/${apiName}/records`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ fieldValues: formValues }),
       });

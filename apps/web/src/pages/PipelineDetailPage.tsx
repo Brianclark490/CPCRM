@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { slugify } from '../utils.js';
 import styles from './PipelineDetailPage.module.css';
@@ -131,6 +132,7 @@ const XIcon = () => (
 export function PipelineDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { sessionToken } = useSession();
+  const api = useApiClient();
 
   // Pipeline state
   const [pipeline, setPipeline] = useState<PipelineDetail | null>(null);
@@ -188,9 +190,7 @@ export function PipelineDetailPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/admin/pipelines/${id}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/admin/pipelines/${id}`);
 
       if (response.ok) {
         const data = (await response.json()) as PipelineDetail;
@@ -205,7 +205,7 @@ export function PipelineDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, id]);
+  }, [sessionToken, api, id]);
 
   useEffect(() => {
     void fetchPipeline();
@@ -217,9 +217,7 @@ export function PipelineDetailPage() {
     if (!sessionToken || !pipeline?.objectId) return;
 
     try {
-      const response = await fetch(`/api/admin/objects/${pipeline.objectId}/fields`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/admin/objects/${pipeline.objectId}/fields`);
 
       if (response.ok) {
         const data = (await response.json()) as FieldOption[];
@@ -228,7 +226,7 @@ export function PipelineDetailPage() {
     } catch {
       // Best-effort
     }
-  }, [sessionToken, pipeline?.objectId]);
+  }, [sessionToken, api, pipeline?.objectId]);
 
   useEffect(() => {
     void fetchFields();
@@ -242,9 +240,7 @@ export function PipelineDetailPage() {
     setGatesLoading(true);
 
     try {
-      const response = await fetch(`/api/admin/stages/${stageId}/gates`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const response = await api.request(`/api/admin/stages/${stageId}/gates`);
 
       if (response.ok) {
         const data = (await response.json()) as StageGate[];
@@ -255,7 +251,7 @@ export function PipelineDetailPage() {
     } finally {
       setGatesLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, api]);
 
   // ── Select a stage ─────────────────────────────────────────
 
@@ -284,13 +280,12 @@ export function PipelineDetailPage() {
     setStageError(null);
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/admin/pipelines/${pipeline.id}/stages/${selectedStageId}`,
         {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({
             name: stageEditName.trim(),
@@ -349,11 +344,10 @@ export function PipelineDetailPage() {
     setAddStageError(null);
 
     try {
-      const response = await fetch(`/api/admin/pipelines/${pipeline.id}/stages`, {
+      const response = await api.request(`/api/admin/pipelines/${pipeline.id}/stages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           name: trimmedName,
@@ -388,11 +382,10 @@ export function PipelineDetailPage() {
     setDeleteStageError(null);
 
     try {
-      const response = await fetch(
+      const response = await api.request(
         `/api/admin/pipelines/${pipeline.id}/stages/${deleteStageTarget.id}`,
         {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${sessionToken}` },
         },
       );
 
@@ -436,11 +429,10 @@ export function PipelineDetailPage() {
     const reorderedIds = [...openStages.map((s) => s.id), ...terminalStages.map((s) => s.id)];
 
     try {
-      await fetch(`/api/admin/pipelines/${pipeline.id}/stages/reorder`, {
+      await api.request(`/api/admin/pipelines/${pipeline.id}/stages/reorder`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ stage_ids: reorderedIds }),
       });
@@ -477,11 +469,10 @@ export function PipelineDetailPage() {
     setGateError(null);
 
     try {
-      const response = await fetch(`/api/admin/stages/${selectedStageId}/gates`, {
+      const response = await api.request(`/api/admin/stages/${selectedStageId}/gates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           field_id: gateFieldId,
@@ -509,9 +500,8 @@ export function PipelineDetailPage() {
     if (!sessionToken || !selectedStageId) return;
 
     try {
-      await fetch(`/api/admin/stages/${selectedStageId}/gates/${gateId}`, {
+      await api.request(`/api/admin/stages/${selectedStageId}/gates/${gateId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${sessionToken}` },
       });
 
       void fetchGates(selectedStageId);

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useApiClient } from './lib/apiClient.js';
 import type { PageLayout } from './components/layoutTypes.js';
 
 /**
@@ -9,6 +10,7 @@ import type { PageLayout } from './components/layoutTypes.js';
  */
 export function usePageLayout(objectApiName: string | undefined) {
   const { sessionToken } = useSession();
+  const api = useApiClient();
   const [layout, setLayout] = useState<PageLayout | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -24,9 +26,8 @@ export function usePageLayout(objectApiName: string | undefined) {
       setLoading(true);
 
       try {
-        const response = await fetch(
+        const response = await api.request(
           `/api/objects/${encodeURIComponent(objectApiName)}/page-layout`,
-          { headers: { Authorization: `Bearer ${sessionToken}` } },
         );
 
         if (cancelled) return;
@@ -51,7 +52,7 @@ export function usePageLayout(objectApiName: string | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, objectApiName]);
+  }, [sessionToken, api, objectApiName]);
 
   return { layout, loading };
 }
