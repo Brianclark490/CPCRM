@@ -33,6 +33,8 @@ import { targetsRouter } from './routes/targets.js';
 import { securityHeaders } from './middleware/security.js';
 import { globalLimiter, writeMethodLimiter, authLimiter } from './middleware/rateLimiter.js';
 import { requireCsrf } from './middleware/csrf.js';
+import { requestId } from './middleware/requestId.js';
+import { errorHandler, normalizeErrorResponses } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,7 +54,24 @@ app.use(securityHeaders);
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(cookieParser());
 app.use(express.json());
-app.use(httpLogger({ logger }));
+// Assign a UUID to every incoming request BEFORE pino-http so the logger
+// picks it up via `req.id`. The same id is echoed as `X-Request-Id` and
+// surfaced in the canonical error response shape for log correlation.
+app.use(requestId);
+app.use(
+  httpLogger({
+    logger,
+    // pino-http reads `req.id` from the request — the `requestId` middleware
+    // above always assigns one, so log lines are correlated with the same
+    // UUID we echo back to clients in the `X-Request-Id` header.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    genReqId: (req: any) => req.id ?? '',
+  }),
+);
+// Normalise any legacy `{error: 'string'}` response bodies emitted by
+// routes that haven't been migrated to throw AppError yet so every API
+// error response conforms to the canonical shape.
+app.use('/api', normalizeErrorResponses);
 
 // Silence /favicon.ico requests with 204 No Content.  Without this, requests
 // that don't match a static file in production fall through to the SPA
@@ -113,6 +132,13 @@ if (config.env === 'production') {
     res.json({ name: 'cpcrm-api', status: 'ok' });
   });
 }
+
+// Global error-handling middleware — must be registered LAST so it catches
+// errors thrown from any handler (including the SPA fallback) and converts
+// them into the canonical `{ error: { code, message, details?, requestId } }`
+// payload. Express 5 forwards both synchronous and async thrown errors here
+// automatically.
+app.use(errorHandler);
 
 // Run database migrations, backfill seed data, then start the HTTP server.
 runMigrations()
