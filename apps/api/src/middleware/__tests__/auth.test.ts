@@ -31,6 +31,20 @@ function mockRes(): Response {
   return res;
 }
 
+function mockReq(
+  overrides: {
+    headers?: Record<string, string>;
+    cookies?: Record<string, string>;
+    path?: string;
+  } = {},
+): AuthenticatedRequest {
+  return {
+    headers: {},
+    cookies: {},
+    ...overrides,
+  } as unknown as AuthenticatedRequest;
+}
+
 describe('requireAuth middleware', () => {
   let next: NextFunction;
 
@@ -41,19 +55,19 @@ describe('requireAuth middleware', () => {
     mockLoggerError.mockReset();
   });
 
-  it('returns 401 when Authorization header is missing', async () => {
-    const req = { headers: {} } as AuthenticatedRequest;
+  it('returns 401 when neither cookie nor Authorization header is present', async () => {
+    const req = mockReq();
     const res = mockRes();
 
     await requireAuth(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Missing or invalid Authorization header' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Missing authentication credentials' });
     expect(next).not.toHaveBeenCalled();
   });
 
   it('returns 401 when Authorization header does not start with Bearer', async () => {
-    const req = { headers: { authorization: 'Basic abc123' } } as AuthenticatedRequest;
+    const req = mockReq({ headers: { authorization: 'Basic abc123' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -62,12 +76,10 @@ describe('requireAuth middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('returns 401 when token validation fails', async () => {
+  it('returns 401 when token validation fails (Bearer header)', async () => {
     mockValidateSession.mockRejectedValue(new Error('Invalid token'));
 
-    const req = {
-      headers: { authorization: 'Bearer invalid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ headers: { authorization: 'Bearer invalid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -82,9 +94,7 @@ describe('requireAuth middleware', () => {
       token: { sub: undefined, email: 'user@example.com', name: 'Test User' },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ headers: { authorization: 'Bearer valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -94,14 +104,12 @@ describe('requireAuth middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('calls next and sets req.user when token is valid without tenant claim', async () => {
+  it('calls next and sets req.user when token is valid without tenant claim (Bearer header)', async () => {
     mockValidateSession.mockResolvedValue({
       token: { sub: 'user123', email: 'user@example.com', name: 'Test User' },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ headers: { authorization: 'Bearer valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -117,6 +125,52 @@ describe('requireAuth middleware', () => {
     });
   });
 
+  it('reads the session token from the cpcrm_session cookie', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: { sub: 'user123', email: 'user@example.com', name: 'Test User' },
+    });
+
+    const req = mockReq({ cookies: { cpcrm_session: 'cookie-token' } });
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(mockValidateSession).toHaveBeenCalledWith('cookie-token');
+    expect(req.user?.userId).toBe('user123');
+  });
+
+  it('prefers the cookie over the Authorization header when both are present', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: { sub: 'user123', email: 'user@example.com', name: 'Test User' },
+    });
+
+    const req = mockReq({
+      headers: { authorization: 'Bearer header-token' },
+      cookies: { cpcrm_session: 'cookie-token' },
+    });
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(mockValidateSession).toHaveBeenCalledWith('cookie-token');
+  });
+
+  it('falls back to Authorization header when no cookie is present', async () => {
+    mockValidateSession.mockResolvedValue({
+      token: { sub: 'user123', email: 'user@example.com', name: 'Test User' },
+    });
+
+    const req = mockReq({ headers: { authorization: 'Bearer header-token' } });
+    const res = mockRes();
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(mockValidateSession).toHaveBeenCalledWith('header-token');
+  });
+
   it('resolves tenantId from the JWT tenants claim', async () => {
     mockValidateSession.mockResolvedValue({
       token: {
@@ -127,9 +181,7 @@ describe('requireAuth middleware', () => {
       },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -161,9 +213,7 @@ describe('requireAuth middleware', () => {
       },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -191,10 +241,7 @@ describe('requireAuth middleware', () => {
       },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-      path: '/accounts',
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' }, path: '/accounts' });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -203,7 +250,6 @@ describe('requireAuth middleware', () => {
     expect(req.user?.tenantId).toBe('tenant-xyz');
     expect(req.user?.roles).toEqual(['admin']);
     expect(req.user?.permissions).toEqual(['admin:access']);
-    // Should NOT warn about ambiguous tenants when dct is explicit
     expect(mockLoggerWarn).not.toHaveBeenCalled();
   });
 
@@ -218,9 +264,7 @@ describe('requireAuth middleware', () => {
       },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -236,9 +280,7 @@ describe('requireAuth middleware', () => {
       token: { sub: 'user123', tenants: {} },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -258,10 +300,7 @@ describe('requireAuth middleware', () => {
       },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-      path: '/accounts',
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' }, path: '/accounts' });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -288,9 +327,7 @@ describe('requireAuth middleware', () => {
       },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -315,9 +352,7 @@ describe('requireAuth middleware', () => {
       },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);
@@ -341,9 +376,7 @@ describe('requireAuth middleware', () => {
       },
     });
 
-    const req = {
-      headers: { authorization: 'Bearer valid_token' },
-    } as AuthenticatedRequest;
+    const req = mockReq({ cookies: { cpcrm_session: 'valid_token' } });
     const res = mockRes();
 
     await requireAuth(req, res, next);

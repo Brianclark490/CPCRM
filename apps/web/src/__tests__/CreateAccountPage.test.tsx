@@ -131,10 +131,10 @@ describe('CreateAccountPage', () => {
 
     const postCall = vi
       .mocked(fetch)
-      .mock.calls.find(([, init]) => init?.method === 'POST');
+      .mock.calls.find(([url, init]) => url === '/api/accounts' && init?.method === 'POST');
     expect(postCall).toBeDefined();
+    expect(postCall![1]?.credentials).toBe('include');
     const postHeaders = new Headers(postCall![1]?.headers);
-    expect(postHeaders.get('Authorization')).toBe('Bearer test-token');
     expect(postHeaders.get('Content-Type')).toBe('application/json');
 
     expect(mockNavigate).toHaveBeenCalledWith('/accounts/new-account-uuid');

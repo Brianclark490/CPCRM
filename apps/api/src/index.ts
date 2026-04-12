@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import type { Options, HttpLogger } from 'pino-http';
@@ -11,6 +12,7 @@ import { logger } from './lib/logger.js';
 import { runMigrations } from './db/runMigrations.js';
 import { backfillSeedObjects } from './db/backfillSeedObjects.js';
 import { healthRouter } from './routes/health.js';
+import { authSessionRouter } from './routes/authSession.js';
 import { meRouter } from './routes/me.js';
 import { organisationsRouter } from './routes/organisations.js';
 import { accountsRouter } from './routes/accounts.js';
@@ -30,6 +32,7 @@ import { pageLayoutsRouter } from './routes/pageLayouts.js';
 import { adminTargetsRouter } from './routes/adminTargets.js';
 import { targetsRouter } from './routes/targets.js';
 import { globalLimiter, writeMethodLimiter, authLimiter } from './middleware/rateLimiter.js';
+import { requireCsrf } from './middleware/csrf.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,7 +49,8 @@ type PinoHttpFactory = (opts: Options) => HttpLogger;
 const httpLogger = pinoHttp as unknown as PinoHttpFactory;
 
 app.use(helmet());
-app.use(cors({ origin: config.corsOrigin }));
+app.use(cors({ origin: config.corsOrigin, credentials: true }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(httpLogger({ logger }));
 
@@ -62,6 +66,17 @@ app.get('/favicon.ico', (_req, res) => {
 // the same origin without path conflicts.
 app.use('/api', globalLimiter);
 app.use('/api', writeMethodLimiter);
+
+// Auth session routes handle cookie-based session establishment and CSRF token
+// provisioning.  They must be mounted *before* the CSRF middleware because:
+//   - POST /api/auth/session is what *creates* the CSRF cookie
+//   - GET  /api/auth/csrf-token is what *refreshes* it
+//   - DELETE /api/auth/session tears down the session (no CSRF needed)
+app.use('/api/auth', authSessionRouter);
+
+// CSRF protection for all other state-changing API requests.
+app.use('/api', requireCsrf);
+
 app.use('/api/me', authLimiter);
 app.use('/api/health', healthRouter);
 app.use('/api/me', meRouter);

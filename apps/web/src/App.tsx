@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { TenantSettingsProvider } from './store/tenantSettings.js';
+import { SessionSync } from './components/SessionSync.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
 import { AccountsPage } from './pages/AccountsPage.js';
@@ -39,6 +40,7 @@ function OpportunityDetailRedirect() {
 export function App() {
   return (
     <BrowserRouter>
+      <SessionSync />
       <TenantSettingsProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />

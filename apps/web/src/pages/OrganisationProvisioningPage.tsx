@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useDescope } from '@descope/react-sdk';
 import { useNavigate } from 'react-router-dom';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, clearServerSession } from '../lib/apiClient.js';
 import styles from './OrganisationProvisioningPage.module.css';
 
 interface FormState {
@@ -66,6 +66,7 @@ export function OrganisationProvisioningPage() {
   };
 
   const handleLogout = async () => {
+    await clearServerSession();
     await logout();
     void navigate('/login');
   };
