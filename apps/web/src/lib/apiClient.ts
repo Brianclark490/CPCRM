@@ -35,6 +35,13 @@ export class ApiError extends Error {
   public readonly status: number;
   public readonly code: string;
   public readonly fieldErrors: FieldErrors;
+  /**
+   * Request correlation id emitted by the API in the canonical error
+   * payload (`error.requestId`) and mirrored in the `X-Request-Id`
+   * response header.  Undefined when the server did not provide one —
+   * e.g. for network-level failures.
+   */
+  public readonly requestId?: string;
   public readonly body: unknown;
 
   constructor(init: {
@@ -42,6 +49,7 @@ export class ApiError extends Error {
     code?: string;
     message: string;
     fieldErrors?: FieldErrors;
+    requestId?: string;
     body?: unknown;
   }) {
     super(init.message);
@@ -49,6 +57,7 @@ export class ApiError extends Error {
     this.status = init.status;
     this.code = init.code ?? fallbackCodeFromStatus(init.status);
     this.fieldErrors = init.fieldErrors ?? {};
+    this.requestId = init.requestId;
     this.body = init.body;
   }
 
@@ -96,9 +105,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function extractFieldErrors(body: unknown): FieldErrors | undefined {
-  if (!isRecord(body)) return undefined;
-  const raw = body.fieldErrors ?? body.field_errors ?? body.errors;
+function normaliseFieldErrors(raw: unknown): FieldErrors | undefined {
   if (!isRecord(raw)) return undefined;
   const out: FieldErrors = {};
   for (const [key, value] of Object.entries(raw)) {
@@ -112,7 +119,45 @@ function extractFieldErrors(body: unknown): FieldErrors | undefined {
 }
 
 /**
+ * Extract field-level validation errors from a response body.
+ *
+ * Prefers the canonical API error shape (`error.details.fieldErrors`)
+ * and falls back to the legacy top-level `fieldErrors` / `field_errors`
+ * / `errors` keys for backward compatibility with un-migrated routes.
+ */
+function extractFieldErrors(body: unknown): FieldErrors | undefined {
+  if (!isRecord(body)) return undefined;
+  // Canonical shape: body.error.details.fieldErrors
+  if (isRecord(body.error)) {
+    const details = body.error.details;
+    if (isRecord(details)) {
+      const canonical = normaliseFieldErrors(details.fieldErrors);
+      if (canonical) return canonical;
+    }
+  }
+  // Legacy fallbacks
+  return normaliseFieldErrors(
+    body.fieldErrors ?? body.field_errors ?? body.errors,
+  );
+}
+
+/**
  * Build an {@link ApiError} from a failed HTTP response.
+ *
+ * Understands the canonical error payload shape:
+ *
+ * ```json
+ * {
+ *   "error": {
+ *     "code": "VALIDATION_ERROR",
+ *     "message": "Human-readable summary",
+ *     "details": { "fieldErrors": { "email": "invalid format" } },
+ *     "requestId": "uuid"
+ *   }
+ * }
+ * ```
+ *
+ * as well as legacy shapes (`{error: "string"}`, `{error: "string", code: "..."}`).
  */
 export async function apiErrorFromResponse(
   response: Response,
@@ -120,12 +165,38 @@ export async function apiErrorFromResponse(
   const body = await safeReadBody(response);
   let message: string | undefined;
   let code: string | undefined;
+  let requestId: string | undefined;
 
   if (isRecord(body)) {
-    const errVal = body.error ?? body.message;
-    if (typeof errVal === 'string') message = errVal;
-    const codeVal = body.code;
-    if (typeof codeVal === 'string') code = codeVal;
+    // Canonical shape — `error` is an object.
+    if (isRecord(body.error)) {
+      const errObj = body.error;
+      if (typeof errObj.message === 'string') message = errObj.message;
+      if (typeof errObj.code === 'string') code = errObj.code;
+      if (typeof errObj.requestId === 'string') requestId = errObj.requestId;
+    } else if (typeof body.error === 'string') {
+      // Legacy shape — `error` is a bare string.
+      message = body.error;
+    } else if (typeof body.message === 'string') {
+      message = body.message;
+    }
+
+    if (!code && typeof body.code === 'string') {
+      // Legacy shape — top-level `code` alongside `error` string.
+      code = body.code;
+    }
+  }
+
+  // `X-Request-Id` header is always present when the API serves the
+  // request, even for responses whose body omits the canonical shape.
+  // Guarded against mocked Response objects in tests that may omit
+  // `headers` entirely.
+  if (!requestId) {
+    const headerId =
+      response.headers && typeof response.headers.get === 'function'
+        ? response.headers.get('X-Request-Id')
+        : null;
+    if (headerId) requestId = headerId;
   }
 
   return new ApiError({
@@ -133,6 +204,7 @@ export async function apiErrorFromResponse(
     code,
     message: message ?? response.statusText ?? `HTTP ${response.status}`,
     fieldErrors: extractFieldErrors(body),
+    requestId,
     body,
   });
 }

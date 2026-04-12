@@ -394,6 +394,42 @@ describe('apiErrorFromResponse', () => {
     expect(err.message).toBe('Server Error');
     expect(err.code).toBe('SERVER_ERROR');
   });
+
+  it('parses the canonical error shape (error.code / error.message / error.requestId)', async () => {
+    const response = jsonResponse(
+      {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Request validation failed',
+          details: { fieldErrors: { email: 'invalid format' } },
+          requestId: 'req-uuid-123',
+        },
+      },
+      { status: 400 },
+    );
+    const err = await apiErrorFromResponse(response);
+    expect(err.status).toBe(400);
+    expect(err.code).toBe('VALIDATION_ERROR');
+    expect(err.message).toBe('Request validation failed');
+    expect(err.fieldErrors).toEqual({ email: ['invalid format'] });
+    expect(err.requestId).toBe('req-uuid-123');
+  });
+
+  it('reads requestId from the X-Request-Id header when not in the body', async () => {
+    const response = {
+      ok: false,
+      status: 500,
+      statusText: 'Server Error',
+      headers: new Headers({
+        'content-type': 'application/json',
+        'x-request-id': 'header-req-id',
+      }),
+      json: async () => ({}),
+      text: async () => '{}',
+    } as unknown as Response;
+    const err = await apiErrorFromResponse(response);
+    expect(err.requestId).toBe('header-req-id');
+  });
 });
 
 describe('clearServerSession', () => {
