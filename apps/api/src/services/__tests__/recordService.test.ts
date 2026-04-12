@@ -495,10 +495,9 @@ describe('validateFieldValues', () => {
     makeFieldDef({ apiName: 'email', label: 'Email', fieldType: 'email', required: false }),
   ];
 
-  it('passes when all required fields are present', () => {
-    expect(() =>
-      validateFieldValues({ name: 'Test' }, fieldDefs, false),
-    ).not.toThrow();
+  it('passes when all required fields are present and returns data', () => {
+    const result = validateFieldValues({ name: 'Test' }, fieldDefs, false);
+    expect(result).toEqual({ name: 'Test' });
   });
 
   it('throws when a required field is missing (create)', () => {
@@ -507,22 +506,44 @@ describe('validateFieldValues', () => {
     ).toThrow("Field 'Name' is required");
   });
 
-  it('does not check required on partial update', () => {
-    expect(() =>
-      validateFieldValues({ email: 'test@example.com' }, fieldDefs, true),
-    ).not.toThrow();
+  it('throws with fieldErrors on validation failure', () => {
+    try {
+      validateFieldValues({}, fieldDefs, false);
+      expect.unreachable('should have thrown');
+    } catch (err: unknown) {
+      const e = err as Error & { code: string; fieldErrors?: Record<string, string> };
+      expect(e.code).toBe('VALIDATION_ERROR');
+      expect(e.fieldErrors).toBeDefined();
+      expect(e.fieldErrors!.name).toBe("Field 'Name' is required");
+    }
   });
 
-  it('silently ignores unknown fields', () => {
-    expect(() =>
-      validateFieldValues({ name: 'Test', unknown_field: 'value' }, fieldDefs, false),
-    ).not.toThrow();
+  it('does not check required on partial update', () => {
+    const result = validateFieldValues({ email: 'test@example.com' }, fieldDefs, true);
+    expect(result).toEqual({ email: 'test@example.com' });
+  });
+
+  it('strips unknown fields from result', () => {
+    const result = validateFieldValues({ name: 'Test', unknown_field: 'value' }, fieldDefs, false);
+    expect(result).toEqual({ name: 'Test' });
+    expect(result).not.toHaveProperty('unknown_field');
   });
 
   it('throws on invalid field value', () => {
     expect(() =>
       validateFieldValues({ name: 'Test', email: 'not-an-email' }, fieldDefs, false),
-    ).toThrow("Field 'Email' must be a valid email");
+    ).toThrow(/email/i);
+  });
+
+  it('throws with per-field errors for invalid values', () => {
+    try {
+      validateFieldValues({ name: 'Test', email: 'not-an-email' }, fieldDefs, false);
+      expect.unreachable('should have thrown');
+    } catch (err: unknown) {
+      const e = err as Error & { fieldErrors?: Record<string, string> };
+      expect(e.fieldErrors).toBeDefined();
+      expect(e.fieldErrors!.email).toMatch(/email/i);
+    }
   });
 
   it('skips required check for formula fields', () => {
@@ -530,9 +551,24 @@ describe('validateFieldValues', () => {
       makeFieldDef({ apiName: 'name', label: 'Name', fieldType: 'text', required: true }),
       makeFieldDef({ apiName: 'win_rate', label: 'Win Rate', fieldType: 'formula', required: true, options: { expression: '{wins} / {total}' } }),
     ];
-    expect(() =>
-      validateFieldValues({ name: 'Test' }, defsWithFormula, false),
-    ).not.toThrow();
+    const result = validateFieldValues({ name: 'Test' }, defsWithFormula, false);
+    expect(result).toEqual({ name: 'Test' });
+  });
+
+  it('coerces string numbers to numbers for number fields', () => {
+    const numDefs: FieldDefinitionRow[] = [
+      makeFieldDef({ apiName: 'amount', label: 'Amount', fieldType: 'number', required: true }),
+    ];
+    const result = validateFieldValues({ amount: '123' }, numDefs, false);
+    expect(result.amount).toBe(123);
+  });
+
+  it('coerces string numbers to numbers for currency fields', () => {
+    const currDefs: FieldDefinitionRow[] = [
+      makeFieldDef({ apiName: 'price', label: 'Price', fieldType: 'currency', required: true }),
+    ];
+    const result = validateFieldValues({ price: '49.99' }, currDefs, false);
+    expect(result.price).toBe(49.99);
   });
 });
 

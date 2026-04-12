@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { logger } from '../lib/logger.js';
 import { pool } from '../db/client.js';
 import { assignDefaultPipeline } from './stageMovementService.js';
+import { validateWithZod, type FieldValidationErrors } from './fieldValueSchema.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,9 +88,10 @@ export interface ListRecordsResult {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function throwValidationError(message: string): never {
-  const err = new Error(message) as Error & { code: string };
+function throwValidationError(message: string, fieldErrors?: FieldValidationErrors): never {
+  const err = new Error(message) as Error & { code: string; fieldErrors?: FieldValidationErrors };
   err.code = 'VALIDATION_ERROR';
+  if (fieldErrors) err.fieldErrors = fieldErrors;
   throw err;
 }
 
@@ -564,45 +566,32 @@ export function validateFieldValue(
 }
 
 /**
- * Validates field_values against field_definitions.
- * - Required fields must be present
- * - Field types must match
- * - Unknown fields are silently ignored
+ * Validates field_values against field_definitions using Zod schemas.
+ * - Builds dynamic Zod schemas from field definitions
+ * - Required fields must be present (on create)
+ * - Type coercion: string "123" → number 123 for number/currency fields
+ * - Unknown fields are stripped from the result
+ * - Formula and pipeline_managed fields are skipped
+ * - Returns coerced and stripped field values on success
  *
- * @param partial - When true, only validate fields that are present (for updates)
+ * @param partial - When true, all fields are optional (for updates)
+ * @returns Validated and coerced field values with unknown fields stripped
  */
 export function validateFieldValues(
   fieldValues: Record<string, unknown>,
   fieldDefs: FieldDefinitionRow[],
   partial: boolean = false,
-): void {
-  const fieldMap = new Map(fieldDefs.map((fd) => [fd.apiName, fd]));
+): Record<string, unknown> {
+  const result = validateWithZod(fieldValues, fieldDefs, partial);
 
-  // Check required fields (only on create, i.e. partial = false)
-  // Skip formula fields — they are computed, not user-provided
-  if (!partial) {
-    for (const fd of fieldDefs) {
-      if (fd.required && fd.fieldType !== 'formula') {
-        const val = fieldValues[fd.apiName];
-        if (val === undefined || val === null || val === '') {
-          throwValidationError(`Field '${fd.label}' is required`);
-        }
-      }
-    }
+  if (!result.success) {
+    // Build a human-readable summary from the first error
+    const firstField = Object.keys(result.fieldErrors)[0];
+    const firstMessage = result.fieldErrors[firstField];
+    throwValidationError(firstMessage, result.fieldErrors);
   }
 
-  // Validate each provided field value against its definition
-  for (const [key, value] of Object.entries(fieldValues)) {
-    const fd = fieldMap.get(key);
-    if (!fd) {
-      // Unknown fields are silently ignored per spec
-      continue;
-    }
-    const error = validateFieldValue(fd, value);
-    if (error) {
-      throwValidationError(error);
-    }
-  }
+  return result.data;
 }
 
 // ─── Service Functions ───────────────────────────────────────────────────────
@@ -627,18 +616,11 @@ export async function createRecord(
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
-  // Filter field_values to only include known fields and strip unsafe keys
+  // Filter field_values to strip unsafe keys before validation
   const safeFieldValues = stripUnsafeKeys(fieldValues);
-  const knownFieldNames = new Set(fieldDefs.map((fd) => fd.apiName));
-  const cleanedValues: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(safeFieldValues)) {
-    if (knownFieldNames.has(key)) {
-      cleanedValues[key] = value;
-    }
-  }
 
-  // Validate
-  validateFieldValues(cleanedValues, fieldDefs, false);
+  // Validate with Zod — returns coerced values with unknown fields stripped
+  const cleanedValues = validateFieldValues(safeFieldValues, fieldDefs, false);
 
   // Determine the record name from field_values
   const name = resolveRecordName(cleanedValues, fieldDefs, objectDef);
@@ -932,18 +914,11 @@ export async function updateRecord(
     throwNotFoundError('Record not found');
   }
 
-  // Filter field_values to only include known fields and strip unsafe keys
+  // Strip unsafe keys before validation
   const safeFieldValues = stripUnsafeKeys(fieldValues);
-  const knownFieldNames = new Set(fieldDefs.map((fd) => fd.apiName));
-  const cleanedValues: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(safeFieldValues)) {
-    if (knownFieldNames.has(key)) {
-      cleanedValues[key] = value;
-    }
-  }
 
-  // Validate changed fields only (partial update)
-  validateFieldValues(cleanedValues, fieldDefs, true);
+  // Validate with Zod — returns coerced values with unknown fields stripped
+  const cleanedValues = validateFieldValues(safeFieldValues, fieldDefs, true);
 
   // Merge with existing field_values
   const existingRecord = rowToRecord(existing.rows[0]);

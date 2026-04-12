@@ -103,7 +103,8 @@ export async function handleCreateRecord(
     const code = (err as Error & { code?: string }).code;
 
     if (code === 'VALIDATION_ERROR') {
-      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR' });
+      const fieldErrors = (err as Error & { fieldErrors?: Record<string, string> }).fieldErrors;
+      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR', ...(fieldErrors && { fieldErrors }) });
       return;
     }
 
@@ -269,7 +270,8 @@ export async function handleUpdateRecord(
     const code = (err as Error & { code?: string }).code;
 
     if (code === 'VALIDATION_ERROR') {
-      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR' });
+      const fieldErrors = (err as Error & { fieldErrors?: Record<string, string> }).fieldErrors;
+      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR', ...(fieldErrors && { fieldErrors }) });
       return;
     }
 
@@ -388,7 +390,8 @@ export async function handleConvertLead(
     }
 
     if (code === 'VALIDATION_ERROR') {
-      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR' });
+      const fieldErrors = (err as Error & { fieldErrors?: Record<string, string> }).fieldErrors;
+      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR', ...(fieldErrors && { fieldErrors }) });
       return;
     }
 
@@ -455,7 +458,8 @@ export async function handleMoveStage(
     }
 
     if (code === 'VALIDATION_ERROR') {
-      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR' });
+      const fieldErrors = (err as Error & { fieldErrors?: Record<string, string> }).fieldErrors;
+      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR', ...(fieldErrors && { fieldErrors }) });
       return;
     }
 
