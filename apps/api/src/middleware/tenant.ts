@@ -1,6 +1,7 @@
 import type { Response, NextFunction } from 'express';
 import type { AuthenticatedRequest } from './auth.js';
 import { pool } from '../db/client.js';
+import { tenantStore } from '../db/tenantContext.js';
 import { logger } from '../lib/logger.js';
 import { seedDefaultObjects } from '../services/seedDefaultObjects.js';
 import { syncUserRecord } from '../services/userSyncService.js';
@@ -97,7 +98,10 @@ export async function requireTenant(
     );
   });
 
-  next();
+  // Run the rest of the middleware/handler chain inside an AsyncLocalStorage
+  // context so the RLS-aware pool proxy in client.ts can read the tenant ID
+  // and call SET app.current_tenant_id on every checked-out connection.
+  tenantStore.run(req.user.tenantId!, next);
 }
 
 /**
