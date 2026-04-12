@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { getCurrentTenantId } from './tenantContext.js';
 
 const { Pool } = pg;
 
@@ -57,7 +58,7 @@ if (!databaseUrl) {
  * SSL is enforced in production (Azure Database for PostgreSQL requires it).
  * It is left disabled locally so developers can run without certificate setup.
  */
-export const pool = new Pool({
+const rawPool = new Pool({
   connectionString: databaseUrl,
   ssl:
     process.env.NODE_ENV === 'production'
@@ -66,4 +67,64 @@ export const pool = new Pool({
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
+});
+
+/**
+ * RLS-aware pool proxy.
+ *
+ * When a request-scoped tenant ID is present in {@link tenantStore}, the proxy
+ * intercepts `pool.query()` and `pool.connect()` to call
+ * `set_config('app.current_tenant_id', tenantId)` on the checked-out
+ * connection.  This activates the Row-Level Security policies created in
+ * migration 025_enable_row_level_security so that Postgres itself enforces
+ * tenant isolation — even if a service query accidentally omits the
+ * `WHERE tenant_id = $N` clause.
+ *
+ * When no tenant context is present (migrations, health checks, admin jobs),
+ * calls pass through to the raw pool unchanged and the RLS bypass policy
+ * allows unrestricted access.
+ */
+export const pool: pg.Pool = new Proxy(rawPool, {
+  get(target, prop, receiver) {
+    if (prop === 'query') {
+      return async (...args: unknown[]) => {
+        const tenantId = getCurrentTenantId();
+        if (!tenantId) {
+          // No tenant context — pass through to raw pool (bypass policy applies)
+          return (target.query as Function)(...args);
+        }
+        // Tenant context present — set RLS variable on a dedicated connection
+        const client = await target.connect();
+        try {
+          await client.query(
+            "SELECT set_config('app.current_tenant_id', $1, false)",
+            [tenantId],
+          );
+          return await (client.query as Function)(...args);
+        } finally {
+          await client.query('RESET app.current_tenant_id').catch(() => {});
+          client.release();
+        }
+      };
+    }
+
+    if (prop === 'connect') {
+      return async () => {
+        const client = await target.connect();
+        const tenantId = getCurrentTenantId();
+        if (tenantId) {
+          await client.query(
+            "SELECT set_config('app.current_tenant_id', $1, false)",
+            [tenantId],
+          );
+        } else {
+          // Reset any stale context from a previous checkout
+          await client.query('RESET app.current_tenant_id').catch(() => {});
+        }
+        return client;
+      };
+    }
+
+    return Reflect.get(target, prop, receiver);
+  },
 });
