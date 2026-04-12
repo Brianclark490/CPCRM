@@ -1,11 +1,44 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useApiClient, clearServerSession } from '../apiClient.js';
+import {
+  useApiClient,
+  clearServerSession,
+  ApiError,
+  apiErrorFromResponse,
+} from '../apiClient.js';
+
+function jsonResponse(
+  body: unknown,
+  init: { status?: number; ok?: boolean } = {},
+): Response {
+  const status = init.status ?? 200;
+  return {
+    ok: init.ok ?? status < 400,
+    status,
+    statusText: '',
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as unknown as Response;
+}
+
+function emptyResponse(status = 204): Response {
+  return {
+    ok: status < 400,
+    status,
+    statusText: '',
+    headers: new Headers(),
+    json: async () => undefined,
+    text: async () => '',
+  } as unknown as Response;
+}
 
 describe('useApiClient', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
-    // Clear cookies between tests
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ ok: true })),
+    );
     Object.defineProperty(document, 'cookie', {
       writable: true,
       value: '',
@@ -136,6 +169,230 @@ describe('useApiClient', () => {
     expect(headers.get('X-CSRF-Token')).toBe('csrf123');
     expect(headers.get('Content-Type')).toBe('application/json');
     expect(headers.get('X-Custom')).toBe('value');
+  });
+});
+
+describe('useApiClient typed methods', () => {
+  beforeEach(() => {
+    Object.defineProperty(document, 'cookie', {
+      writable: true,
+      value: '',
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('get<T> parses JSON and returns typed data', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ id: '1', name: 'Acme' })),
+    );
+
+    const { result } = renderHook(() => useApiClient());
+    const data = await result.current.get<{ id: string; name: string }>(
+      '/api/accounts/1',
+    );
+
+    expect(data).toEqual({ id: '1', name: 'Acme' });
+  });
+
+  it('post<T> serialises JSON body and sets Content-Type', async () => {
+    Object.defineProperty(document, 'cookie', {
+      writable: true,
+      value: 'cpcrm_csrf=csrf-token',
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ id: 'new' }, { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useApiClient());
+    const data = await result.current.post<{ id: string }>('/api/accounts', {
+      body: { name: 'Acme' },
+    });
+
+    expect(data).toEqual({ id: 'new' });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe('{"name":"Acme"}');
+    const headers = new Headers(init.headers);
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('X-CSRF-Token')).toBe('csrf-token');
+  });
+
+  it('del<T> handles 204 No Content responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(emptyResponse(204)));
+
+    const { result } = renderHook(() => useApiClient());
+    const data = await result.current.del('/api/accounts/1');
+
+    expect(data).toBeUndefined();
+  });
+
+  it('throws ApiError on 4xx with code and message from body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          { error: 'Name is required', code: 'VALIDATION_ERROR' },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    const { result } = renderHook(() => useApiClient());
+
+    await expect(
+      result.current.post('/api/accounts', { body: {} }),
+    ).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'Name is required',
+    });
+  });
+
+  it('extracts fieldErrors from error responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: 'Validation failed',
+            code: 'VALIDATION_ERROR',
+            fieldErrors: { name: ['Required'], email: 'Invalid' },
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+
+    const { result } = renderHook(() => useApiClient());
+    let caught: ApiError | undefined;
+    try {
+      await result.current.post('/api/accounts', { body: {} });
+    } catch (err) {
+      caught = err as ApiError;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(caught!.fieldErrors).toEqual({
+      name: ['Required'],
+      email: ['Invalid'],
+    });
+  });
+
+  it('retries GET once on 5xx and returns the successful response', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'boom' }, { status: 503 }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useApiClient());
+    const data = await result.current.get<{ ok: boolean }>('/api/accounts');
+
+    expect(data).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT retry POST on 5xx', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'boom' }, { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useApiClient());
+    await expect(
+      result.current.post('/api/accounts', { body: { name: 'x' } }),
+    ).rejects.toBeInstanceOf(ApiError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries GET on network failure and throws ApiError if both attempts fail', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('network down'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useApiClient());
+    let caught: ApiError | undefined;
+    try {
+      await result.current.get('/api/accounts');
+    } catch (err) {
+      caught = err as ApiError;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(caught!.status).toBe(0);
+    expect(caught!.code).toBe('NETWORK_ERROR');
+    expect(caught!.isNetwork).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after a single retry on repeated 5xx and throws ApiError', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'boom' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useApiClient());
+    await expect(result.current.get('/api/accounts')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 500,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ApiError', () => {
+  it('derives a default code from the status', () => {
+    expect(new ApiError({ status: 401, message: 'x' }).code).toBe(
+      'UNAUTHENTICATED',
+    );
+    expect(new ApiError({ status: 403, message: 'x' }).code).toBe('FORBIDDEN');
+    expect(new ApiError({ status: 404, message: 'x' }).code).toBe('NOT_FOUND');
+    expect(new ApiError({ status: 500, message: 'x' }).code).toBe(
+      'SERVER_ERROR',
+    );
+    expect(new ApiError({ status: 0, message: 'x' }).code).toBe(
+      'NETWORK_ERROR',
+    );
+  });
+
+  it('isTransient is true for network and 5xx', () => {
+    expect(new ApiError({ status: 0, message: 'x' }).isTransient).toBe(true);
+    expect(new ApiError({ status: 500, message: 'x' }).isTransient).toBe(true);
+    expect(new ApiError({ status: 404, message: 'x' }).isTransient).toBe(false);
+  });
+});
+
+describe('apiErrorFromResponse', () => {
+  it('prefers body.error over statusText for the message', async () => {
+    const response = jsonResponse(
+      { error: 'Too many requests', code: 'RATE_LIMIT' },
+      { status: 429 },
+    );
+    const err = await apiErrorFromResponse(response);
+    expect(err.message).toBe('Too many requests');
+    expect(err.code).toBe('RATE_LIMIT');
+    expect(err.status).toBe(429);
+  });
+
+  it('falls back to statusText when body has no error', async () => {
+    const response = {
+      ok: false,
+      status: 500,
+      statusText: 'Server Error',
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({}),
+      text: async () => '{}',
+    } as unknown as Response;
+    const err = await apiErrorFromResponse(response);
+    expect(err.message).toBe('Server Error');
+    expect(err.code).toBe('SERVER_ERROR');
   });
 });
 

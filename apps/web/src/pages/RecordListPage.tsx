@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { ApiError, useApiClient } from '../lib/apiClient.js';
+import { ApiErrorDisplay } from '../components/ApiErrorDisplay.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { FieldRenderer } from '../components/FieldRenderer.js';
 import { KanbanBoard } from '../components/KanbanBoard.js';
@@ -135,7 +136,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
 
   // Pipeline view toggle state
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>(initialView ?? 'list');
@@ -277,27 +278,38 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
       }
 
       try {
-        const response = await api.request(
+        const data = await api.get<RecordsResponse>(
           `/api/objects/${apiName}/records?${params.toString()}`,
         );
 
-        if (cancelled) return;
-
-        if (response.ok) {
-          const data = (await response.json()) as RecordsResponse;
-          if (!cancelled) {
-            setRecords(data.data);
-            setTotal(data.total);
-            setObjectDef(data.object);
-          }
-        } else if (response.status === 404) {
-          if (!cancelled) setError('Object type not found.');
-        } else {
-          if (!cancelled) setError('Failed to load records.');
+        if (!cancelled) {
+          setRecords(data.data);
+          setTotal(data.total);
+          setObjectDef(data.object);
         }
-      } catch {
-        if (!cancelled)
-          setError('Failed to connect to the server. Please try again.');
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError) {
+          if (err.status === 404) {
+            setError(
+              new ApiError({ status: 404, message: 'Object type not found.' }),
+            );
+          } else if (err.isNetwork) {
+            setError(
+              new ApiError({
+                status: 0,
+                message: 'Failed to connect to the server. Please try again.',
+              }),
+            );
+          } else {
+            setError(
+              new ApiError({
+                status: err.status,
+                message: 'Failed to load records.',
+              }),
+            );
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -413,11 +425,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
         </div>
       </div>
 
-      {error && (
-        <p role="alert" className={styles.errorAlert}>
-          {error}
-        </p>
-      )}
+      {error && <ApiErrorDisplay error={error} />}
 
       {viewMode === 'pipeline' && hasPipeline && resolvedObjectId && apiName && (
         <KanbanBoard apiName={apiName} objectId={resolvedObjectId} />
