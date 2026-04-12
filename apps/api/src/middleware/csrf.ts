@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { COOKIE_NAMES } from '../lib/cookies.js';
 
 /**
  * CSRF protection using the double-submit cookie pattern.
@@ -14,10 +15,13 @@ import type { Request, Response, NextFunction } from 'express';
  *    matching header.
  *
  * Safe methods (GET, HEAD, OPTIONS) are exempt.
+ *
+ * Requests without a session cookie are also exempt — they will be rejected
+ * by the auth middleware instead, and this allows Bearer-token clients to
+ * operate without CSRF tokens.
  */
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const CSRF_COOKIE = 'cpcrm_csrf';
 const CSRF_HEADER = 'x-csrf-token';
 
 export function requireCsrf(req: Request, res: Response, next: NextFunction): void {
@@ -26,7 +30,17 @@ export function requireCsrf(req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
-  const cookieValue = (req.cookies as Record<string, string | undefined>)?.[CSRF_COOKIE];
+  const cookies = req.cookies as Record<string, string | undefined> | undefined;
+
+  // Skip CSRF check when no session cookie is present — the request is
+  // either unauthenticated (auth middleware will reject it) or using Bearer
+  // token auth which is not vulnerable to CSRF.
+  if (!cookies?.[COOKIE_NAMES.session]) {
+    next();
+    return;
+  }
+
+  const cookieValue = cookies?.[COOKIE_NAMES.csrf];
   const headerValue = req.headers[CSRF_HEADER] as string | undefined;
 
   if (!cookieValue || !headerValue || cookieValue !== headerValue) {

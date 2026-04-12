@@ -7,11 +7,18 @@ export const authSessionRouter = Router();
 
 let descopeClientInstance: ReturnType<typeof DescopeClient> | undefined;
 
+class DescopeConfigError extends Error {
+  constructor() {
+    super('DESCOPE_PROJECT_ID environment variable is required');
+    this.name = 'DescopeConfigError';
+  }
+}
+
 function getDescopeClient(): ReturnType<typeof DescopeClient> {
   if (!descopeClientInstance) {
     const projectId = process.env.DESCOPE_PROJECT_ID;
     if (!projectId) {
-      throw new Error('DESCOPE_PROJECT_ID environment variable is required');
+      throw new DescopeConfigError();
     }
     descopeClientInstance = DescopeClient({ projectId });
   }
@@ -47,6 +54,11 @@ authSessionRouter.post('/session', async (req, res) => {
     const csrfToken = setSessionCookies(res, token);
     res.json({ ok: true, csrfToken });
   } catch (err) {
+    if (err instanceof DescopeConfigError) {
+      logger.error('Auth session: Descope is not configured');
+      res.status(503).json({ error: 'Authentication service unavailable' });
+      return;
+    }
     logger.warn({ err }, 'Auth session: token validation failed');
     res.status(401).json({ error: 'Invalid or expired token' });
   }

@@ -144,6 +144,10 @@ describe('clearServerSession', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('calls DELETE /api/auth/session with credentials: include', async () => {
     await clearServerSession();
 

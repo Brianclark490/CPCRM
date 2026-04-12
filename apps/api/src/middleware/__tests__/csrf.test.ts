@@ -33,10 +33,40 @@ describe('requireCsrf middleware', () => {
     }
   });
 
-  it('returns 403 when CSRF cookie is missing on a POST', () => {
+  it('skips CSRF check when no session cookie is present (Bearer auth)', () => {
     const req = mockReq({
       method: 'POST',
       cookies: {},
+      headers: { authorization: 'Bearer some-jwt' },
+    });
+    const res = mockRes();
+    const next: NextFunction = vi.fn();
+
+    requireCsrf(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when CSRF header is missing but session cookie is present', () => {
+    const req = mockReq({
+      method: 'POST',
+      cookies: { cpcrm_session: 'session-jwt', cpcrm_csrf: 'cookie-token' },
+      headers: {},
+    });
+    const res = mockRes();
+    const next: NextFunction = vi.fn();
+
+    requireCsrf(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('returns 403 when CSRF cookie is missing but session cookie is present', () => {
+    const req = mockReq({
+      method: 'POST',
+      cookies: { cpcrm_session: 'session-jwt' },
       headers: { 'x-csrf-token': 'some-token' },
     });
     const res = mockRes();
@@ -49,25 +79,10 @@ describe('requireCsrf middleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'CSRF token mismatch' });
   });
 
-  it('returns 403 when X-CSRF-Token header is missing on a POST', () => {
-    const req = mockReq({
-      method: 'POST',
-      cookies: { cpcrm_csrf: 'cookie-token' },
-      headers: {},
-    });
-    const res = mockRes();
-    const next: NextFunction = vi.fn();
-
-    requireCsrf(req, res, next);
-
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(403);
-  });
-
   it('returns 403 when CSRF cookie and header do not match', () => {
     const req = mockReq({
       method: 'PUT',
-      cookies: { cpcrm_csrf: 'cookie-token' },
+      cookies: { cpcrm_session: 'session-jwt', cpcrm_csrf: 'cookie-token' },
       headers: { 'x-csrf-token': 'different-token' },
     });
     const res = mockRes();
@@ -82,7 +97,7 @@ describe('requireCsrf middleware', () => {
   it('passes through when CSRF cookie and header match on a POST', () => {
     const req = mockReq({
       method: 'POST',
-      cookies: { cpcrm_csrf: 'valid-csrf-token' },
+      cookies: { cpcrm_session: 'session-jwt', cpcrm_csrf: 'valid-csrf-token' },
       headers: { 'x-csrf-token': 'valid-csrf-token' },
     });
     const res = mockRes();
@@ -97,7 +112,7 @@ describe('requireCsrf middleware', () => {
   it('passes through when CSRF cookie and header match on PATCH', () => {
     const req = mockReq({
       method: 'PATCH',
-      cookies: { cpcrm_csrf: 'my-token' },
+      cookies: { cpcrm_session: 'session-jwt', cpcrm_csrf: 'my-token' },
       headers: { 'x-csrf-token': 'my-token' },
     });
     const res = mockRes();
@@ -111,7 +126,7 @@ describe('requireCsrf middleware', () => {
   it('passes through when CSRF cookie and header match on DELETE', () => {
     const req = mockReq({
       method: 'DELETE',
-      cookies: { cpcrm_csrf: 'del-token' },
+      cookies: { cpcrm_session: 'session-jwt', cpcrm_csrf: 'del-token' },
       headers: { 'x-csrf-token': 'del-token' },
     });
     const res = mockRes();

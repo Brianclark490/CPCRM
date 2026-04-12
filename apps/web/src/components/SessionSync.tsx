@@ -15,8 +15,9 @@ export function SessionSync() {
 
   useEffect(() => {
     if (!sessionToken || sessionToken === lastSyncedRef.current) return;
-    lastSyncedRef.current = sessionToken;
-    void syncSessionCookie(sessionToken);
+    syncSessionCookie(sessionToken).then(() => {
+      lastSyncedRef.current = sessionToken;
+    });
   }, [sessionToken]);
 
   return null;
