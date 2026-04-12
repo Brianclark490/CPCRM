@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { UserManagement, useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { ApiError, useApiClient } from '../lib/apiClient.js';
+import { ApiErrorDisplay } from '../components/ApiErrorDisplay.js';
 import { useTenant } from '../store/tenant.js';
 import styles from './AdminUsersPage.module.css';
 
@@ -32,7 +33,7 @@ export function AdminUsersPage() {
   const api = useApiClient();
   const [users, setUsers] = useState<CrmUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     if (!sessionToken || !tenantId) {
@@ -44,22 +45,23 @@ export function AdminUsersPage() {
 
     const loadUsers = async () => {
       try {
-        const response = await api.request('/api/objects/user/records?limit=100');
-
-        if (cancelled) return;
-
-        if (!response.ok) {
-          setError('Failed to load CRM users');
-          setLoading(false);
-          return;
-        }
-
-        const result = (await response.json()) as UsersResponse;
+        const result = await api.get<UsersResponse>(
+          '/api/objects/user/records?limit=100',
+        );
         if (!cancelled) {
           setUsers(result.data);
         }
-      } catch {
-        if (!cancelled) setError('Failed to load CRM users');
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof ApiError
+              ? err
+              : new ApiError({
+                  status: 0,
+                  message: 'Failed to load CRM users',
+                }),
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -88,7 +90,7 @@ export function AdminUsersPage() {
           </p>
 
           {loading && <p className={styles.loadingText}>Loading users…</p>}
-          {error && <p className={styles.errorText}>{error}</p>}
+          {error && <ApiErrorDisplay error={error} />}
           {!loading && !error && users.length === 0 && (
             <p className={styles.emptyText}>
               No CRM user records yet. Users are created automatically when they log in.

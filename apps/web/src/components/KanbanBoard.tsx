@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { ApiError, useApiClient } from '../lib/apiClient.js';
 import { useTenantLocale } from '../useTenantLocale.js';
 import { KanbanCard } from './KanbanCard.js';
 import type { KanbanCardRecord } from './KanbanCard.js';
@@ -229,9 +229,14 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     const loadAll = async () => {
       try {
         // 1. Find pipeline for this object
-        const response = await api.request('/api/admin/pipelines');
-
-        if (cancelled || !response.ok) {
+        let pipelines: Array<
+          PipelineDefinition & { objectId?: string; object_id?: string }
+        >;
+        try {
+          pipelines = await api.get<
+            Array<PipelineDefinition & { objectId?: string; object_id?: string }>
+          >('/api/admin/pipelines');
+        } catch {
           if (!cancelled) {
             setError('Failed to load pipeline configuration.');
             setLoading(false);
@@ -239,53 +244,57 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
           return;
         }
 
-        const pipelines = (await response.json()) as Array<PipelineDefinition & { objectId?: string; object_id?: string }>;
+        if (cancelled) return;
+
         const match = pipelines.find(
           (p) => (p.objectId ?? p.object_id) === objectId,
         );
 
-        if (!match || cancelled) {
-          if (!cancelled) {
-            setPipeline(null);
-            setLoading(false);
-          }
+        if (!match) {
+          setPipeline(null);
+          setLoading(false);
           return;
         }
 
         // 2. Fetch pipeline detail AND records in parallel
-        const [detailResponse, recordsResponse] = await Promise.all([
-          api.request(`/api/admin/pipelines/${match.id}`),
-          api.request(`/api/objects/${apiName}/records?limit=100`),
+        const [detailResult, recordsResult] = await Promise.allSettled([
+          api.get<PipelineDefinition>(`/api/admin/pipelines/${match.id}`),
+          api.get<RecordsResponse>(
+            `/api/objects/${apiName}/records?limit=100`,
+          ),
         ]);
 
         if (cancelled) return;
 
-        if (!detailResponse.ok) {
+        if (detailResult.status === 'rejected') {
           setError('Failed to load pipeline stages.');
           setLoading(false);
           return;
         }
 
-        const detail = (await detailResponse.json()) as PipelineDefinition;
+        const detail = detailResult.value;
 
         let records: RecordItem[] = [];
-        if (recordsResponse.ok) {
-          const recordsData = (await recordsResponse.json()) as RecordsResponse;
-          records = Array.isArray(recordsData.data) ? recordsData.data : [];
+        if (recordsResult.status === 'fulfilled') {
+          records = Array.isArray(recordsResult.value.data)
+            ? recordsResult.value.data
+            : [];
         }
-
-        if (cancelled) return;
 
         // Set both pipeline and records in the same render batch
         setPipeline(detail);
         setAllRecords(records);
 
-        if (!recordsResponse.ok) {
+        if (recordsResult.status === 'rejected') {
           setError('Failed to load records for the pipeline.');
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setError('Failed to connect to the server.');
+          setError(
+            err instanceof ApiError && err.isNetwork
+              ? 'Failed to connect to the server.'
+              : 'Failed to load pipeline configuration.',
+          );
         }
       } finally {
         if (!cancelled) {
@@ -305,28 +314,29 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const loadAnalytics = useCallback(async () => {
     if (!sessionToken || !pipeline) return;
 
-    try {
-      const [summaryResp, velocityResp, overdueResp] = await Promise.all([
-        api.request(`/api/pipelines/${pipeline.id}/summary`),
-        api.request(`/api/pipelines/${pipeline.id}/velocity?period=30d`),
-        api.request(`/api/pipelines/${pipeline.id}/overdue`),
+    const [summaryResult, velocityResult, overdueResult] =
+      await Promise.allSettled([
+        api.get<{ totals: PipelineSummaryData['totals'] }>(
+          `/api/pipelines/${pipeline.id}/summary`,
+        ),
+        api.get<{ avgDaysToClose: number }>(
+          `/api/pipelines/${pipeline.id}/velocity?period=30d`,
+        ),
+        api.get<OverdueRecord[]>(`/api/pipelines/${pipeline.id}/overdue`),
       ]);
 
-      if (summaryResp.ok && velocityResp.ok) {
-        const summary = (await summaryResp.json()) as { totals: PipelineSummaryData['totals'] };
-        const velocity = (await velocityResp.json()) as { avgDaysToClose: number };
-        setSummaryData({
-          totals: summary.totals,
-          avgDaysToClose: velocity.avgDaysToClose,
-        });
-      }
+    if (
+      summaryResult.status === 'fulfilled' &&
+      velocityResult.status === 'fulfilled'
+    ) {
+      setSummaryData({
+        totals: summaryResult.value.totals,
+        avgDaysToClose: velocityResult.value.avgDaysToClose,
+      });
+    }
 
-      if (overdueResp.ok) {
-        const overdue = (await overdueResp.json()) as OverdueRecord[];
-        setOverdueRecords(overdue);
-      }
-    } catch {
-      // Analytics fetch is best-effort
+    if (overdueResult.status === 'fulfilled') {
+      setOverdueRecords(overdueResult.value);
     }
   }, [sessionToken, api, pipeline]);
 
