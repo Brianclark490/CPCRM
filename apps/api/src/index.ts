@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import type { Options, HttpLogger } from 'pino-http';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +30,7 @@ import { componentRegistryRouter } from './routes/adminPageLayouts.js';
 import { pageLayoutsRouter } from './routes/pageLayouts.js';
 import { adminTargetsRouter } from './routes/adminTargets.js';
 import { targetsRouter } from './routes/targets.js';
+import { securityHeaders } from './middleware/security.js';
 import { globalLimiter, writeMethodLimiter, authLimiter } from './middleware/rateLimiter.js';
 import { requireCsrf } from './middleware/csrf.js';
 
@@ -48,7 +48,7 @@ app.set('trust proxy', config.trustProxy);
 type PinoHttpFactory = (opts: Options) => HttpLogger;
 const httpLogger = pinoHttp as unknown as PinoHttpFactory;
 
-app.use(helmet());
+app.use(securityHeaders);
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(cookieParser());
 app.use(express.json());
