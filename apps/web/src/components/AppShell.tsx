@@ -5,6 +5,7 @@ import { sessionHistory } from '../store/sessionHistory.js';
 import { useTenant, clearStoredTenant } from '../store/tenant.js';
 import { useSuperAdmin } from '../store/superAdmin.js';
 import { useTheme } from '../store/useTheme.js';
+import { clearServerSession } from '../lib/apiClient.js';
 import { ProfileDropdown } from './ProfileDropdown.js';
 import { ObjectTabs } from './ObjectTabs.js';
 import styles from './AppShell.module.css';
@@ -34,6 +35,7 @@ export function AppShell({ children }: AppShellProps) {
   const { theme, toggle: toggleTheme } = useTheme();
 
   const handleLogout = async () => {
+    await clearServerSession();
     await logout();
     sessionHistory.clearAuthenticated();
     clearStoredTenant();

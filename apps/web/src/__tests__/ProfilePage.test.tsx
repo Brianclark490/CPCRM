@@ -133,8 +133,8 @@ describe('ProfilePage', () => {
       .mocked(fetch)
       .mock.calls.find(([, init]) => init?.method === 'PUT');
     expect(putCall).toBeDefined();
+    expect(putCall![1]?.credentials).toBe('include');
     const putHeaders = new Headers(putCall![1]?.headers);
-    expect(putHeaders.get('Authorization')).toBe('Bearer test-token');
     expect(putHeaders.get('Content-Type')).toBe('application/json');
 
     await waitFor(() => {

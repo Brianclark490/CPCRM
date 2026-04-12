@@ -1,6 +1,7 @@
 import DescopeClient from '@descope/node-sdk';
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from '../lib/logger.js';
+import { COOKIE_NAMES } from '../lib/cookies.js';
 
 class MissingDescopeConfigError extends Error {
   constructor() {
@@ -115,20 +116,37 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+/**
+ * Extracts the session token from the request.
+ *
+ * Resolution order:
+ * 1. `cpcrm_session` HttpOnly cookie (preferred — not accessible to XSS)
+ * 2. `Authorization: Bearer <token>` header (backward-compatible fallback)
+ */
+function extractSessionToken(req: Request): string | undefined {
+  // 1. HttpOnly cookie
+  const cookieToken = (req.cookies as Record<string, string | undefined>)?.[COOKIE_NAMES.session];
+  if (cookieToken) return cookieToken;
+
+  // 2. Authorization header fallback
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7);
+
+  return undefined;
+}
+
 export async function requireAuth(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const authHeader = req.headers.authorization;
+  const sessionToken = extractSessionToken(req);
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    logger.warn({ path: req.path }, 'Auth rejected: missing or invalid Authorization header');
-    res.status(401).json({ error: 'Missing or invalid Authorization header' });
+  if (!sessionToken) {
+    logger.warn({ path: req.path }, 'Auth rejected: no session cookie or Authorization header');
+    res.status(401).json({ error: 'Missing authentication credentials' });
     return;
   }
-
-  const sessionToken = authHeader.slice(7);
 
   try {
     const client = getDescopeClient();
