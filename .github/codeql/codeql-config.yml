@@ -1,0 +1,10 @@
+name: "CPCRM CodeQL Config"
+
+# Suppress the js/missing-token-validation (Missing CSRF middleware) query.
+# We implement CSRF protection with a custom double-submit cookie middleware
+# (apps/api/src/middleware/csrf.ts) rather than a third-party library like
+# csurf.  CodeQL cannot recognise our custom middleware and raises a false
+# positive for every route behind cookie-parser.
+query-filters:
+  - exclude:
+      id: js/missing-token-validation
