@@ -12,16 +12,8 @@ import type { CreateTargetParams } from '../services/salesTargetService.js';
 import { logger } from '../lib/logger.js';
 import { parsePaginationQuery, paginateInMemory } from '../lib/pagination.js';
 import { isAppError } from '../lib/appError.js';
-import rateLimit from 'express-rate-limit';
 
 export const adminTargetsRouter = Router();
-
-const adminTargetsLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per window
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -177,6 +169,6 @@ export async function handleDeleteTarget(
 
 // ─── Route registration ──────────────────────────────────────────────────────
 
-adminTargetsRouter.post('/', requireAuth, requireTenant, adminTargetsLimiter, handleCreateTarget);
-adminTargetsRouter.get('/', requireAuth, requireTenant, adminTargetsLimiter, handleListTargets);
-adminTargetsRouter.delete('/:id', requireAuth, requireTenant, adminTargetsLimiter, handleDeleteTarget);
+adminTargetsRouter.post('/', requireAuth, requireTenant, handleCreateTarget);
+adminTargetsRouter.get('/', requireAuth, requireTenant, handleListTargets);
+adminTargetsRouter.delete('/:id', requireAuth, requireTenant, handleDeleteTarget);
