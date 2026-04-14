@@ -52,20 +52,32 @@ to the registry is automatically available under the versioned prefix.
 
 The same `apiRouter` is also mounted at the bare `/api` prefix so that any
 client that has not yet migrated keeps working. Every response served from
-the legacy mount carries two RFC 8594 headers:
+the legacy mount carries two standardised headers:
 
-| Header | Value | Meaning |
-|--------|-------|---------|
-| `Deprecation` | `true` | This endpoint (under the bare `/api` prefix) is deprecated. |
-| `Link` | `</api/v1/…>; rel="successor-version"` | Points the client at the canonical versioned path. |
+| Header | Value | Standard | Meaning |
+|--------|-------|----------|---------|
+| `Deprecation` | `true` | [RFC 8594](https://www.rfc-editor.org/rfc/rfc8594) | This endpoint (under the bare `/api` prefix) is deprecated. |
+| `Link` | `</api/v1/…>; rel="successor-version"` | [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) (header) + [RFC 5829](https://www.rfc-editor.org/rfc/rfc5829) (`successor-version` relation type) | Points the client at the canonical versioned path. |
 
 The legacy alias exists **only** to prevent a flag-day migration. It is not a
 supported long-term surface: clients that continue using `/api/...` after the
 deprecation window lapses may begin receiving 410 Gone responses.
 
-The versioned mount is registered first in the Express middleware chain so
-that requests to `/api/v1/...` never fall through to the legacy alias and the
-`Deprecation` header is never emitted on versioned responses.
+The versioned mount is registered first in the Express middleware chain, and
+the shared router ends with a terminal 404 handler that throws the canonical
+`NOT_FOUND` error. Together these guarantee two things:
+
+1. A valid `/api/v1/...` request is always answered by the versioned mount —
+   it never falls through to the legacy alias, so `Deprecation` headers are
+   never emitted on versioned responses.
+2. An unmatched `/api/v1/...` request (typo, wrong method) returns the
+   canonical JSON error payload rather than the SPA `index.html` that the
+   production static-file fallback would otherwise serve for unknown paths.
+
+The legacy-alias middleware additionally short-circuits any request whose
+`originalUrl` already begins with `/api/v1` as a defence-in-depth check, so
+even a future misconfiguration cannot mistakenly stamp a versioned response
+with deprecation headers or a malformed `Link: </api/v1/v1/…>` value.
 
 ### 3. Deprecation Policy for Breaking Changes
 

@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import type { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import pinoHttp from 'pino-http';
@@ -38,6 +37,7 @@ import { globalLimiter, writeMethodLimiter, authLimiter } from './middleware/rat
 import { requireCsrf } from './middleware/csrf.js';
 import { requestId } from './middleware/requestId.js';
 import { errorHandler, normalizeErrorResponses } from './middleware/errorHandler.js';
+import { createLegacyApiAlias, installApiTerminal404 } from './lib/apiVersioning.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -161,25 +161,19 @@ apiRouter.use('/admin/component-registry', componentRegistryRouter);
 apiRouter.use('/admin/targets', adminTargetsRouter);
 apiRouter.use('/targets', targetsRouter);
 
-/**
- * Tags every legacy `/api/...` response with RFC 8594 deprecation headers so
- * clients can discover the successor (`/api/v1/...`) without changes to the
- * response body.  Removing this alias is a breaking change and must follow the
- * deprecation policy in `docs/architecture/adr-005-api-versioning.md`.
- */
-function legacyApiDeprecationHeaders(req: Request, res: Response, next: NextFunction): void {
-  res.setHeader('Deprecation', 'true');
-  res.setHeader('Link', `</api/v1${req.url}>; rel="successor-version"`);
-  next();
-}
+// Terminal 404 for the shared API router — must be the LAST middleware
+// registered on `apiRouter`. See `lib/apiVersioning.ts` for the rationale.
+installApiTerminal404(apiRouter);
 
-// Canonical v1 mount — registered first so `/api/v1/...` requests never fall
-// through to the legacy alias below.
+// Canonical v1 mount — registered first so `/api/v1/...` requests are
+// dispatched through the versioned prefix without touching the legacy alias.
 app.use('/api/v1', apiRouter);
 
-// Legacy alias — kept until the deprecation window elapses.  Emits a
-// `Deprecation` header on every response so clients can detect the usage.
-app.use('/api', legacyApiDeprecationHeaders, apiRouter);
+// Legacy `/api` alias — kept until the deprecation window elapses. The
+// middleware short-circuits any `/api/v1/...` request that somehow falls
+// through the versioned mount, and stamps RFC 8594/8288 deprecation
+// headers on responses served from the genuine legacy surface.
+app.use('/api', createLegacyApiAlias(apiRouter));
 
 if (config.env === 'production') {
   // In production the CI pipeline copies the built frontend to public/ alongside
