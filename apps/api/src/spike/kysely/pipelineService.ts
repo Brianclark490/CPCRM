@@ -289,6 +289,7 @@ export async function getPipelineDetail(
         .selectFrom('stage_gates')
         .selectAll()
         .where('stage_id', 'in', stageIds)
+        .where('tenant_id', '=', tenantId)
         .execute()
     : [];
 

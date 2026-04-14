@@ -92,6 +92,7 @@ export interface Records {
 
 export interface RecordRelationships {
   id: Generated<string>;
+  tenant_id: string;
   relationship_id: string;
   source_record_id: string;
   target_record_id: string;
@@ -142,6 +143,7 @@ export interface StageDefinitions {
 
 export interface StageGates {
   id: Generated<string>;
+  tenant_id: string;
   stage_id: string;
   field_id: string;
   gate_type: string;

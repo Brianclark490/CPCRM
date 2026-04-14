@@ -144,7 +144,7 @@ await db
 #### Kysely ✅ **Excellent**
 
 - **No schema required in code** — just type definitions
-- Works seamlessly with existing SQL migrations (001-029)
+- Works seamlessly with existing SQL migrations (001-025)
 - Types can be generated from live database using `kysely-codegen`
 - Migrations remain raw SQL with full control
 - Can introduce incrementally without migrating schema management

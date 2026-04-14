@@ -130,15 +130,17 @@ export const relationshipDefinitions = pgTable('relationship_definitions', {
 
 export const recordRelationships = pgTable('record_relationships', {
   id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   relationshipId: uuid('relationship_id').notNull().references(() => relationshipDefinitions.id, { onDelete: 'cascade' }),
   sourceRecordId: uuid('source_record_id').notNull().references(() => records.id, { onDelete: 'cascade' }),
   targetRecordId: uuid('target_record_id').notNull().references(() => records.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
-  relSourceTargetUnique: uniqueIndex('record_relationships_relationship_id_source_record_id_targe_key').on(table.relationshipId, table.sourceRecordId, table.targetRecordId),
-  sourceRecordIdIdx: index('idx_record_relationships_source_record_id').on(table.sourceRecordId),
-  targetRecordIdIdx: index('idx_record_relationships_target_record_id').on(table.targetRecordId),
-  relationshipIdIdx: index('idx_record_relationships_relationship_id').on(table.relationshipId),
+  // Migration 017: uniqueness is tenant-scoped
+  relSourceTargetUnique: uniqueIndex('uq_record_relationships_tenant_rel_source_target').on(table.tenantId, table.relationshipId, table.sourceRecordId, table.targetRecordId),
+  tenantSourceIdx: index('idx_record_relationships_tenant_source').on(table.tenantId, table.sourceRecordId),
+  tenantTargetIdx: index('idx_record_relationships_tenant_target').on(table.tenantId, table.targetRecordId),
+  tenantRelationshipIdx: index('idx_record_relationships_tenant_relationship').on(table.tenantId, table.relationshipId),
 }));
 
 export const pipelineDefinitions = pgTable('pipeline_definitions', {
@@ -146,7 +148,7 @@ export const pipelineDefinitions = pgTable('pipeline_definitions', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   objectId: uuid('object_id').notNull().references(() => objectDefinitions.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
-  apiName: varchar('api_name', { length: 100 }).notNull().unique(),
+  apiName: varchar('api_name', { length: 100 }).notNull(),
   description: text('description'),
   isDefault: boolean('is_default').notNull().default(false),
   isSystem: boolean('is_system').notNull().default(false),
@@ -154,8 +156,10 @@ export const pipelineDefinitions = pgTable('pipeline_definitions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
-  objectApiNameUnique: uniqueIndex('pipeline_definitions_object_id_api_name_key').on(table.objectId, table.apiName),
-  tenantIdIdx: index('idx_pipeline_definitions_tenant_id').on(table.tenantId),
+  // Migration 017: uniqueness is tenant-scoped
+  tenantApiNameUnique: uniqueIndex('uq_pipeline_definitions_tenant_api_name').on(table.tenantId, table.apiName),
+  tenantObjectApiNameUnique: uniqueIndex('uq_pipeline_definitions_tenant_object_api_name').on(table.tenantId, table.objectId, table.apiName),
+  tenantObjectIdx: index('idx_pipeline_definitions_tenant_object').on(table.tenantId, table.objectId),
 }));
 
 export const stageDefinitions = pgTable('stage_definitions', {
@@ -172,23 +176,25 @@ export const stageDefinitions = pgTable('stage_definitions', {
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
-  pipelineApiNameUnique: uniqueIndex('stage_definitions_pipeline_id_api_name_key').on(table.pipelineId, table.apiName),
-  pipelineSortOrderUnique: uniqueIndex('stage_definitions_pipeline_id_sort_order_key').on(table.pipelineId, table.sortOrder),
-  pipelineIdIdx: index('idx_stage_definitions_pipeline_id').on(table.pipelineId),
-  pipelineSortIdx: index('idx_stage_definitions_pipeline_id_sort_order').on(table.pipelineId, table.sortOrder),
-  tenantIdIdx: index('idx_stage_definitions_tenant_id').on(table.tenantId),
+  // Migration 017: uniqueness and indexes are tenant-scoped
+  tenantPipelineApiNameUnique: uniqueIndex('uq_stage_definitions_tenant_pipeline_api_name').on(table.tenantId, table.pipelineId, table.apiName),
+  tenantPipelineSortOrderUnique: uniqueIndex('uq_stage_definitions_tenant_pipeline_sort_order').on(table.tenantId, table.pipelineId, table.sortOrder),
+  tenantPipelineIdx: index('idx_stage_definitions_tenant_pipeline').on(table.tenantId, table.pipelineId),
+  tenantPipelineSortIdx: index('idx_stage_definitions_tenant_pipeline_sort_order').on(table.tenantId, table.pipelineId, table.sortOrder),
 }));
 
 export const stageGates = pgTable('stage_gates', {
   id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   stageId: uuid('stage_id').notNull().references(() => stageDefinitions.id, { onDelete: 'cascade' }),
   fieldId: uuid('field_id').notNull().references(() => fieldDefinitions.id, { onDelete: 'cascade' }),
   gateType: varchar('gate_type', { length: 50 }).notNull().default('required'),
   gateValue: text('gate_value'),
   errorMessage: varchar('error_message', { length: 500 }),
 }, (table) => ({
-  stageFieldUnique: uniqueIndex('stage_gates_stage_id_field_id_key').on(table.stageId, table.fieldId),
-  stageIdIdx: index('idx_stage_gates_stage_id').on(table.stageId),
+  // Migration 017: uniqueness and indexes are tenant-scoped
+  tenantStageFieldUnique: uniqueIndex('uq_stage_gates_tenant_stage_field').on(table.tenantId, table.stageId, table.fieldId),
+  tenantStageIdx: index('idx_stage_gates_tenant_stage').on(table.tenantId, table.stageId),
 }));
 
 export const stageHistory = pgTable('stage_history', {

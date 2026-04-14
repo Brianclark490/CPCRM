@@ -270,7 +270,12 @@ export async function getPipelineDetail(
       ? await db
           .select()
           .from(stageGates)
-          .where(sql`${stageGates.stageId} = ANY(${stageIds})`)
+          .where(
+            and(
+              sql`${stageGates.stageId} = ANY(${stageIds})`,
+              eq(stageGates.tenantId, tenantId),
+            ),
+          )
       : [];
 
   const gatesByStageId = new Map<string, StageGate[]>();

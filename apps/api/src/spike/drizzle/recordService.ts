@@ -224,6 +224,11 @@ export async function listRecords(params: {
   const { tenantId, apiName, ownerId, search, limit, offset, sortBy, sortDir } =
     params;
 
+  // ownerId is accepted for API-contract parity with the production
+  // recordService, but list-scoping is performed at the record level via
+  // tenant isolation rather than per-owner filtering.
+  void ownerId;
+
   // Resolve object and fields
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);

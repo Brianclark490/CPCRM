@@ -7,8 +7,6 @@
 
 import { db } from './client.js';
 import { sql } from 'kysely';
-import type { ExpressionBuilder } from 'kysely';
-import type { Database } from './database.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,12 +72,6 @@ export interface ListRecordsResult {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function throwValidationError(message: string): never {
-  const err = new Error(message) as Error & { code: string };
-  err.code = 'VALIDATION_ERROR';
-  throw err;
-}
 
 function throwNotFoundError(message: string): never {
   const err = new Error(message) as Error & { code: string };
@@ -249,9 +241,27 @@ export async function listRecords(params: {
   const { tenantId, apiName, ownerId, search, limit, offset, sortBy, sortDir } =
     params;
 
+  // ownerId is accepted for API-contract parity with the production
+  // recordService, but list-scoping is performed at the record level via
+  // tenant isolation rather than per-owner filtering.
+  void ownerId;
+
   // Resolve object and fields
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
+
+  // Find text-like fields to search
+  const textFields = fieldDefs.filter(
+    (fd) =>
+      fd.fieldType === 'text' ||
+      fd.fieldType === 'email' ||
+      fd.fieldType === 'textarea',
+  );
+
+  const searchTerm =
+    search && search.trim().length > 0
+      ? `%${escapeLikePattern(search.trim())}%`
+      : null;
 
   // Build base query with type safety
   let query = db
@@ -261,46 +271,50 @@ export async function listRecords(params: {
     .where('r.tenant_id', '=', tenantId);
 
   // Add search filter if present
-  if (search && search.trim().length > 0) {
-    const searchTerm = `%${escapeLikePattern(search.trim())}%`;
-
-    // Find text-like fields to search
-    const textFields = fieldDefs.filter(
-      (fd) =>
-        fd.fieldType === 'text' ||
-        fd.fieldType === 'email' ||
-        fd.fieldType === 'textarea',
-    );
-
-    query = query.where((eb) => {
-      // Search against name field
-      const conditions: ReturnType<typeof eb.or>[] = [
+  if (searchTerm !== null) {
+    query = query.where((eb) =>
+      eb.or([
         eb('r.name', 'ilike', searchTerm),
-      ];
-
-      // Search against JSONB field values
-      for (const tf of textFields) {
-        if (isSafeIdentifier(tf.apiName)) {
-          // Type-safe JSONB field access
-          conditions.push(
+        ...textFields
+          .filter((tf) => isSafeIdentifier(tf.apiName))
+          .map((tf) =>
             eb(
-              sql`r.field_values->>$<apiName>`,
+              sql<string>`r.field_values->>${tf.apiName}`,
               'ilike',
-              sql`${searchTerm}`,
-            ) as any,
-          );
-        }
-      }
-
-      return eb.or(conditions);
-    });
+              searchTerm,
+            ),
+          ),
+      ]),
+    );
   }
 
-  // Get total count
-  const countResult = await query
-    .select(sql`COUNT(*)`.as('total'))
-    .executeTakeFirst();
+  // Get total count — build an independent COUNT query so we don't append
+  // COUNT(*) onto the selectAll() of the main query (which would produce
+  // invalid SQL).
+  let countQuery = db
+    .selectFrom('records as r')
+    .select(sql<string>`COUNT(*)`.as('total'))
+    .where('r.object_id', '=', objectDef.id)
+    .where('r.tenant_id', '=', tenantId);
 
+  if (searchTerm !== null) {
+    countQuery = countQuery.where((eb) =>
+      eb.or([
+        eb('r.name', 'ilike', searchTerm),
+        ...textFields
+          .filter((tf) => isSafeIdentifier(tf.apiName))
+          .map((tf) =>
+            eb(
+              sql<string>`r.field_values->>${tf.apiName}`,
+              'ilike',
+              searchTerm,
+            ),
+          ),
+      ]),
+    );
+  }
+
+  const countResult = await countQuery.executeTakeFirst();
   const total = Number(countResult?.total ?? 0);
 
   // Apply sorting
