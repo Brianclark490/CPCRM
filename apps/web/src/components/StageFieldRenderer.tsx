@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { GateFailureModal } from './GateFailureModal.js';
 import type { GateFailure } from './GateFailureModal.js';
 import styles from './StageFieldRenderer.module.css';
@@ -137,9 +137,9 @@ export function StageFieldRenderer({
           return;
         }
 
-        const pipelines = (await response.json()) as Array<
+        const pipelines = unwrapList<
           PipelineDefinition & { objectId?: string; object_id?: string }
-        >;
+        >(await response.json());
         const match = pipelines.find(
           (p) => (p.objectId ?? p.object_id) === objectId,
         );

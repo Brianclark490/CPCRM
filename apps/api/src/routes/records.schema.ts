@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { registry } from '../lib/openapi.js';
 import { commonResponses } from '../lib/openapi.js';
+import { PaginationMetaSchema, PaginationOpenApiQuery } from '../lib/pagination.js';
 
 // Request schemas
 const LinkToSchema = z.object({
@@ -93,11 +94,9 @@ registry.registerPath({
     }),
     query: z.object({
       search: z.string().optional(),
-      page: z.string().optional(),
-      limit: z.string().optional(),
       sort_by: z.string().optional(),
       sort_dir: z.enum(['asc', 'desc']).optional(),
-    }),
+    }).merge(PaginationOpenApiQuery),
   },
   responses: {
     200: {
@@ -106,14 +105,13 @@ registry.registerPath({
         'application/json': {
           schema: z.object({
             data: z.array(RecordSchema),
-            total: z.number(),
-            page: z.number(),
-            limit: z.number(),
+            pagination: PaginationMetaSchema,
             object: ObjectDefinitionSummarySchema,
           }),
         },
       },
     },
+    400: commonResponses[400],
     401: commonResponses[401],
     404: commonResponses[404],
     500: commonResponses[500],

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
-import { ApiError, useApiClient } from '../lib/apiClient.js';
+import { ApiError, useApiClient, unwrapList } from '../lib/apiClient.js';
 import { ApiErrorDisplay } from '../components/ApiErrorDisplay.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { FieldRenderer } from '../components/FieldRenderer.js';
@@ -44,11 +44,16 @@ interface RecordItem {
   updatedAt: string;
 }
 
+interface PaginationMeta {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 interface RecordsResponse {
   data: RecordItem[];
-  total: number;
-  page: number;
-  limit: number;
+  pagination: PaginationMeta;
   object: ObjectDefinition;
 }
 
@@ -193,10 +198,10 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
 
         if (!objResponse.ok) return;
 
-        const allObjects = (await objResponse.json()) as Array<{
+        const allObjects = unwrapList<{
           id: string;
           apiName: string;
-        }>;
+        }>(await objResponse.json());
         const obj = allObjects.find((o) => o.apiName === apiName);
         if (!obj || cancelled) return;
 
@@ -211,7 +216,8 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
           })
           .then((pipelines) => {
             if (cancelled || !pipelines) return;
-            const match = (pipelines as Array<{ objectId?: string; object_id?: string }>).find(
+            const list = unwrapList<{ objectId?: string; object_id?: string }>(pipelines);
+            const match = list.find(
               (p) => (p.objectId ?? p.object_id) === obj.id,
             );
             if (!cancelled) setHasPipeline(!!match);
@@ -225,7 +231,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
 
         if (cancelled || !layoutsResponse.ok) return;
 
-        const layouts = (await layoutsResponse.json()) as LayoutListItem[];
+        const layouts = unwrapList<LayoutListItem>(await layoutsResponse.json());
         const listLayout = layouts.find(
           (l) => l.layoutType === 'list' && l.isDefault,
         ) ?? layouts.find((l) => l.layoutType === 'list');
@@ -266,8 +272,8 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
       setError(null);
 
       const params = new URLSearchParams({
-        page: String(page),
         limit: String(PAGE_SIZE),
+        offset: String((page - 1) * PAGE_SIZE),
       });
       if (debouncedSearch.trim()) {
         params.set('search', debouncedSearch.trim());
@@ -284,7 +290,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
 
         if (!cancelled) {
           setRecords(data.data);
-          setTotal(data.total);
+          setTotal(data.pagination.total);
           setObjectDef(data.object);
         }
       } catch (err) {

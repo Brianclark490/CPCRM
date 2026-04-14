@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../../../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../../../lib/apiClient.js';
 import type {
   BuilderLayout,
   PageLayoutListItem,
@@ -234,7 +234,7 @@ export function usePageLayoutActions({
       );
 
       if (res.ok) {
-        const data = (await res.json()) as VersionEntry[];
+        const data = unwrapList<VersionEntry>(await res.json());
         setVersions(data);
       }
     } catch {

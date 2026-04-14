@@ -17,11 +17,16 @@ interface AccountListItem {
   opportunityCount: number;
 }
 
+interface PaginationMeta {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 interface AccountsResponse {
   data: AccountListItem[];
-  total: number;
-  page: number;
-  limit: number;
+  pagination: PaginationMeta;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -81,8 +86,8 @@ export function AccountsPage() {
       setError(null);
 
       const params = new URLSearchParams({
-        page: String(page),
         limit: String(PAGE_SIZE),
+        offset: String((page - 1) * PAGE_SIZE),
       });
       if (debouncedSearch.trim()) {
         params.set('search', debouncedSearch.trim());
@@ -97,7 +102,7 @@ export function AccountsPage() {
           const data = (await response.json()) as AccountsResponse;
           if (!cancelled) {
             setAccounts(data.data);
-            setTotal(data.total);
+            setTotal(data.pagination.total);
           }
         } else {
           if (!cancelled) setError('Failed to load accounts.');

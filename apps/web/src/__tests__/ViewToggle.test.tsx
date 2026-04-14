@@ -26,9 +26,7 @@ function renderPage(apiName = 'opportunity', initialView?: 'list' | 'pipeline') 
 function makeRecordsResponse(total = 0) {
   return {
     data: [],
-    total,
-    page: 1,
-    limit: 20,
+    pagination: { total, limit: 20, offset: 0, hasMore: false },
     object: {
       id: 'obj-1',
       apiName: 'opportunity',

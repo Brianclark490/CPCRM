@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import styles from './AdminTargetsPage.module.css';
 
 /* ── Types ────────────────────────────────────────────────── */
@@ -269,7 +269,7 @@ export function AdminTargetsPage() {
         return;
       }
 
-      const targets = (await response.json()) as SalesTarget[];
+      const targets = unwrapList<SalesTarget>(await response.json());
 
       // Group by type
       const biz = targets.find((t) => t.target_type === 'business');

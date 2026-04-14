@@ -222,17 +222,21 @@ describe('GET /records/:id/related/:objectApiName', () => {
     mockGetRelatedRecords.mockReset();
   });
 
-  it('returns 200 with paginated related records', async () => {
-    const result = {
-      data: [
-        { id: 'rec-2', name: 'Acme Corp', fieldValues: { name: 'Acme Corp' }, createdAt: new Date(), updatedAt: new Date() },
-      ],
-      total: 1,
-      page: 1,
-      limit: 20,
+  it('returns 200 with paginated related records wrapped in the canonical envelope', async () => {
+    const item = {
+      id: 'rec-2',
+      name: 'Acme Corp',
+      fieldValues: { name: 'Acme Corp' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    mockGetRelatedRecords.mockResolvedValue(result);
+    mockGetRelatedRecords.mockResolvedValue({
+      data: [item],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
 
     const req = mockReq(
       {},
@@ -244,30 +248,31 @@ describe('GET /records/:id/related/:objectApiName', () => {
 
     await handleGetRelatedRecords(req, res);
 
-    expect(mockGetRelatedRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'account', 'user-123', 1, 20);
+    expect(mockGetRelatedRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'account', 'user-123', 50, 0);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(result);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [item],
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+    });
   });
 
   it('passes pagination params to service', async () => {
-    mockGetRelatedRecords.mockResolvedValue({ data: [], total: 0, page: 2, limit: 10 });
+    mockGetRelatedRecords.mockResolvedValue({ data: [], total: 0, limit: 10, offset: 20 });
 
     const req = mockReq(
       {},
       undefined,
       { id: 'rec-uuid', objectApiName: 'account' },
-      { page: '2', limit: '10' },
+      { limit: '10', offset: '20' },
     );
     const res = mockRes();
 
     await handleGetRelatedRecords(req, res);
 
-    expect(mockGetRelatedRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'account', 'user-123', 2, 10);
+    expect(mockGetRelatedRecords).toHaveBeenCalledWith('tenant-abc', 'rec-uuid', 'account', 'user-123', 10, 20);
   });
 
-  it('clamps limit to maximum of 100', async () => {
-    mockGetRelatedRecords.mockResolvedValue({ data: [], total: 0, page: 1, limit: 100 });
-
+  it('rejects limit greater than the max with HTTP 400', async () => {
     const req = mockReq(
       {},
       undefined,
@@ -278,9 +283,8 @@ describe('GET /records/:id/related/:objectApiName', () => {
 
     await handleGetRelatedRecords(req, res);
 
-    expect(mockGetRelatedRecords).toHaveBeenCalledWith(
-      'tenant-abc', 'rec-uuid', 'account', 'user-123', 1, 100,
-    );
+    expect(mockGetRelatedRecords).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 
   it('returns 404 when record not found', async () => {

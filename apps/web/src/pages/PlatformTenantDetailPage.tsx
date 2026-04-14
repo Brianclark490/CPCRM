@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import styles from './PlatformTenantDetailPage.module.css';
 
@@ -154,7 +154,7 @@ export function PlatformTenantDetailPage() {
       const response = await api.request(`/api/v1/platform/tenants/${id}/users`);
 
       if (response.ok) {
-        const data = (await response.json()) as TenantUser[];
+        const data = unwrapList<TenantUser>(await response.json());
         setUsers(data);
       }
     } catch {

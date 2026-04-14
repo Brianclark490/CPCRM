@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { slugify } from '../utils.js';
 import styles from './PipelineDetailPage.module.css';
@@ -220,7 +220,7 @@ export function PipelineDetailPage() {
       const response = await api.request(`/api/v1/admin/objects/${pipeline.objectId}/fields`);
 
       if (response.ok) {
-        const data = (await response.json()) as FieldOption[];
+        const data = unwrapList<FieldOption>(await response.json());
         setFields(data);
       }
     } catch {
@@ -243,7 +243,7 @@ export function PipelineDetailPage() {
       const response = await api.request(`/api/v1/admin/stages/${stageId}/gates`);
 
       if (response.ok) {
-        const data = (await response.json()) as StageGate[];
+        const data = unwrapList<StageGate>(await response.json());
         setGates(data);
       }
     } catch {

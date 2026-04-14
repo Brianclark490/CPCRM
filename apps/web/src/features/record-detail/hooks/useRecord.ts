@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../../../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../../../lib/apiClient.js';
 import { usePageLayout } from '../../../usePageLayout.js';
 import { groupFieldsBySection } from '../helpers.js';
 import type {
@@ -59,7 +59,7 @@ export function useRecord(
 
         const objResponse = await api.request('/api/v1/admin/objects');
         if (objResponse.ok) {
-          const allObjects = (await objResponse.json()) as ObjectDefinition[];
+          const allObjects = unwrapList<ObjectDefinition>(await objResponse.json());
           const obj = allObjects.find((o) => o.apiName === apiName);
           if (obj) setObjectDef(obj);
         }
@@ -90,10 +90,10 @@ export function useRecord(
         const objResponse = await api.request('/api/v1/admin/objects');
         if (cancelled || !objResponse.ok) return;
 
-        const allObjects = (await objResponse.json()) as Array<{
+        const allObjects = unwrapList<{
           id: string;
           apiName: string;
-        }>;
+        }>(await objResponse.json());
         const obj = allObjects.find((o) => o.apiName === apiName);
         if (!obj || cancelled) return;
 
@@ -102,7 +102,7 @@ export function useRecord(
         );
         if (cancelled || !layoutsResponse.ok) return;
 
-        const layouts = (await layoutsResponse.json()) as LayoutListItem[];
+        const layouts = unwrapList<LayoutListItem>(await layoutsResponse.json());
         const formLayout =
           layouts.find((l) => l.layoutType === 'form' && l.isDefault) ??
           layouts.find((l) => l.layoutType === 'form');

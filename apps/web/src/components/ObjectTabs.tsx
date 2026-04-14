@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { ObjectIcon } from './ObjectIcon.js';
 import styles from './ObjectTabs.module.css';
 
@@ -31,12 +31,12 @@ export function ObjectTabs() {
 
         if (cancelled || !response.ok) return;
 
-        const objects = (await response.json()) as Array<{
+        const objects = unwrapList<{
           id: string;
           apiName: string;
           pluralLabel: string;
           icon?: string;
-        }>;
+        }>(await response.json());
 
         if (!cancelled) {
           const HIDDEN_FROM_NAV = new Set(['user', 'team']);

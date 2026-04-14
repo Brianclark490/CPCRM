@@ -176,26 +176,24 @@ describe('GET /accounts', () => {
     mockListAccounts.mockReset();
   });
 
-  it('returns 200 with paginated accounts', async () => {
+  it('returns 200 with paginated accounts wrapped in the canonical envelope', async () => {
     const now = new Date();
-    const result = {
-      data: [
-        {
-          id: 'acc-1',
-          tenantId: 'tenant-abc',
-          name: 'Acme Corp',
-          ownerId: 'user-123',
-          createdAt: now,
-          updatedAt: now,
-          createdBy: 'user-123',
-        },
-      ],
-      total: 1,
-      page: 1,
-      limit: 20,
+    const account = {
+      id: 'acc-1',
+      tenantId: 'tenant-abc',
+      name: 'Acme Corp',
+      ownerId: 'user-123',
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'user-123',
     };
 
-    mockListAccounts.mockResolvedValue(result);
+    mockListAccounts.mockResolvedValue({
+      data: [account],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
 
     const req = mockReq({}, undefined, {}, {});
     const res = mockRes();
@@ -206,17 +204,20 @@ describe('GET /accounts', () => {
       tenantId: 'tenant-abc',
       ownerId: 'user-123',
       search: undefined,
-      page: 1,
-      limit: 20,
+      limit: 50,
+      offset: 0,
     });
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(result);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [account],
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+    });
   });
 
   it('passes search and pagination parameters to the service', async () => {
-    mockListAccounts.mockResolvedValue({ data: [], total: 0, page: 2, limit: 10 });
+    mockListAccounts.mockResolvedValue({ data: [], total: 0, limit: 10, offset: 20 });
 
-    const req = mockReq({}, undefined, {}, { search: 'acme', page: '2', limit: '10' });
+    const req = mockReq({}, undefined, {}, { search: 'acme', limit: '10', offset: '20' });
     const res = mockRes();
 
     await handleListAccounts(req, res);
@@ -225,21 +226,61 @@ describe('GET /accounts', () => {
       tenantId: 'tenant-abc',
       ownerId: 'user-123',
       search: 'acme',
-      page: 2,
       limit: 10,
+      offset: 20,
     });
   });
 
-  it('clamps limit to maximum of 100', async () => {
-    mockListAccounts.mockResolvedValue({ data: [], total: 0, page: 1, limit: 100 });
-
+  it('rejects limit greater than the max with HTTP 400', async () => {
     const req = mockReq({}, undefined, {}, { limit: '500' });
     const res = mockRes();
 
     await handleListAccounts(req, res);
 
-    expect(mockListAccounts).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100 }),
+    expect(mockListAccounts).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+    );
+  });
+
+  it('rejects negative offset with HTTP 400', async () => {
+    const req = mockReq({}, undefined, {}, { offset: '-1' });
+    const res = mockRes();
+
+    await handleListAccounts(req, res);
+
+    expect(mockListAccounts).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('rejects non-numeric limit with HTTP 400', async () => {
+    const req = mockReq({}, undefined, {}, { limit: 'banana' });
+    const res = mockRes();
+
+    await handleListAccounts(req, res);
+
+    expect(mockListAccounts).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('reports hasMore=true when more results are available', async () => {
+    mockListAccounts.mockResolvedValue({
+      data: Array.from({ length: 50 }, (_, i) => ({ id: `acc-${i}` })),
+      total: 120,
+      limit: 50,
+      offset: 0,
+    });
+
+    const req = mockReq({}, undefined, {}, {});
+    const res = mockRes();
+
+    await handleListAccounts(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pagination: { total: 120, limit: 50, offset: 0, hasMore: true },
+      }),
     );
   });
 

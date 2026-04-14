@@ -81,8 +81,8 @@ export interface RecordDetail extends RecordWithLabels {
 export interface ListRecordsResult {
   data: RecordWithLabels[];
   total: number;
-  page: number;
   limit: number;
+  offset: number;
   object: ObjectDefinitionRow;
 }
 
@@ -672,12 +672,14 @@ export async function listRecords(params: {
   apiName: string;
   ownerId: string;
   search?: string;
-  page: number;
   limit: number;
+  offset: number;
   sortBy?: string;
   sortDir?: string;
 }): Promise<ListRecordsResult> {
-  const { tenantId, apiName, ownerId, search, page, limit, sortBy, sortDir } = params;
+  const { tenantId, apiName, ownerId, search, limit, offset, sortBy, sortDir } = params;
+  // ownerId is currently used via filters at the route/service level (reserved for future scoping)
+  void ownerId;
 
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
@@ -734,7 +736,6 @@ export async function listRecords(params: {
     }
   }
 
-  const offset = (page - 1) * limit;
   queryParams.push(limit, offset);
 
   const dataResult = await pool.query(
@@ -788,7 +789,7 @@ export async function listRecords(params: {
     }
   }
 
-  return { data, total, page, limit, object: objectDef };
+  return { data, total, limit, offset, object: objectDef };
 }
 
 /**

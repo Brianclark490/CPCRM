@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { registry } from '../lib/openapi.js';
 import { commonResponses } from '../lib/openapi.js';
+import { paginatedResponseSchema, PaginationOpenApiQuery } from '../lib/pagination.js';
 
 // Simple schemas for remaining admin routes
 
@@ -246,12 +247,7 @@ const ProvisionTenantResultSchema = z.object({
   inviteUrl: z.string().optional(),
 }).passthrough();
 
-const ListTenantsResponseSchema = z.object({
-  tenants: z.array(TenantSchema),
-  total: z.number(),
-  limit: z.number(),
-  offset: z.number(),
-});
+const ListTenantsResponseSchema = paginatedResponseSchema(TenantSchema);
 
 registry.registerPath({
   method: 'post',
@@ -279,13 +275,11 @@ registry.registerPath({
   tags: ['Platform - Tenants'],
   security: [{ bearerAuth: [] }],
   request: {
-    query: z.object({
-      limit: z.string().optional(),
-      offset: z.string().optional(),
-    }),
+    query: PaginationOpenApiQuery,
   },
   responses: {
     200: { description: 'Paginated list of tenants', content: { 'application/json': { schema: ListTenantsResponseSchema } } },
+    400: commonResponses[400],
     401: commonResponses[401],
     403: commonResponses[403],
     500: commonResponses[500],
@@ -485,25 +479,18 @@ registry.registerPath({
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.string(), objectApiName: z.string() }),
-    query: z.object({
-      page: z.string().optional(),
-      limit: z.string().optional(),
-    }),
+    query: PaginationOpenApiQuery,
   },
   responses: {
     200: {
       description: 'Paginated related records',
       content: {
         'application/json': {
-          schema: z.object({
-            data: z.array(RelatedRecordRowSchema),
-            total: z.number(),
-            page: z.number(),
-            limit: z.number(),
-          }),
+          schema: paginatedResponseSchema(RelatedRecordRowSchema),
         },
       },
     },
+    400: commonResponses[400],
     401: commonResponses[401],
     403: commonResponses[403],
     404: commonResponses[404],

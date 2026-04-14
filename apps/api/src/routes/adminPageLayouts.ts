@@ -17,6 +17,8 @@ import {
 import type { CreatePageLayoutParams, UpdatePageLayoutParams } from '../services/pageLayoutService.js';
 import { COMPONENT_REGISTRY } from '../lib/componentRegistry.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginateInMemory } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 import rateLimit from 'express-rate-limit';
 
 const adminPageLayoutsRateLimiter = rateLimit({
@@ -113,9 +115,22 @@ export async function handleListPageLayouts(
 ): Promise<void> {
   const { objectId } = req.params as { objectId: string };
 
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
   try {
     const layouts = await listPageLayouts(req.user!.tenantId!, objectId);
-    res.status(200).json(layouts);
+    res.status(200).json(paginateInMemory(layouts, pagination));
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 
@@ -286,9 +301,22 @@ export async function handleListPageLayoutVersions(
 ): Promise<void> {
   const { objectId, id } = req.params as { objectId: string; id: string };
 
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
   try {
     const versions = await listPageLayoutVersions(req.user!.tenantId!, objectId, id);
-    res.status(200).json(versions);
+    res.status(200).json(paginateInMemory(versions, pagination));
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 

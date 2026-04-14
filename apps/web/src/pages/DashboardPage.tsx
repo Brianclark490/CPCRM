@@ -102,20 +102,20 @@ export function DashboardPage() {
   useEffect(() => {
     if (!sessionToken) return;
 
-    api.request('/api/v1/objects/opportunity/records?limit=1&page=1')
+    api.request('/api/v1/objects/opportunity/records?limit=1&offset=0')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { total?: number } | null) => {
-        if (data && typeof data.total === 'number') {
-          setOpportunityCount(data.total);
+      .then((data: { pagination?: { total?: number } } | null) => {
+        if (data?.pagination && typeof data.pagination.total === 'number') {
+          setOpportunityCount(data.pagination.total);
         }
       })
       .catch(() => { /* best-effort */ });
 
-    api.request('/api/v1/objects/account/records?limit=1&page=1')
+    api.request('/api/v1/objects/account/records?limit=1&offset=0')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { total?: number } | null) => {
-        if (data && typeof data.total === 'number') {
-          setAccountCount(data.total);
+      .then((data: { pagination?: { total?: number } } | null) => {
+        if (data?.pagination && typeof data.pagination.total === 'number') {
+          setAccountCount(data.pagination.total);
         }
       })
       .catch(() => { /* best-effort */ });

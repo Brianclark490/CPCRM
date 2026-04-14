@@ -699,11 +699,11 @@ describe('listRecords', () => {
       tenantId: TENANT_ID,
       apiName: 'account',
       ownerId: 'user-123',
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
-    expect(result.page).toBe(1);
+    expect(result.offset).toBe(0);
     expect(result.limit).toBe(20);
     expect(result.object.apiName).toBe('account');
     expect(Array.isArray(result.data)).toBe(true);
@@ -711,7 +711,7 @@ describe('listRecords', () => {
 
   it('throws NOT_FOUND for unknown object type', async () => {
     await expect(
-      listRecords({ tenantId: TENANT_ID, apiName: 'nonexistent', ownerId: 'user-123', page: 1, limit: 20 }),
+      listRecords({ tenantId: TENANT_ID, apiName: 'nonexistent', ownerId: 'user-123', limit: 20, offset: 0 }),
     ).rejects.toThrow("Object type 'nonexistent' not found");
   });
 });

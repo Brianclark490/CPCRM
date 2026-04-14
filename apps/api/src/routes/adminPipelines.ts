@@ -16,6 +16,8 @@ import {
 } from '../services/pipelineService.js';
 import type { UpdatePipelineParams } from '../services/pipelineService.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginateInMemory } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 export const adminPipelinesRouter = Router();
 
@@ -107,9 +109,22 @@ export async function handleListPipelines(
   req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
   try {
     const pipelines = await listPipelines(req.user!.tenantId!);
-    res.status(200).json(pipelines);
+    res.status(200).json(paginateInMemory(pipelines, pagination));
   } catch (err: unknown) {
     logger.error({ err }, 'Unexpected error listing pipelines');
     res.status(500).json({ error: 'An unexpected error occurred' });

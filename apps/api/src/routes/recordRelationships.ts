@@ -9,6 +9,8 @@ import {
   getRelatedRecords,
 } from '../services/recordRelationshipService.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginatedResponse } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 export const recordRelationshipsRouter = Router();
 
@@ -114,11 +116,12 @@ export async function handleUnlinkRecords(
  * Includes name and key field values for display.
  *
  * Query parameters:
- *   page?: number  — page number, defaults to 1
- *   limit?: number — results per page, defaults to 20 (max 100)
+ *   limit?:  number — results per page (default 50, max 200)
+ *   offset?: number — results to skip (default 0)
  *
  * Responses:
- *   200  – { data: RelatedRecordRow[], total, page, limit }
+ *   200  – { data, pagination: { total, limit, offset, hasMore } }
+ *   400  – invalid pagination parameters
  *   401  – missing or invalid Bearer token
  *   403  – no active tenant context
  *   404  – record or object type not found
@@ -131,13 +134,29 @@ export async function handleGetRelatedRecords(
   const { id, objectApiName } = req.params as { id: string; objectApiName: string };
   const { userId: ownerId } = req.user!;
 
-  const query = req.query as { page?: string; limit?: string };
-  const page = Math.max(1, parseInt(query.page ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? '20', 10) || 20));
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
 
   try {
-    const result = await getRelatedRecords(req.user!.tenantId!, id, objectApiName, ownerId, page, limit);
-    res.status(200).json(result);
+    const result = await getRelatedRecords(
+      req.user!.tenantId!,
+      id,
+      objectApiName,
+      ownerId,
+      pagination.limit,
+      pagination.offset,
+    );
+    res.status(200).json(paginatedResponse(result.data, result.total, pagination));
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 

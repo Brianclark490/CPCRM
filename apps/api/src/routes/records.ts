@@ -15,6 +15,8 @@ import { convertLead } from '../services/leadConversionService.js';
 import { moveRecordStage } from '../services/stageMovementService.js';
 import type { GateValidationError } from '../services/stageMovementService.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginatedResponse } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -125,14 +127,15 @@ export async function handleCreateRecord(
  * Supports searching, sorting, and pagination.
  *
  * Query parameters:
- *   search?: string  — matches against name and text/email fields
- *   page?: number    — page number, defaults to 1
- *   limit?: number   — results per page, defaults to 20 (max 100)
- *   sort_by?: string — field api_name or "name"/"created_at"/"updated_at"
+ *   search?: string   — matches against name and text/email fields
+ *   limit?:  number   — results per page (default 50, max 200)
+ *   offset?: number   — number of results to skip (default 0)
+ *   sort_by?: string  — field api_name or "name"/"created_at"/"updated_at"
  *   sort_dir?: string — "asc" or "desc"
  *
  * Responses:
- *   200  – { data: Record[], total, page, limit, object: ObjectDefinition }
+ *   200  – { data, pagination: { total, limit, offset, hasMore }, object }
+ *   400  – invalid pagination parameters
  *   401  – missing or invalid Bearer token
  *   403  – no active tenant context
  *   404  – object type not found
@@ -147,14 +150,24 @@ export async function handleListRecords(
 
   const query = req.query as {
     search?: string;
-    page?: string;
     limit?: string;
+    offset?: string;
     sort_by?: string;
     sort_dir?: string;
   };
 
-  const page = Math.max(1, parseInt(query.page ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? '20', 10) || 20));
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
 
   try {
     const result = await listRecords({
@@ -162,13 +175,14 @@ export async function handleListRecords(
       apiName,
       ownerId,
       search: query.search,
-      page,
-      limit,
+      limit: pagination.limit,
+      offset: pagination.offset,
       sortBy: query.sort_by,
       sortDir: query.sort_dir,
     });
 
-    res.status(200).json(result);
+    const envelope = paginatedResponse(result.data, result.total, pagination);
+    res.status(200).json({ ...envelope, object: result.object });
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 

@@ -12,6 +12,8 @@ import {
 } from '../services/tenantProvisioning.js';
 import { listTenantUsers, inviteUser } from '../services/adminUserService.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginatedResponse } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 export const platformTenantsRouter = Router();
 
@@ -84,23 +86,33 @@ export async function handleCreateTenant(
 /**
  * GET /api/platform/tenants
  *
- * Lists all tenants with optional pagination.
+ * Lists all tenants with pagination.
  * Super-admin only.
  *
  * Query params:
- *   limit  – max records to return (default 50, max 100)
+ *   limit  – max records to return (default 50, max 200)
  *   offset – number of records to skip (default 0)
  */
 export async function handleListTenants(
   req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
-  const limit = Math.min(parseInt(req.query['limit'] as string || '50', 10) || 50, 100);
-  const offset = Math.max(parseInt(req.query['offset'] as string || '0', 10) || 0, 0);
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
 
   try {
-    const { tenants, total } = await listTenants(limit, offset);
-    res.json({ tenants, total, limit, offset });
+    const { tenants, total } = await listTenants(pagination.limit, pagination.offset);
+    res.json(paginatedResponse(tenants, total, pagination));
   } catch (err: unknown) {
     logger.error({ err }, 'Unexpected error listing tenants');
     res.status(500).json({ error: 'An unexpected error occurred' });
@@ -202,7 +214,7 @@ export async function handleDeleteTenant(
 /**
  * GET /api/platform/tenants/:id/users
  *
- * Lists all users belonging to a specific tenant.
+ * Lists all users belonging to a specific tenant with pagination.
  * Super-admin only.
  */
 export async function handleListTenantUsers(
@@ -212,9 +224,26 @@ export async function handleListTenantUsers(
   const { id } = req.params;
   const tenantId = resolveParam(id);
 
+  let pagination;
   try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
+  try {
+    // Descope management SDK returns all users for a tenant in a single call;
+    // paginate in-memory to honour the canonical envelope.
     const users = await listTenantUsers(tenantId);
-    res.json(users);
+    const total = users.length;
+    const page = users.slice(pagination.offset, pagination.offset + pagination.limit);
+    res.json(paginatedResponse(page, total, pagination));
   } catch (err: unknown) {
     logger.error({ err, tenantId }, 'Unexpected error listing tenant users');
     res.status(500).json({ error: 'An unexpected error occurred' });

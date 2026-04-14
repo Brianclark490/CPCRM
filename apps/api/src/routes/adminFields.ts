@@ -12,6 +12,8 @@ import {
 } from '../services/fieldDefinitionService.js';
 import type { UpdateFieldDefinitionParams } from '../services/fieldDefinitionService.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginateInMemory } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 export const adminFieldsRouter = Router({ mergeParams: true });
 
@@ -101,10 +103,15 @@ export async function handleCreateField(
 /**
  * GET /admin/objects/:objectId/fields
  *
- * Returns all field definitions for the specified object, ordered by sort_order.
+ * Returns field definitions for the specified object, ordered by sort_order.
+ *
+ * Query parameters:
+ *   limit?:  number — results per page (default 50, max 200)
+ *   offset?: number — results to skip (default 0)
  *
  * Responses:
- *   200  – array of field definitions
+ *   200  – { data, pagination: { total, limit, offset, hasMore } }
+ *   400  – invalid pagination parameters
  *   401  – missing or invalid Bearer token
  *   404  – parent object not found
  *   500  – unexpected server error
@@ -115,9 +122,22 @@ export async function handleListFields(
 ): Promise<void> {
   const { objectId } = req.params as { objectId: string };
 
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
   try {
     const fields = await listFieldDefinitions(req.user!.tenantId!, objectId);
-    res.status(200).json(fields);
+    res.status(200).json(paginateInMemory(fields, pagination));
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 

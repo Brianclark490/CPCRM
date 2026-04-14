@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { PrimaryButton } from './PrimaryButton.js';
 import styles from './LayoutBuilderTab.module.css';
 
@@ -202,7 +202,7 @@ export function LayoutBuilderTab({ objectId, fields }: LayoutBuilderTabProps) {
       const response = await api.request(`/api/v1/admin/objects/${objectId}/layouts`);
 
       if (response.ok) {
-        const data = (await response.json()) as LayoutDefinition[];
+        const data = unwrapList<LayoutDefinition>(await response.json());
         setLayouts(data);
 
         setSelectedLayoutId((prev) => {

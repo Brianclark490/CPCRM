@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { slugify } from '../utils.js';
 import styles from './PipelineManagerPage.module.css';
@@ -97,7 +97,7 @@ export function PipelineManagerPage() {
       const response = await api.request('/api/v1/admin/pipelines');
 
       if (response.ok) {
-        const data = (await response.json()) as PipelineListItem[];
+        const data = unwrapList<PipelineListItem>(await response.json());
         setPipelines(data);
       } else {
         setError('Failed to load pipelines.');
@@ -118,7 +118,7 @@ export function PipelineManagerPage() {
       const response = await api.request('/api/v1/admin/objects');
 
       if (response.ok) {
-        const data = (await response.json()) as ObjectOption[];
+        const data = unwrapList<ObjectOption>(await response.json());
         setObjects(data);
       }
     } catch {

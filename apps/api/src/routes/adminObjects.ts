@@ -17,6 +17,8 @@ import { adminObjectRelationshipsRouter } from './adminRelationships.js';
 import { adminLayoutsRouter } from './adminLayouts.js';
 import { adminPageLayoutsRouter } from './adminPageLayouts.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginateInMemory } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 export const adminObjectsRouter = Router();
 
@@ -95,13 +97,18 @@ export async function handleCreateObject(
 /**
  * GET /admin/objects
  *
- * Returns all object definitions with field count and record count.
+ * Returns object definitions with field count and record count.
  * Includes both system and custom objects.
  *
  * Requires: valid Bearer token (requireAuth).
  *
+ * Query parameters:
+ *   limit?:  number — results per page (default 50, max 200)
+ *   offset?: number — results to skip (default 0)
+ *
  * Responses:
- *   200  – array of object definitions with counts
+ *   200  – { data, pagination: { total, limit, offset, hasMore } }
+ *   400  – invalid pagination parameters
  *   401  – missing or invalid Bearer token
  *   500  – unexpected server error
  */
@@ -109,9 +116,22 @@ export async function handleListObjects(
   req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> {
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
   try {
     const objects = await listObjectDefinitions(req.user!.tenantId!);
-    res.status(200).json(objects);
+    res.status(200).json(paginateInMemory(objects, pagination));
   } catch (err: unknown) {
     logger.error({ err }, 'Unexpected error listing object definitions');
     res.status(500).json({ error: 'An unexpected error occurred' });

@@ -29,18 +29,22 @@ function makeRecordsResponse(
   }> = [],
   total = 0,
 ) {
+  const data = records.map((r) => ({
+    ...r,
+    fieldValues: {},
+    ownerId: 'user-1',
+    ownerName: r.ownerName,
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z',
+  }));
   return {
-    data: records.map((r) => ({
-      ...r,
-      fieldValues: {},
-      ownerId: 'user-1',
-      ownerName: r.ownerName,
-      createdAt: '2025-01-01T00:00:00Z',
-      updatedAt: '2025-01-01T00:00:00Z',
-    })),
-    total,
-    page: 1,
-    limit: 20,
+    data,
+    pagination: {
+      total,
+      limit: 20,
+      offset: 0,
+      hasMore: total > data.length,
+    },
     object: {
       id: 'obj-1',
       apiName: 'account',
@@ -351,9 +355,7 @@ describe('RecordListPage', () => {
           updatedAt: '2025-01-01T00:00:00Z',
         },
       ],
-      total: 1,
-      page: 1,
-      limit: 20,
+      pagination: { total: 1, limit: 20, offset: 0, hasMore: false },
       object: {
         id: 'obj-1',
         apiName: 'account',

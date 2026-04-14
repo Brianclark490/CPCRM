@@ -352,13 +352,20 @@ describe('GET /objects/:apiName/records', () => {
     mockListRecords.mockReset();
   });
 
-  it('returns 200 with paginated records', async () => {
+  it('returns 200 with paginated records wrapped in the canonical envelope', async () => {
+    const objectDef = {
+      id: 'obj-id',
+      apiName: 'account',
+      label: 'Account',
+      pluralLabel: 'Accounts',
+      isSystem: true,
+    };
     const result = {
       data: [],
       total: 0,
-      page: 1,
-      limit: 20,
-      object: { id: 'obj-id', apiName: 'account', label: 'Account', pluralLabel: 'Accounts', isSystem: true },
+      limit: 50,
+      offset: 0,
+      object: objectDef,
     };
 
     mockListRecords.mockResolvedValue(result);
@@ -373,23 +380,27 @@ describe('GET /objects/:apiName/records', () => {
       apiName: 'account',
       ownerId: 'user-123',
       search: undefined,
-      page: 1,
-      limit: 20,
+      limit: 50,
+      offset: 0,
       sortBy: undefined,
       sortDir: undefined,
     });
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(result);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [],
+      pagination: { total: 0, limit: 50, offset: 0, hasMore: false },
+      object: objectDef,
+    });
   });
 
   it('passes search and pagination params to service', async () => {
-    mockListRecords.mockResolvedValue({ data: [], total: 0, page: 2, limit: 10, object: {} });
+    mockListRecords.mockResolvedValue({ data: [], total: 0, limit: 10, offset: 20, object: {} });
 
     const req = mockReq(
       {},
       undefined,
       { apiName: 'account' },
-      { search: 'acme', page: '2', limit: '10', sort_by: 'name', sort_dir: 'asc' },
+      { search: 'acme', limit: '10', offset: '20', sort_by: 'name', sort_dir: 'asc' },
     );
     const res = mockRes();
 
@@ -400,24 +411,34 @@ describe('GET /objects/:apiName/records', () => {
       apiName: 'account',
       ownerId: 'user-123',
       search: 'acme',
-      page: 2,
       limit: 10,
+      offset: 20,
       sortBy: 'name',
       sortDir: 'asc',
     });
   });
 
-  it('clamps limit to maximum of 100', async () => {
-    mockListRecords.mockResolvedValue({ data: [], total: 0, page: 1, limit: 100, object: {} });
-
+  it('rejects limit greater than the max with HTTP 400', async () => {
     const req = mockReq({}, undefined, { apiName: 'account' }, { limit: '500' });
     const res = mockRes();
 
     await handleListRecords(req, res);
 
-    expect(mockListRecords).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100 }),
+    expect(mockListRecords).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
     );
+  });
+
+  it('rejects negative offset with HTTP 400', async () => {
+    const req = mockReq({}, undefined, { apiName: 'account' }, { offset: '-5' });
+    const res = mockRes();
+
+    await handleListRecords(req, res);
+
+    expect(mockListRecords).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 
   it('returns 404 when object type not found', async () => {

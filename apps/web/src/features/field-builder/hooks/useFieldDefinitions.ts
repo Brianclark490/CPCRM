@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../../../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../../../lib/apiClient.js';
 import type {
   FieldDefinition,
   ObjectDefinitionDetail,
@@ -72,7 +72,7 @@ export function useFieldDefinitions(objectId: string | undefined) {
       const response = await api.request(`/api/v1/admin/objects/${objectId}/relationships`);
 
       if (response.ok) {
-        const data = (await response.json()) as RelationshipDefinition[];
+        const data = unwrapList<RelationshipDefinition>(await response.json());
         setRelationships(data);
       } else {
         setRelationshipsError('Failed to load relationships.');
@@ -91,7 +91,7 @@ export function useFieldDefinitions(objectId: string | undefined) {
       const response = await api.request('/api/v1/admin/objects');
 
       if (response.ok) {
-        const data = (await response.json()) as ObjectDefinitionListItem[];
+        const data = unwrapList<ObjectDefinitionListItem>(await response.json());
         setAllObjects(data);
       }
     } catch {
@@ -111,7 +111,7 @@ export function useFieldDefinitions(objectId: string | undefined) {
       const response = await api.request(`/api/v1/admin/objects/${objectId}/page-layouts`);
 
       if (response.ok) {
-        const data = (await response.json()) as PageLayoutListItem[];
+        const data = unwrapList<PageLayoutListItem>(await response.json());
         setPageLayouts(data);
       } else {
         setPageLayoutsError('Failed to load page layouts.');

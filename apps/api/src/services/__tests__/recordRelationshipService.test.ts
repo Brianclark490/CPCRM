@@ -355,7 +355,7 @@ describe('getRelatedRecords', () => {
 
   it('throws NOT_FOUND when record does not exist', async () => {
     await expect(
-      getRelatedRecords(TENANT_ID, 'missing-id', 'account', 'user-123', 1, 20),
+      getRelatedRecords(TENANT_ID, 'missing-id', 'account', 'user-123', 20, 0),
     ).rejects.toThrow('Record not found');
   });
 
@@ -363,18 +363,18 @@ describe('getRelatedRecords', () => {
     fakeRecords.set('rec-1', { id: 'rec-1', owner_id: 'user-123', object_id: 'obj-1' });
 
     await expect(
-      getRelatedRecords(TENANT_ID, 'rec-1', 'nonexistent', 'user-123', 1, 20),
+      getRelatedRecords(TENANT_ID, 'rec-1', 'nonexistent', 'user-123', 20, 0),
     ).rejects.toThrow("Object type 'nonexistent' not found");
   });
 
   it('returns empty result for records with no relationships', async () => {
     fakeRecords.set('rec-1', { id: 'rec-1', owner_id: 'user-123', object_id: 'obj-1' });
 
-    const result = await getRelatedRecords(TENANT_ID, 'rec-1', 'account', 'user-123', 1, 20);
+    const result = await getRelatedRecords(TENANT_ID, 'rec-1', 'account', 'user-123', 20, 0);
 
     expect(result.data).toEqual([]);
     expect(result.total).toBe(0);
-    expect(result.page).toBe(1);
+    expect(result.offset).toBe(0);
     expect(result.limit).toBe(20);
   });
 });
