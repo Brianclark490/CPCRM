@@ -235,7 +235,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
         try {
           pipelines = await api.get<
             Array<PipelineDefinition & { objectId?: string; object_id?: string }>
-          >('/api/admin/pipelines');
+          >('/api/v1/admin/pipelines');
         } catch {
           if (!cancelled) {
             setError('Failed to load pipeline configuration.');
@@ -258,9 +258,9 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
         // 2. Fetch pipeline detail AND records in parallel
         const [detailResult, recordsResult] = await Promise.allSettled([
-          api.get<PipelineDefinition>(`/api/admin/pipelines/${match.id}`),
+          api.get<PipelineDefinition>(`/api/v1/admin/pipelines/${match.id}`),
           api.get<RecordsResponse>(
-            `/api/objects/${apiName}/records?limit=100`,
+            `/api/v1/objects/${apiName}/records?limit=100`,
           ),
         ]);
 
@@ -317,12 +317,12 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     const [summaryResult, velocityResult, overdueResult] =
       await Promise.allSettled([
         api.get<{ totals: PipelineSummaryData['totals'] }>(
-          `/api/pipelines/${pipeline.id}/summary`,
+          `/api/v1/pipelines/${pipeline.id}/summary`,
         ),
         api.get<{ avgDaysToClose: number }>(
-          `/api/pipelines/${pipeline.id}/velocity?period=30d`,
+          `/api/v1/pipelines/${pipeline.id}/velocity?period=30d`,
         ),
-        api.get<OverdueRecord[]>(`/api/pipelines/${pipeline.id}/overdue`),
+        api.get<OverdueRecord[]>(`/api/v1/pipelines/${pipeline.id}/overdue`),
       ]);
 
     if (
@@ -375,7 +375,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
     try {
       const response = await api.request(
-        `/api/objects/${apiName}/records/${recordId}/move-stage`,
+        `/api/v1/objects/${apiName}/records/${recordId}/move-stage`,
         {
           method: 'POST',
           headers: {
@@ -491,7 +491,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     try {
       // First update the record fields
       const updateResponse = await api.request(
-        `/api/objects/${apiName}/records/${gateModal.recordId}`,
+        `/api/v1/objects/${apiName}/records/${gateModal.recordId}`,
         {
           method: 'PUT',
           headers: {

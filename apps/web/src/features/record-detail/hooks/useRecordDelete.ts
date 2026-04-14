@@ -32,7 +32,7 @@ export function useRecordDelete(
 
     try {
       const response = await api.request(
-        `/api/objects/${apiName}/records/${record.id}`,
+        `/api/v1/objects/${apiName}/records/${record.id}`,
         {
           method: 'DELETE',
         },

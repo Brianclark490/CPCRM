@@ -261,7 +261,7 @@ export function AdminTargetsPage() {
         period_end: selectedPeriod.periodEnd,
       });
 
-      const response = await api.request(`/api/admin/targets?${params.toString()}`);
+      const response = await api.request(`/api/v1/admin/targets?${params.toString()}`);
 
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as ApiError;
@@ -431,7 +431,7 @@ export function AdminTargetsPage() {
 
         // If value is 0 but we have an existing id, delete it
         if (value === 0 && draft.id) {
-          const deleteRes = await api.request(`/api/admin/targets/${draft.id}`, {
+          const deleteRes = await api.request(`/api/v1/admin/targets/${draft.id}`, {
             method: 'DELETE',
             headers,
           });
@@ -452,7 +452,7 @@ export function AdminTargetsPage() {
           currency: DEFAULT_CURRENCY,
         };
 
-        const res = await api.request('/api/admin/targets', {
+        const res = await api.request('/api/v1/admin/targets', {
           method: 'POST',
           headers,
           body: JSON.stringify(body),

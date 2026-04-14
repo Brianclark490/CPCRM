@@ -125,7 +125,7 @@ export function PlatformTenantDetailPage() {
     setError(null);
 
     try {
-      const response = await api.request(`/api/platform/tenants/${id}`);
+      const response = await api.request(`/api/v1/platform/tenants/${id}`);
 
       if (response.ok) {
         const data = (await response.json()) as TenantDetail;
@@ -151,7 +151,7 @@ export function PlatformTenantDetailPage() {
     setUsersLoading(true);
 
     try {
-      const response = await api.request(`/api/platform/tenants/${id}/users`);
+      const response = await api.request(`/api/v1/platform/tenants/${id}/users`);
 
       if (response.ok) {
         const data = (await response.json()) as TenantUser[];
@@ -179,7 +179,7 @@ export function PlatformTenantDetailPage() {
     setSaveSuccess(false);
 
     try {
-      const response = await api.request(`/api/platform/tenants/${id}`, {
+      const response = await api.request(`/api/v1/platform/tenants/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -211,7 +211,7 @@ export function PlatformTenantDetailPage() {
     setSaveError(null);
 
     try {
-      const response = await api.request(`/api/platform/tenants/${id}`, {
+      const response = await api.request(`/api/v1/platform/tenants/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -243,7 +243,7 @@ export function PlatformTenantDetailPage() {
     setDeleteError(null);
 
     try {
-      const response = await api.request(`/api/platform/tenants/${id}?cascade=true`, {
+      const response = await api.request(`/api/v1/platform/tenants/${id}?cascade=true`, {
         method: 'DELETE',
       });
 
@@ -301,7 +301,7 @@ export function PlatformTenantDetailPage() {
     setInviting(true);
 
     try {
-      const response = await api.request(`/api/platform/tenants/${id}/users/invite`, {
+      const response = await api.request(`/api/v1/platform/tenants/${id}/users/invite`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

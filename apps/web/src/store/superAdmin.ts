@@ -5,7 +5,7 @@ import { useApiClient } from '../lib/apiClient.js';
 /**
  * Checks whether the current authenticated user is a platform super-admin.
  *
- * Calls GET /api/me and reads the `isSuperAdmin` flag from the response.
+ * Calls GET /api/v1/me and reads the `isSuperAdmin` flag from the response.
  * Returns `{ isSuperAdmin, loading }`.
  */
 export function useSuperAdmin(): { isSuperAdmin: boolean; loading: boolean } {
@@ -25,7 +25,7 @@ export function useSuperAdmin(): { isSuperAdmin: boolean; loading: boolean } {
 
     const check = async () => {
       try {
-        const response = await api.request('/api/me');
+        const response = await api.request('/api/v1/me');
 
         if (cancelled) return;
 

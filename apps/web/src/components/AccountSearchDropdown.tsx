@@ -58,7 +58,7 @@ export function AccountSearchDropdown({
       try {
         const params = new URLSearchParams({ limit: '10' });
         if (search.trim()) params.set('search', search.trim());
-        const response = await api.request(`/api/accounts?${params.toString()}`);
+        const response = await api.request(`/api/v1/accounts?${params.toString()}`);
         if (response.ok) {
           const data = (await response.json()) as { data: AccountOption[] };
           setOptions(data.data);

@@ -108,7 +108,7 @@ describe('CreateAccountPage', () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        '/api/accounts',
+        '/api/v1/accounts',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({
@@ -131,7 +131,7 @@ describe('CreateAccountPage', () => {
 
     const postCall = vi
       .mocked(fetch)
-      .mock.calls.find(([url, init]) => url === '/api/accounts' && init?.method === 'POST');
+      .mock.calls.find(([url, init]) => url === '/api/v1/accounts' && init?.method === 'POST');
     expect(postCall).toBeDefined();
     expect(postCall![1]?.credentials).toBe('include');
     const postHeaders = new Headers(postCall![1]?.headers);
@@ -156,7 +156,7 @@ describe('CreateAccountPage', () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        '/api/accounts',
+        '/api/v1/accounts',
         expect.objectContaining({
           body: expect.stringContaining('"industry":"Technology"'),
         }),
@@ -236,7 +236,7 @@ describe('CreateAccountPage', () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        '/api/accounts',
+        '/api/v1/accounts',
         expect.objectContaining({
           body: expect.stringContaining('"industry":"Space Exploration"'),
         }),

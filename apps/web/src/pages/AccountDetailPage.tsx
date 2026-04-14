@@ -130,7 +130,7 @@ export function AccountDetailPage() {
       setLoadError(null);
 
       try {
-        const response = await api.request(`/api/accounts/${id}`);
+        const response = await api.request(`/api/v1/accounts/${id}`);
 
         if (cancelled) return;
 
@@ -220,7 +220,7 @@ export function AccountDetailPage() {
     setSaveSuccess(false);
 
     try {
-      const response = await api.request(`/api/accounts/${account.id}`, {
+      const response = await api.request(`/api/v1/accounts/${account.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -277,7 +277,7 @@ export function AccountDetailPage() {
     setDeleteError(null);
 
     try {
-      const response = await api.request(`/api/accounts/${account.id}`, {
+      const response = await api.request(`/api/v1/accounts/${account.id}`, {
         method: 'DELETE',
       });
 

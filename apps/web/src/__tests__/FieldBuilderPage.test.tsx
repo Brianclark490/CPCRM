@@ -864,7 +864,7 @@ describe('FieldBuilderPage', () => {
     });
 
     const reorderCall = mockFetch.mock.calls[1];
-    expect(reorderCall[0]).toBe('/api/admin/objects/obj-1/fields/reorder');
+    expect(reorderCall[0]).toBe('/api/v1/admin/objects/obj-1/fields/reorder');
     expect(reorderCall[1].method).toBe('PATCH');
   });
 

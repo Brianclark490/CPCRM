@@ -41,7 +41,7 @@ export function ProfilePage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const response = await api.request('/api/profile');
+        const response = await api.request('/api/v1/profile');
         if (!response.ok) {
           const data = (await response.json()) as ApiError;
           if (!cancelled) setLoadError(data.error ?? 'Failed to load profile');
@@ -83,7 +83,7 @@ export function ProfilePage() {
     if (form.jobTitle.trim()) body.jobTitle = form.jobTitle.trim();
 
     try {
-      const response = await api.request('/api/profile', {
+      const response = await api.request('/api/v1/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

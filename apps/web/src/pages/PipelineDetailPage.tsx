@@ -190,7 +190,7 @@ export function PipelineDetailPage() {
     setError(null);
 
     try {
-      const response = await api.request(`/api/admin/pipelines/${id}`);
+      const response = await api.request(`/api/v1/admin/pipelines/${id}`);
 
       if (response.ok) {
         const data = (await response.json()) as PipelineDetail;
@@ -217,7 +217,7 @@ export function PipelineDetailPage() {
     if (!sessionToken || !pipeline?.objectId) return;
 
     try {
-      const response = await api.request(`/api/admin/objects/${pipeline.objectId}/fields`);
+      const response = await api.request(`/api/v1/admin/objects/${pipeline.objectId}/fields`);
 
       if (response.ok) {
         const data = (await response.json()) as FieldOption[];
@@ -240,7 +240,7 @@ export function PipelineDetailPage() {
     setGatesLoading(true);
 
     try {
-      const response = await api.request(`/api/admin/stages/${stageId}/gates`);
+      const response = await api.request(`/api/v1/admin/stages/${stageId}/gates`);
 
       if (response.ok) {
         const data = (await response.json()) as StageGate[];
@@ -281,7 +281,7 @@ export function PipelineDetailPage() {
 
     try {
       const response = await api.request(
-        `/api/admin/pipelines/${pipeline.id}/stages/${selectedStageId}`,
+        `/api/v1/admin/pipelines/${pipeline.id}/stages/${selectedStageId}`,
         {
           method: 'PUT',
           headers: {
@@ -344,7 +344,7 @@ export function PipelineDetailPage() {
     setAddStageError(null);
 
     try {
-      const response = await api.request(`/api/admin/pipelines/${pipeline.id}/stages`, {
+      const response = await api.request(`/api/v1/admin/pipelines/${pipeline.id}/stages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -383,7 +383,7 @@ export function PipelineDetailPage() {
 
     try {
       const response = await api.request(
-        `/api/admin/pipelines/${pipeline.id}/stages/${deleteStageTarget.id}`,
+        `/api/v1/admin/pipelines/${pipeline.id}/stages/${deleteStageTarget.id}`,
         {
           method: 'DELETE',
         },
@@ -429,7 +429,7 @@ export function PipelineDetailPage() {
     const reorderedIds = [...openStages.map((s) => s.id), ...terminalStages.map((s) => s.id)];
 
     try {
-      await api.request(`/api/admin/pipelines/${pipeline.id}/stages/reorder`, {
+      await api.request(`/api/v1/admin/pipelines/${pipeline.id}/stages/reorder`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -469,7 +469,7 @@ export function PipelineDetailPage() {
     setGateError(null);
 
     try {
-      const response = await api.request(`/api/admin/stages/${selectedStageId}/gates`, {
+      const response = await api.request(`/api/v1/admin/stages/${selectedStageId}/gates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -500,7 +500,7 @@ export function PipelineDetailPage() {
     if (!sessionToken || !selectedStageId) return;
 
     try {
-      await api.request(`/api/admin/stages/${selectedStageId}/gates/${gateId}`, {
+      await api.request(`/api/v1/admin/stages/${selectedStageId}/gates/${gateId}`, {
         method: 'DELETE',
       });
 

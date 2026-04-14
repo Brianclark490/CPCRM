@@ -49,7 +49,7 @@ describe('StageFieldRenderer', () => {
   function setupFetch(overrides?: { moveResponse?: { ok: boolean; status?: number; body?: unknown } }) {
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       // Pipeline list
-      if (typeof url === 'string' && url === '/api/admin/pipelines') {
+      if (typeof url === 'string' && url === '/api/v1/admin/pipelines') {
         return Promise.resolve({
           ok: true,
           json: async () => MOCK_PIPELINES,
@@ -57,7 +57,7 @@ describe('StageFieldRenderer', () => {
       }
 
       // Pipeline detail
-      if (typeof url === 'string' && url.match(/\/api\/admin\/pipelines\//)) {
+      if (typeof url === 'string' && url.match(/\/api\/v1\/admin\/pipelines\//)) {
         return Promise.resolve({
           ok: true,
           json: async () => MOCK_PIPELINE_DETAIL,

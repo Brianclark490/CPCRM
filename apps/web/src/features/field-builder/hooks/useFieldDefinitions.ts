@@ -40,7 +40,7 @@ export function useFieldDefinitions(objectId: string | undefined) {
     setError(null);
 
     try {
-      const response = await api.request(`/api/admin/objects/${objectId}`);
+      const response = await api.request(`/api/v1/admin/objects/${objectId}`);
 
       if (response.ok) {
         const data = (await response.json()) as ObjectDefinitionDetail;
@@ -69,7 +69,7 @@ export function useFieldDefinitions(objectId: string | undefined) {
     setRelationshipsError(null);
 
     try {
-      const response = await api.request(`/api/admin/objects/${objectId}/relationships`);
+      const response = await api.request(`/api/v1/admin/objects/${objectId}/relationships`);
 
       if (response.ok) {
         const data = (await response.json()) as RelationshipDefinition[];
@@ -88,7 +88,7 @@ export function useFieldDefinitions(objectId: string | undefined) {
     if (!sessionToken) return;
 
     try {
-      const response = await api.request('/api/admin/objects');
+      const response = await api.request('/api/v1/admin/objects');
 
       if (response.ok) {
         const data = (await response.json()) as ObjectDefinitionListItem[];
@@ -108,7 +108,7 @@ export function useFieldDefinitions(objectId: string | undefined) {
     setPageLayoutsError(null);
 
     try {
-      const response = await api.request(`/api/admin/objects/${objectId}/page-layouts`);
+      const response = await api.request(`/api/v1/admin/objects/${objectId}/page-layouts`);
 
       if (response.ok) {
         const data = (await response.json()) as PageLayoutListItem[];

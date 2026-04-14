@@ -27,7 +27,7 @@ export function ObjectTabs() {
 
     const loadObjects = async () => {
       try {
-        const response = await api.request('/api/admin/objects');
+        const response = await api.request('/api/v1/admin/objects');
 
         if (cancelled || !response.ok) return;
 
@@ -67,7 +67,7 @@ export function ObjectTabs() {
     async (orderedItems: ObjectDefinitionNavItem[]) => {
       if (!sessionToken) return;
       try {
-        await api.request('/api/admin/objects/reorder', {
+        await api.request('/api/v1/admin/objects/reorder', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',

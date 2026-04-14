@@ -122,7 +122,7 @@ export function ObjectManagerPage() {
     setError(null);
 
     try {
-      const response = await api.request('/api/admin/objects');
+      const response = await api.request('/api/v1/admin/objects');
 
       if (response.ok) {
         const data = (await response.json()) as ObjectDefinitionListItem[];
@@ -208,7 +208,7 @@ export function ObjectManagerPage() {
     setCreating(true);
 
     try {
-      const response = await api.request('/api/admin/objects', {
+      const response = await api.request('/api/v1/admin/objects', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -255,7 +255,7 @@ export function ObjectManagerPage() {
     setDeleteError(null);
 
     try {
-      const response = await api.request(`/api/admin/objects/${deleteTarget.id}`, {
+      const response = await api.request(`/api/v1/admin/objects/${deleteTarget.id}`, {
         method: 'DELETE',
       });
 

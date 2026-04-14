@@ -45,7 +45,7 @@ function mockFetchWithFields(fields: Array<{
 }> = []) {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
     // Admin objects list
-    if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/fields') && !url.includes('/layouts')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/fields') && !url.includes('/layouts')) {
       return Promise.resolve({
         ok: true,
         json: async () => [
@@ -99,7 +99,7 @@ function mockFetchWithFields(fields: Array<{
     }
 
     // Create record
-    if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records$/)) {
+    if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records$/)) {
       return Promise.resolve({
         ok: true,
         json: async () => ({ id: 'new-record-uuid' }),
@@ -202,7 +202,7 @@ describe('CreateRecordPage', () => {
 
     await waitFor(() => {
       const createCalls = fetchMock.mock.calls.filter(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).match(/\/api\/objects\/[^/]+\/records$/),
+        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).match(/\/api\/v1\/objects\/[^/]+\/records$/),
       );
       expect(createCalls.length).toBeGreaterThan(0);
     });
@@ -223,14 +223,14 @@ describe('CreateRecordPage', () => {
 
     // Override fetch for the create call to return an error
     fetchMock.mockImplementation((url: string, opts?: RequestInit) => {
-      if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records$/) && opts?.method === 'POST') {
+      if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records$/) && opts?.method === 'POST') {
         return Promise.resolve({
           ok: false,
           json: async () => ({ error: "Field 'Email' must be a valid email" }),
         } as Response);
       }
       // Return default responses for other calls
-      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/fields') && !url.includes('/layouts')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/fields') && !url.includes('/layouts')) {
         return Promise.resolve({
           ok: true,
           json: async () => [
@@ -268,7 +268,7 @@ describe('CreateRecordPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
-        if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/fields') && !url.includes('/layouts')) {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/fields') && !url.includes('/layouts')) {
           return Promise.resolve({
             ok: true,
             json: async () => [],

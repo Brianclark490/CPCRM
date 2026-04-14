@@ -187,7 +187,7 @@ export function useFieldMutations({
     try {
       if (editingField) {
         const response = await api.request(
-          `/api/admin/objects/${objectId}/fields/${editingField.id}`,
+          `/api/v1/admin/objects/${objectId}/fields/${editingField.id}`,
           {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -205,7 +205,7 @@ export function useFieldMutations({
       } else {
         payload.apiName = trimmedApiName;
 
-        const response = await api.request(`/api/admin/objects/${objectId}/fields`, {
+        const response = await api.request(`/api/v1/admin/objects/${objectId}/fields`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -246,7 +246,7 @@ export function useFieldMutations({
 
     try {
       const response = await api.request(
-        `/api/admin/objects/${objectId}/fields/${deleteTarget.id}`,
+        `/api/v1/admin/objects/${objectId}/fields/${deleteTarget.id}`,
         { method: 'DELETE' },
       );
 
@@ -278,7 +278,7 @@ export function useFieldMutations({
 
     setReordering(true);
     try {
-      const response = await api.request(`/api/admin/objects/${objectId}/fields/reorder`, {
+      const response = await api.request(`/api/v1/admin/objects/${objectId}/fields/reorder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fieldIds: newFields.map((f) => f.id) }),

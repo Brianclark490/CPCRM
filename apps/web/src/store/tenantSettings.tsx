@@ -43,7 +43,7 @@ export function TenantSettingsProvider({ children }: TenantSettingsProviderProps
 
     const fetchSettings = async () => {
       try {
-        const response = await api.request('/api/admin/tenant-settings');
+        const response = await api.request('/api/v1/admin/tenant-settings');
 
         if (!response.ok || cancelled) return;
 

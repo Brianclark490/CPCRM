@@ -50,14 +50,14 @@ export function useRecord(
 
     try {
       const response = await api.request(
-        `/api/objects/${apiName}/records/${id}`,
+        `/api/v1/objects/${apiName}/records/${id}`,
       );
 
       if (response.ok) {
         const data = (await response.json()) as RecordDetail;
         setRecord(data);
 
-        const objResponse = await api.request('/api/admin/objects');
+        const objResponse = await api.request('/api/v1/admin/objects');
         if (objResponse.ok) {
           const allObjects = (await objResponse.json()) as ObjectDefinition[];
           const obj = allObjects.find((o) => o.apiName === apiName);
@@ -87,7 +87,7 @@ export function useRecord(
 
     const loadLayout = async () => {
       try {
-        const objResponse = await api.request('/api/admin/objects');
+        const objResponse = await api.request('/api/v1/admin/objects');
         if (cancelled || !objResponse.ok) return;
 
         const allObjects = (await objResponse.json()) as Array<{
@@ -98,7 +98,7 @@ export function useRecord(
         if (!obj || cancelled) return;
 
         const layoutsResponse = await api.request(
-          `/api/admin/objects/${obj.id}/layouts`,
+          `/api/v1/admin/objects/${obj.id}/layouts`,
         );
         if (cancelled || !layoutsResponse.ok) return;
 
@@ -110,7 +110,7 @@ export function useRecord(
         if (!formLayout || cancelled) return;
 
         const layoutDetailResponse = await api.request(
-          `/api/admin/objects/${obj.id}/layouts/${formLayout.id}`,
+          `/api/v1/admin/objects/${obj.id}/layouts/${formLayout.id}`,
         );
         if (cancelled || !layoutDetailResponse.ok) return;
 

@@ -70,7 +70,7 @@ export function RelationshipSearchDropdown({
         const params = new URLSearchParams({ limit: '10' });
         if (search.trim()) params.set('search', search.trim());
         const response = await api.request(
-          `/api/objects/${objectApiName}/records?${params.toString()}`,
+          `/api/v1/objects/${objectApiName}/records?${params.toString()}`,
         );
         if (response.ok) {
           const data = (await response.json()) as { data: RecordOption[] };

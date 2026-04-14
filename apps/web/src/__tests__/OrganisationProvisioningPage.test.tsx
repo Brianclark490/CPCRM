@@ -78,7 +78,7 @@ describe('OrganisationProvisioningPage', () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        '/api/organisations',
+        '/api/v1/organisations',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ name: 'Acme Corp', description: 'Our main org' }),
@@ -88,7 +88,7 @@ describe('OrganisationProvisioningPage', () => {
 
     const postCall = vi
       .mocked(fetch)
-      .mock.calls.find(([url, init]) => url === '/api/organisations' && init?.method === 'POST');
+      .mock.calls.find(([url, init]) => url === '/api/v1/organisations' && init?.method === 'POST');
     expect(postCall).toBeDefined();
     expect(postCall![1]?.credentials).toBe('include');
     const postHeaders = new Headers(postCall![1]?.headers);

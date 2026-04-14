@@ -460,12 +460,12 @@ export function useApiClient(): ApiClient {
 
 /**
  * Syncs the Descope session token to a server-side HttpOnly cookie by
- * calling POST /api/auth/session.  Called by `<SessionSync />` on login
+ * calling POST /api/v1/auth/session.  Called by `<SessionSync />` on login
  * and whenever the Descope SDK refreshes the token.
  */
 export async function syncSessionCookie(sessionToken: string): Promise<void> {
   try {
-    await fetch('/api/auth/session', {
+    await fetch('/api/v1/auth/session', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -478,12 +478,12 @@ export async function syncSessionCookie(sessionToken: string): Promise<void> {
 }
 
 /**
- * Clears the server-side session cookie by calling DELETE /api/auth/session.
+ * Clears the server-side session cookie by calling DELETE /api/v1/auth/session.
  * Should be called during the logout flow.
  */
 export async function clearServerSession(): Promise<void> {
   try {
-    await fetch('/api/auth/session', {
+    await fetch('/api/v1/auth/session', {
       method: 'DELETE',
       credentials: 'include',
     });

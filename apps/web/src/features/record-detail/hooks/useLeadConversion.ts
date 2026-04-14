@@ -44,7 +44,7 @@ export function useLeadConversion(
 
     try {
       const response = await api.request(
-        `/api/objects/lead/records/${record.id}/convert`,
+        `/api/v1/objects/lead/records/${record.id}/convert`,
         {
           method: 'POST',
           headers: {

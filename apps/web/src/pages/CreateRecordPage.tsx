@@ -121,7 +121,7 @@ export function CreateRecordPage() {
 
       try {
         // Fetch all object definitions to find our object
-        const objResponse = await api.request('/api/admin/objects');
+        const objResponse = await api.request('/api/v1/admin/objects');
 
         if (cancelled) return;
 
@@ -144,7 +144,7 @@ export function CreateRecordPage() {
 
         // Fetch field definitions
         const fieldsResponse = await api.request(
-          `/api/admin/objects/${obj.id}/fields`,
+          `/api/v1/admin/objects/${obj.id}/fields`,
         );
 
         if (cancelled) return;
@@ -156,7 +156,7 @@ export function CreateRecordPage() {
 
         // Fetch layouts
         const layoutsResponse = await api.request(
-          `/api/admin/objects/${obj.id}/layouts`,
+          `/api/v1/admin/objects/${obj.id}/layouts`,
         );
 
         if (cancelled) return;
@@ -171,7 +171,7 @@ export function CreateRecordPage() {
 
           if (formLayout) {
             const layoutDetailResponse = await api.request(
-              `/api/admin/objects/${obj.id}/layouts/${formLayout.id}`,
+              `/api/v1/admin/objects/${obj.id}/layouts/${formLayout.id}`,
             );
 
             if (!cancelled && layoutDetailResponse.ok) {
@@ -259,7 +259,7 @@ export function CreateRecordPage() {
     setSubmitting(true);
 
     try {
-      const response = await api.request(`/api/objects/${apiName}/records`, {
+      const response = await api.request(`/api/v1/objects/${apiName}/records`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

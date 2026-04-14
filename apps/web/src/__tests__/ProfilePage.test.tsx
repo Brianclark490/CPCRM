@@ -124,7 +124,7 @@ describe('ProfilePage', () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        '/api/profile',
+        '/api/v1/profile',
         expect.objectContaining({ method: 'PUT' }),
       );
     });

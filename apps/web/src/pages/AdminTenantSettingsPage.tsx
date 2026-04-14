@@ -112,8 +112,8 @@ export function AdminTenantSettingsPage() {
       setLoadError(null);
       try {
         const [settingsRes, pipelinesRes] = await Promise.all([
-          api.request('/api/admin/tenant-settings'),
-          api.request('/api/admin/pipelines'),
+          api.request('/api/v1/admin/tenant-settings'),
+          api.request('/api/v1/admin/pipelines'),
         ]);
 
         if (!settingsRes.ok) {
@@ -169,7 +169,7 @@ export function AdminTenantSettingsPage() {
     settings.leadAutoConversion = leadAutoConversion;
 
     try {
-      const response = await api.request('/api/admin/tenant-settings', {
+      const response = await api.request('/api/v1/admin/tenant-settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

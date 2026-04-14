@@ -199,7 +199,7 @@ export function LayoutBuilderTab({ objectId, fields }: LayoutBuilderTabProps) {
     setLayoutsError(null);
 
     try {
-      const response = await api.request(`/api/admin/objects/${objectId}/layouts`);
+      const response = await api.request(`/api/v1/admin/objects/${objectId}/layouts`);
 
       if (response.ok) {
         const data = (await response.json()) as LayoutDefinition[];
@@ -234,7 +234,7 @@ export function LayoutBuilderTab({ objectId, fields }: LayoutBuilderTabProps) {
 
     try {
       const response = await api.request(
-        `/api/admin/objects/${objectId}/layouts/${selectedLayoutId}`,
+        `/api/v1/admin/objects/${objectId}/layouts/${selectedLayoutId}`,
       );
 
       if (response.ok) {
@@ -293,7 +293,7 @@ export function LayoutBuilderTab({ objectId, fields }: LayoutBuilderTabProps) {
     setCreating(true);
 
     try {
-      const response = await api.request(`/api/admin/objects/${objectId}/layouts`, {
+      const response = await api.request(`/api/v1/admin/objects/${objectId}/layouts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -331,7 +331,7 @@ export function LayoutBuilderTab({ objectId, fields }: LayoutBuilderTabProps) {
 
     try {
       const response = await api.request(
-        `/api/admin/objects/${objectId}/layouts/${selectedLayoutId}`,
+        `/api/v1/admin/objects/${objectId}/layouts/${selectedLayoutId}`,
         {
           method: 'DELETE',
         },
@@ -360,7 +360,7 @@ export function LayoutBuilderTab({ objectId, fields }: LayoutBuilderTabProps) {
 
     try {
       const response = await api.request(
-        `/api/admin/objects/${objectId}/layouts/${selectedLayoutId}/fields`,
+        `/api/v1/admin/objects/${objectId}/layouts/${selectedLayoutId}/fields`,
         {
           method: 'PUT',
           headers: {

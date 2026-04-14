@@ -89,7 +89,7 @@ export function AccountsPage() {
       }
 
       try {
-        const response = await api.request(`/api/accounts?${params.toString()}`);
+        const response = await api.request(`/api/v1/accounts?${params.toString()}`);
 
         if (cancelled) return;
 
