@@ -187,7 +187,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
     const loadLayout = async () => {
       try {
         // First get the object definitions to find the object ID
-        const objResponse = await api.request('/api/admin/objects');
+        const objResponse = await api.request('/api/v1/admin/objects');
 
         if (cancelled) return;
 
@@ -204,7 +204,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
         setResolvedObjectId(obj.id);
 
         // Check for pipeline existence (best-effort)
-        api.request('/api/admin/pipelines')
+        api.request('/api/v1/admin/pipelines')
           .then((resp) => {
             if (cancelled || !resp.ok) return null;
             return resp.json();
@@ -220,7 +220,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
 
         // Fetch layouts for this object
         const layoutsResponse = await api.request(
-          `/api/admin/objects/${obj.id}/layouts`,
+          `/api/v1/admin/objects/${obj.id}/layouts`,
         );
 
         if (cancelled || !layoutsResponse.ok) return;
@@ -234,7 +234,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
 
         // Fetch the layout detail with fields
         const layoutDetailResponse = await api.request(
-          `/api/admin/objects/${obj.id}/layouts/${listLayout.id}`,
+          `/api/v1/admin/objects/${obj.id}/layouts/${listLayout.id}`,
         );
 
         if (cancelled || !layoutDetailResponse.ok) return;
@@ -279,7 +279,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
 
       try {
         const data = await api.get<RecordsResponse>(
-          `/api/objects/${apiName}/records?${params.toString()}`,
+          `/api/v1/objects/${apiName}/records?${params.toString()}`,
         );
 
         if (!cancelled) {

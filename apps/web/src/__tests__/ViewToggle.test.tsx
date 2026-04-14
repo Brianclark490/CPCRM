@@ -41,14 +41,14 @@ function makeRecordsResponse(total = 0) {
 
 function mockFetchWithPipeline() {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
-    if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
       return Promise.resolve({
         ok: true,
         json: async () => [{ id: 'obj-1', apiName: 'opportunity' }],
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -62,7 +62,7 @@ function mockFetchWithPipeline() {
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
       return Promise.resolve({
         ok: true,
         json: async () => [{ id: 'pipe-1', object_id: 'obj-1' }],
@@ -76,7 +76,7 @@ function mockFetchWithPipeline() {
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/objects/')) {
+    if (typeof url === 'string' && url.includes('/api/v1/objects/')) {
       return Promise.resolve({
         ok: true,
         json: async () => makeRecordsResponse(),
@@ -92,14 +92,14 @@ function mockFetchWithPipeline() {
 
 function mockFetchWithoutPipeline() {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
-    if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
       return Promise.resolve({
         ok: true,
         json: async () => [{ id: 'obj-1', apiName: 'opportunity' }],
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
       return Promise.resolve({
         ok: true,
         json: async () => [],
@@ -113,7 +113,7 @@ function mockFetchWithoutPipeline() {
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/objects/')) {
+    if (typeof url === 'string' && url.includes('/api/v1/objects/')) {
       return Promise.resolve({
         ok: true,
         json: async () => makeRecordsResponse(),

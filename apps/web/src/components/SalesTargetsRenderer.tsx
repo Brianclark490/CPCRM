@@ -224,7 +224,7 @@ export function SalesTargetsRenderer({ component }: ComponentRendererProps) {
       if (periodEnd) params.set('period_end', periodEnd);
 
       const qs = params.toString();
-      const url = `/api/targets/summary${qs ? `?${qs}` : ''}`;
+      const url = `/api/v1/targets/summary${qs ? `?${qs}` : ''}`;
 
       const response = await api.request(url);
 

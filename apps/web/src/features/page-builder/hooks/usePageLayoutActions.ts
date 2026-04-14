@@ -56,7 +56,7 @@ export function usePageLayoutActions({
     try {
       if (selectedLayoutId) {
         const res = await api.request(
-          `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}`,
+          `/api/v1/admin/objects/${objectId}/page-layouts/${selectedLayoutId}`,
           {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -71,7 +71,7 @@ export function usePageLayoutActions({
         }
       } else {
         const res = await api.request(
-          `/api/admin/objects/${objectId}/page-layouts`,
+          `/api/v1/admin/objects/${objectId}/page-layouts`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -109,7 +109,7 @@ export function usePageLayoutActions({
     setSaveError(null);
     try {
       const res = await api.request(
-        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/publish`,
+        `/api/v1/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/publish`,
         { method: 'POST' },
       );
       if (!res.ok) {
@@ -135,7 +135,7 @@ export function usePageLayoutActions({
     } else if (role !== null) {
       try {
         const res = await api.request(
-          `/api/admin/objects/${objectId}/page-layouts`,
+          `/api/v1/admin/objects/${objectId}/page-layouts`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -173,7 +173,7 @@ export function usePageLayoutActions({
 
     try {
       const res = await api.request(
-        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/copy`,
+        `/api/v1/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/copy`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -205,7 +205,7 @@ export function usePageLayoutActions({
 
     try {
       const res = await api.request(
-        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}`,
+        `/api/v1/admin/objects/${objectId}/page-layouts/${selectedLayoutId}`,
         { method: 'DELETE' },
       );
 
@@ -230,7 +230,7 @@ export function usePageLayoutActions({
 
     try {
       const res = await api.request(
-        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/versions`,
+        `/api/v1/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/versions`,
       );
 
       if (res.ok) {
@@ -250,7 +250,7 @@ export function usePageLayoutActions({
     setReverting(true);
     try {
       const res = await api.request(
-        `/api/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/revert`,
+        `/api/v1/admin/objects/${objectId}/page-layouts/${selectedLayoutId}/revert`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

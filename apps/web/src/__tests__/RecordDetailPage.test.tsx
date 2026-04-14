@@ -60,7 +60,7 @@ function makeRecordResponse(overrides: Partial<{
 function mockFetch(recordResponse?: ReturnType<typeof makeRecordResponse>) {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
     // Admin objects list
-    if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
       return Promise.resolve({
         ok: true,
         json: async () => [
@@ -120,7 +120,7 @@ function mockFetch(recordResponse?: ReturnType<typeof makeRecordResponse>) {
     }
 
     // Single record
-    if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
+    if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records\/[^/?]+$/)) {
       return Promise.resolve({
         ok: true,
         json: async () => recordResponse ?? makeRecordResponse(),
@@ -228,7 +228,7 @@ describe('RecordDetailPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
-        if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
           return Promise.resolve({
             ok: true,
             json: async () => [
@@ -236,7 +236,7 @@ describe('RecordDetailPage', () => {
             ],
           } as Response);
         }
-        if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
+        if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records\/[^/?]+$/)) {
           return Promise.resolve({
             ok: false,
             status: 404,
@@ -362,7 +362,7 @@ describe('RecordDetailPage', () => {
 
     // Add mock for field definitions fetch
     fetchMock.mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts') && !url.includes('/fields')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts') && !url.includes('/fields')) {
         return Promise.resolve({
           ok: true,
           json: async () => [
@@ -396,7 +396,7 @@ describe('RecordDetailPage', () => {
           json: async () => [{ id: 'layout-1', objectId: 'obj-1', name: 'Default Form', layoutType: 'form', isDefault: true }],
         } as Response);
       }
-      if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
+      if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records\/[^/?]+$/)) {
         return Promise.resolve({
           ok: true,
           json: async () => record,
@@ -465,7 +465,7 @@ describe('RecordDetailPage', () => {
 
     // Mock without layouts to test field fallback
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
         return Promise.resolve({
           ok: true,
           json: async () => [
@@ -476,7 +476,7 @@ describe('RecordDetailPage', () => {
       if (typeof url === 'string' && url.includes('/layouts')) {
         return Promise.resolve({ ok: true, json: async () => [] } as Response);
       }
-      if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
+      if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records\/[^/?]+$/)) {
         return Promise.resolve({
           ok: true,
           json: async () => record,
@@ -502,7 +502,7 @@ describe('RecordDetailPage', () => {
     });
 
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
         return Promise.resolve({
           ok: true,
           json: async () => [
@@ -513,7 +513,7 @@ describe('RecordDetailPage', () => {
       if (typeof url === 'string' && url.includes('/layouts')) {
         return Promise.resolve({ ok: true, json: async () => [] } as Response);
       }
-      if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
+      if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records\/[^/?]+$/)) {
         return Promise.resolve({
           ok: true,
           json: async () => record,
@@ -557,7 +557,7 @@ describe('RecordDetailPage', () => {
 
     function mockLeadFetch(leadRecord: ReturnType<typeof makeRecordResponse>) {
       const fetchMock = vi.fn().mockImplementation((url: string) => {
-        if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
           return Promise.resolve({
             ok: true,
             json: async () => [
@@ -586,7 +586,7 @@ describe('RecordDetailPage', () => {
             ],
           } as Response);
         }
-        if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\/[^/?]+$/)) {
+        if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records\/[^/?]+$/)) {
           return Promise.resolve({
             ok: true,
             json: async () => leadRecord,

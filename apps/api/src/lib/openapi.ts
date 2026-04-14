@@ -113,8 +113,12 @@ export function generateOpenAPIDocument() {
     },
     servers: [
       {
+        url: '/api/v1',
+        description: 'API base path (versioned)',
+      },
+      {
         url: '/api',
-        description: 'API base path',
+        description: 'Legacy unversioned alias (deprecated — see ADR-005)',
       },
     ],
     security: [

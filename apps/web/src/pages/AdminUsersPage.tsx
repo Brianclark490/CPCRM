@@ -46,7 +46,7 @@ export function AdminUsersPage() {
     const loadUsers = async () => {
       try {
         const result = await api.get<UsersResponse>(
-          '/api/objects/user/records?limit=100',
+          '/api/v1/objects/user/records?limit=100',
         );
         if (!cancelled) {
           setUsers(result.data);

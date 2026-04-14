@@ -53,7 +53,7 @@ function makeRecordsResponse(
 
 function mockFetch(recordsResponse?: ReturnType<typeof makeRecordsResponse>) {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
-    if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
       // Admin objects list
       return Promise.resolve({
         ok: true,
@@ -98,7 +98,7 @@ function mockFetch(recordsResponse?: ReturnType<typeof makeRecordsResponse>) {
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/objects/')) {
+    if (typeof url === 'string' && url.includes('/api/v1/objects/')) {
       // Records list
       return Promise.resolve({
         ok: true,
@@ -191,7 +191,7 @@ describe('RecordListPage', () => {
     // Use a custom mock where layouts return an empty list so columns
     // fall back to record field definitions (the path this test covers).
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
         return Promise.resolve({
           ok: true,
           json: async () => [{ id: 'obj-1', apiName: 'account' }],
@@ -203,7 +203,7 @@ describe('RecordListPage', () => {
           json: async () => [],
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/objects/')) {
+      if (typeof url === 'string' && url.includes('/api/v1/objects/')) {
         return Promise.resolve({
           ok: true,
           json: async () => response,
@@ -266,7 +266,7 @@ describe('RecordListPage', () => {
       () => {
         const calls = fetchMock.mock.calls;
         const recordsCalls = calls.filter(
-          (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('/api/objects/'),
+          (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('/api/v1/objects/'),
         );
         const lastCall = recordsCalls[recordsCalls.length - 1];
         expect(String(lastCall[0])).toContain('search=acme');
@@ -365,7 +365,7 @@ describe('RecordListPage', () => {
     };
 
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
         return Promise.resolve({
           ok: true,
           json: async () => [{ id: 'obj-1', apiName: 'account' }],
@@ -411,7 +411,7 @@ describe('RecordListPage', () => {
           ],
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/objects/')) {
+      if (typeof url === 'string' && url.includes('/api/v1/objects/')) {
         return Promise.resolve({
           ok: true,
           json: async () => response,

@@ -27,7 +27,7 @@ export function usePageLayout(objectApiName: string | undefined) {
 
       try {
         const response = await api.request(
-          `/api/objects/${encodeURIComponent(objectApiName)}/page-layout`,
+          `/api/v1/objects/${encodeURIComponent(objectApiName)}/page-layout`,
         );
 
         if (cancelled) return;

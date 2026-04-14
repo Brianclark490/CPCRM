@@ -132,7 +132,7 @@ function mockFetch(overrides: {
 
   const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     // Admin objects list
-    if (typeof url === 'string' && url.includes('/api/admin/objects') && !url.includes('/layouts') && !url.includes('/relationships') && !url.includes('/fields')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts') && !url.includes('/relationships') && !url.includes('/fields')) {
       return Promise.resolve({
         ok: true,
         json: async () => objects,
@@ -172,7 +172,7 @@ function mockFetch(overrides: {
     }
 
     // Create record
-    if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records$/) && init?.method === 'POST') {
+    if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records$/) && init?.method === 'POST') {
       if (overrides.createError) {
         return Promise.resolve({
           ok: false,
@@ -197,7 +197,7 @@ function mockFetch(overrides: {
     }
 
     // Records search (for relationship dropdown)
-    if (typeof url === 'string' && url.match(/\/api\/objects\/[^/]+\/records\?/)) {
+    if (typeof url === 'string' && url.match(/\/api\/v1\/objects\/[^/]+\/records\?/)) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -413,7 +413,7 @@ describe('RecordCreatePage', () => {
       const createCall = calls.find(
         (c: unknown[]) =>
           typeof c[0] === 'string' &&
-          (c[0] as string).match(/\/api\/objects\/account\/records$/) &&
+          (c[0] as string).match(/\/api\/v1\/objects\/account\/records$/) &&
           (c[1] as RequestInit)?.method === 'POST',
       );
       expect(createCall).toBeDefined();

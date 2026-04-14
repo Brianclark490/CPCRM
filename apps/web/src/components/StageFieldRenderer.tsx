@@ -130,7 +130,7 @@ export function StageFieldRenderer({
       setLoadingStages(true);
 
       try {
-        const response = await api.request('/api/admin/pipelines');
+        const response = await api.request('/api/v1/admin/pipelines');
 
         if (cancelled || !response.ok) {
           if (!cancelled) setLoadingStages(false);
@@ -151,7 +151,7 @@ export function StageFieldRenderer({
 
         // Fetch pipeline detail for stages
         const detailResponse = await api.request(
-          `/api/admin/pipelines/${match.id}`,
+          `/api/v1/admin/pipelines/${match.id}`,
         );
 
         if (cancelled) return;
@@ -187,7 +187,7 @@ export function StageFieldRenderer({
 
       try {
         const response = await api.request(
-          `/api/objects/${objectApiName}/records/${recordId}/move-stage`,
+          `/api/v1/objects/${objectApiName}/records/${recordId}/move-stage`,
           {
             method: 'POST',
             headers: {
@@ -236,7 +236,7 @@ export function StageFieldRenderer({
       try {
         // First update the record with the filled field values
         const updateResponse = await api.request(
-          `/api/objects/${objectApiName}/records/${recordId}`,
+          `/api/v1/objects/${objectApiName}/records/${recordId}`,
           {
             method: 'PUT',
             headers: {
@@ -252,7 +252,7 @@ export function StageFieldRenderer({
 
         // Now retry the stage move
         const moveResponse = await api.request(
-          `/api/objects/${objectApiName}/records/${recordId}/move-stage`,
+          `/api/v1/objects/${objectApiName}/records/${recordId}/move-stage`,
           {
             method: 'POST',
             headers: {

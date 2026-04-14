@@ -258,7 +258,7 @@ export function RecordCreatePage() {
 
       try {
         // 1. Get object definitions to find the object ID
-        const objResponse = await api.request('/api/admin/objects');
+        const objResponse = await api.request('/api/v1/admin/objects');
 
         if (cancelled) return;
         if (!objResponse.ok) {
@@ -280,8 +280,8 @@ export function RecordCreatePage() {
 
         // 2. Fetch layouts + relationships in parallel
         const [layoutsResponse, relsResponse] = await Promise.all([
-          api.request(`/api/admin/objects/${obj.id}/layouts`),
-          api.request(`/api/admin/objects/${obj.id}/relationships`),
+          api.request(`/api/v1/admin/objects/${obj.id}/layouts`),
+          api.request(`/api/v1/admin/objects/${obj.id}/relationships`),
         ]);
 
         if (cancelled) return;
@@ -296,7 +296,7 @@ export function RecordCreatePage() {
 
           if (formLayout && !cancelled) {
             const layoutDetailResponse = await api.request(
-              `/api/admin/objects/${obj.id}/layouts/${formLayout.id}`,
+              `/api/v1/admin/objects/${obj.id}/layouts/${formLayout.id}`,
             );
 
             if (cancelled) return;
@@ -317,7 +317,7 @@ export function RecordCreatePage() {
         // still create a record.
         if (!layoutResolved && !cancelled) {
           const fieldsResponse = await api.request(
-            `/api/admin/objects/${obj.id}/fields`,
+            `/api/v1/admin/objects/${obj.id}/fields`,
           );
 
           if (cancelled) return;
@@ -448,7 +448,7 @@ export function RecordCreatePage() {
 
     try {
       // Create the record
-      const response = await api.request(`/api/objects/${apiName}/records`, {
+      const response = await api.request(`/api/v1/objects/${apiName}/records`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -470,7 +470,7 @@ export function RecordCreatePage() {
       // Link relationships
       const relLinks = relationshipSelections.filter((s) => s.recordId);
       for (const link of relLinks) {
-        await api.request(`/api/records/${created.id}/relationships`, {
+        await api.request(`/api/v1/records/${created.id}/relationships`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

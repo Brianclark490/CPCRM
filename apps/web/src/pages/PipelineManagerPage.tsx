@@ -94,7 +94,7 @@ export function PipelineManagerPage() {
     setError(null);
 
     try {
-      const response = await api.request('/api/admin/pipelines');
+      const response = await api.request('/api/v1/admin/pipelines');
 
       if (response.ok) {
         const data = (await response.json()) as PipelineListItem[];
@@ -115,7 +115,7 @@ export function PipelineManagerPage() {
     if (!sessionToken) return;
 
     try {
-      const response = await api.request('/api/admin/objects');
+      const response = await api.request('/api/v1/admin/objects');
 
       if (response.ok) {
         const data = (await response.json()) as ObjectOption[];
@@ -196,7 +196,7 @@ export function PipelineManagerPage() {
     setCreating(true);
 
     try {
-      const response = await api.request('/api/admin/pipelines', {
+      const response = await api.request('/api/v1/admin/pipelines', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

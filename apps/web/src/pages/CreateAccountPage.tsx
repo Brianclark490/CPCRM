@@ -106,7 +106,7 @@ export function CreateAccountPage() {
       const industry =
         form.industry === 'Other' ? form.customIndustry.trim() : form.industry || undefined;
 
-      const response = await api.request('/api/accounts', {
+      const response = await api.request('/api/v1/accounts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

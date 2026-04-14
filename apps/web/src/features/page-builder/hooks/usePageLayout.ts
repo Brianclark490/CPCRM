@@ -59,7 +59,7 @@ export function usePageLayout(objectId: string | undefined) {
 
     try {
       const res = await api.request(
-        `/api/admin/objects/${objectId}/page-layouts/${layoutId}`,
+        `/api/v1/admin/objects/${objectId}/page-layouts/${layoutId}`,
       );
 
       if (res.ok) {
@@ -88,10 +88,10 @@ export function usePageLayout(objectId: string | undefined) {
 
     try {
       const [objRes, relRes, regRes, layoutsRes] = await Promise.all([
-        api.request(`/api/admin/objects/${objectId}`),
-        api.request(`/api/admin/objects/${objectId}/relationships`),
-        api.request('/api/admin/component-registry'),
-        api.request(`/api/admin/objects/${objectId}/page-layouts`),
+        api.request(`/api/v1/admin/objects/${objectId}`),
+        api.request(`/api/v1/admin/objects/${objectId}/relationships`),
+        api.request('/api/v1/admin/component-registry'),
+        api.request(`/api/v1/admin/objects/${objectId}/page-layouts`),
       ]);
 
       if (!objRes.ok) {
@@ -120,7 +120,7 @@ export function usePageLayout(objectId: string | undefined) {
 
         const relatedObjResults = await Promise.all(
           uniqueTargetIds.map((targetId) =>
-            api.request(`/api/admin/objects/${targetId}`)
+            api.request(`/api/v1/admin/objects/${targetId}`)
               .then(async (res) => {
                 if (!res.ok) return null;
                 return (await res.json()) as RelatedObjectFields;

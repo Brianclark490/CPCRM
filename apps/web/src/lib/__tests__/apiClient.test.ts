@@ -52,7 +52,7 @@ describe('useApiClient', () => {
   it('sends requests with credentials: include', async () => {
     const { result } = renderHook(() => useApiClient());
 
-    await result.current.request('/api/accounts');
+    await result.current.request('/api/v1/accounts');
 
     const [, init] = vi.mocked(fetch).mock.calls[0]!;
     expect(init?.credentials).toBe('include');
@@ -61,7 +61,7 @@ describe('useApiClient', () => {
   it('does not set an Authorization header (uses cookies instead)', async () => {
     const { result } = renderHook(() => useApiClient());
 
-    await result.current.request('/api/accounts');
+    await result.current.request('/api/v1/accounts');
 
     const [, init] = vi.mocked(fetch).mock.calls[0]!;
     const headers = new Headers(init?.headers);
@@ -76,7 +76,7 @@ describe('useApiClient', () => {
 
     const { result } = renderHook(() => useApiClient());
 
-    await result.current.request('/api/accounts', {
+    await result.current.request('/api/v1/accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Acme' }),
@@ -99,7 +99,7 @@ describe('useApiClient', () => {
 
     for (const method of ['PUT', 'PATCH', 'DELETE']) {
       vi.mocked(fetch).mockClear();
-      await result.current.request('/api/test', { method });
+      await result.current.request('/api/v1/test', { method });
 
       const [, init] = vi.mocked(fetch).mock.calls[0]!;
       const headers = new Headers(init?.headers);
@@ -115,7 +115,7 @@ describe('useApiClient', () => {
 
     const { result } = renderHook(() => useApiClient());
 
-    await result.current.request('/api/accounts');
+    await result.current.request('/api/v1/accounts');
 
     const [, init] = vi.mocked(fetch).mock.calls[0]!;
     const headers = new Headers(init?.headers);
@@ -130,7 +130,7 @@ describe('useApiClient', () => {
 
     const { result } = renderHook(() => useApiClient());
 
-    await result.current.request('/api/accounts', {
+    await result.current.request('/api/v1/accounts', {
       method: 'POST',
       headers: { 'X-CSRF-Token': 'caller-override' },
     });
@@ -158,7 +158,7 @@ describe('useApiClient', () => {
 
     const { result } = renderHook(() => useApiClient());
 
-    await result.current.request('/api/accounts', {
+    await result.current.request('/api/v1/accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Custom': 'value' },
       body: JSON.stringify({ name: 'Acme' }),
@@ -192,7 +192,7 @@ describe('useApiClient typed methods', () => {
 
     const { result } = renderHook(() => useApiClient());
     const data = await result.current.get<{ id: string; name: string }>(
-      '/api/accounts/1',
+      '/api/v1/accounts/1',
     );
 
     expect(data).toEqual({ id: '1', name: 'Acme' });
@@ -209,7 +209,7 @@ describe('useApiClient typed methods', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useApiClient());
-    const data = await result.current.post<{ id: string }>('/api/accounts', {
+    const data = await result.current.post<{ id: string }>('/api/v1/accounts', {
       body: { name: 'Acme' },
     });
 
@@ -226,7 +226,7 @@ describe('useApiClient typed methods', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(emptyResponse(204)));
 
     const { result } = renderHook(() => useApiClient());
-    const data = await result.current.del('/api/accounts/1');
+    const data = await result.current.del('/api/v1/accounts/1');
 
     expect(data).toBeUndefined();
   });
@@ -245,7 +245,7 @@ describe('useApiClient typed methods', () => {
     const { result } = renderHook(() => useApiClient());
 
     await expect(
-      result.current.post('/api/accounts', { body: {} }),
+      result.current.post('/api/v1/accounts', { body: {} }),
     ).rejects.toMatchObject({
       name: 'ApiError',
       status: 400,
@@ -272,7 +272,7 @@ describe('useApiClient typed methods', () => {
     const { result } = renderHook(() => useApiClient());
     let caught: ApiError | undefined;
     try {
-      await result.current.post('/api/accounts', { body: {} });
+      await result.current.post('/api/v1/accounts', { body: {} });
     } catch (err) {
       caught = err as ApiError;
     }
@@ -292,7 +292,7 @@ describe('useApiClient typed methods', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useApiClient());
-    const data = await result.current.get<{ ok: boolean }>('/api/accounts');
+    const data = await result.current.get<{ ok: boolean }>('/api/v1/accounts');
 
     expect(data).toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -306,7 +306,7 @@ describe('useApiClient typed methods', () => {
 
     const { result } = renderHook(() => useApiClient());
     await expect(
-      result.current.post('/api/accounts', { body: { name: 'x' } }),
+      result.current.post('/api/v1/accounts', { body: { name: 'x' } }),
     ).rejects.toBeInstanceOf(ApiError);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -319,7 +319,7 @@ describe('useApiClient typed methods', () => {
     const { result } = renderHook(() => useApiClient());
     let caught: ApiError | undefined;
     try {
-      await result.current.get('/api/accounts');
+      await result.current.get('/api/v1/accounts');
     } catch (err) {
       caught = err as ApiError;
     }
@@ -338,7 +338,7 @@ describe('useApiClient typed methods', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useApiClient());
-    await expect(result.current.get('/api/accounts')).rejects.toMatchObject({
+    await expect(result.current.get('/api/v1/accounts')).rejects.toMatchObject({
       name: 'ApiError',
       status: 500,
     });
@@ -441,10 +441,10 @@ describe('clearServerSession', () => {
     vi.restoreAllMocks();
   });
 
-  it('calls DELETE /api/auth/session with credentials: include', async () => {
+  it('calls DELETE /api/v1/auth/session with credentials: include', async () => {
     await clearServerSession();
 
-    expect(fetch).toHaveBeenCalledWith('/api/auth/session', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/auth/session', {
       method: 'DELETE',
       credentials: 'include',
     });

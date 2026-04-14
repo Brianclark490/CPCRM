@@ -102,7 +102,7 @@ export function DashboardPage() {
   useEffect(() => {
     if (!sessionToken) return;
 
-    api.request('/api/objects/opportunity/records?limit=1&page=1')
+    api.request('/api/v1/objects/opportunity/records?limit=1&page=1')
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { total?: number } | null) => {
         if (data && typeof data.total === 'number') {
@@ -111,7 +111,7 @@ export function DashboardPage() {
       })
       .catch(() => { /* best-effort */ });
 
-    api.request('/api/objects/account/records?limit=1&page=1')
+    api.request('/api/v1/objects/account/records?limit=1&page=1')
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { total?: number } | null) => {
         if (data && typeof data.total === 'number') {

@@ -121,7 +121,7 @@ export function PlatformTenantsPage() {
     setError(null);
 
     try {
-      const response = await api.request('/api/platform/tenants');
+      const response = await api.request('/api/v1/platform/tenants');
 
       if (response.ok) {
         const data = (await response.json()) as TenantListResponse;
@@ -221,7 +221,7 @@ export function PlatformTenantsPage() {
       await new Promise((resolve) => setTimeout(resolve, 500));
       setProvisionStep('seeding');
 
-      const response = await api.request('/api/platform/tenants', {
+      const response = await api.request('/api/v1/platform/tenants', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

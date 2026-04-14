@@ -118,42 +118,42 @@ const mockOverdue = [
 
 function mockFetch() {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
-    if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
       return Promise.resolve({
         ok: true,
         json: async () => mockPipeline,
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
       return Promise.resolve({
         ok: true,
         json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/objects/opportunity/records')) {
+    if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
       return Promise.resolve({
         ok: true,
         json: async () => mockRecords,
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+    if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
       return Promise.resolve({
         ok: true,
         json: async () => mockSummary,
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+    if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/velocity')) {
       return Promise.resolve({
         ok: true,
         json: async () => mockVelocity,
       } as Response);
     }
 
-    if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+    if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/overdue')) {
       return Promise.resolve({
         ok: true,
         json: async () => mockOverdue,
@@ -280,7 +280,7 @@ describe('KanbanBoard', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
-        if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
           return Promise.resolve({
             ok: true,
             json: async () => [],
@@ -340,37 +340,37 @@ describe('KanbanBoard', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
-        if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
           return Promise.resolve({
             ok: true,
             json: async () => mockPipeline,
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
           return Promise.resolve({
             ok: true,
             json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/objects/opportunity/records')) {
+        if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
           return Promise.resolve({
             ok: true,
             json: async () => unassignedRecords,
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
           return Promise.resolve({
             ok: true,
             json: async () => mockSummary,
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/velocity')) {
           return Promise.resolve({
             ok: true,
             json: async () => mockVelocity,
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/overdue')) {
           return Promise.resolve({
             ok: true,
             json: async () => [],
@@ -443,31 +443,31 @@ describe('KanbanBoard', () => {
         } as Response);
       }
       // Fall back to existing mock responses
-      if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
         return Promise.resolve({
           ok: true,
           json: async () => mockPipeline,
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
         return Promise.resolve({
           ok: true,
           json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+      if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
         return Promise.resolve({
           ok: true,
           json: async () => mockSummary,
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+      if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/velocity')) {
         return Promise.resolve({
           ok: true,
           json: async () => mockVelocity,
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+      if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/overdue')) {
         return Promise.resolve({
           ok: true,
           json: async () => mockOverdue,
@@ -529,31 +529,31 @@ describe('KanbanBoard', () => {
           }),
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
         return Promise.resolve({
           ok: true,
           json: async () => mockPipeline,
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
         return Promise.resolve({
           ok: true,
           json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+      if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
         return Promise.resolve({
           ok: true,
           json: async () => mockSummary,
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+      if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/velocity')) {
         return Promise.resolve({
           ok: true,
           json: async () => mockVelocity,
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+      if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/overdue')) {
         return Promise.resolve({
           ok: true,
           json: async () => mockOverdue,
@@ -618,37 +618,37 @@ describe('KanbanBoard', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
-        if (typeof url === 'string' && url.includes('/api/admin/pipelines/pipe-1')) {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
           return Promise.resolve({
             ok: true,
             json: async () => mockPipeline,
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/admin/pipelines')) {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
           return Promise.resolve({
             ok: true,
             json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/objects/opportunity/records')) {
+        if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
           return Promise.resolve({
             ok: true,
             json: async () => stageRecords,
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/summary')) {
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
           return Promise.resolve({
             ok: true,
             json: async () => mockSummary,
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/velocity')) {
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/velocity')) {
           return Promise.resolve({
             ok: true,
             json: async () => mockVelocity,
           } as Response);
         }
-        if (typeof url === 'string' && url.includes('/api/pipelines/pipe-1/overdue')) {
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/overdue')) {
           return Promise.resolve({
             ok: true,
             json: async () => [],

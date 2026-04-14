@@ -68,7 +68,7 @@ export function InlineRecordForm({
       setLoading(true);
       try {
         // Get the object definition to find the ID
-        const objRes = await api.request('/api/admin/objects');
+        const objRes = await api.request('/api/v1/admin/objects');
         if (cancelled || !objRes.ok) {
           setLoading(false);
           return;
@@ -86,7 +86,7 @@ export function InlineRecordForm({
 
         // Fetch field definitions
         const fieldsRes = await api.request(
-          `/api/admin/objects/${obj.id}/fields`,
+          `/api/v1/admin/objects/${obj.id}/fields`,
         );
         if (cancelled || !fieldsRes.ok) {
           setLoading(false);
@@ -149,7 +149,7 @@ export function InlineRecordForm({
 
     try {
       const response = await api.request(
-        `/api/objects/${relatedObjectApiName}/records`,
+        `/api/v1/objects/${relatedObjectApiName}/records`,
         {
           method: 'POST',
           headers: {

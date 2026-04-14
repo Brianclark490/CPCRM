@@ -14,13 +14,13 @@ function mockFetchCounts(opportunityTotal = 0, accountTotal = 0) {
   vi.stubGlobal(
     'fetch',
     vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/api/objects/opportunity')) {
+      if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity')) {
         return Promise.resolve({
           ok: true,
           json: async () => ({ total: opportunityTotal }),
         });
       }
-      if (typeof url === 'string' && url.includes('/api/objects/account')) {
+      if (typeof url === 'string' && url.includes('/api/v1/objects/account')) {
         return Promise.resolve({
           ok: true,
           json: async () => ({ total: accountTotal }),

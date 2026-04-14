@@ -106,7 +106,7 @@ export function useRelationshipMutations({
     };
 
     try {
-      const response = await api.request('/api/admin/relationships', {
+      const response = await api.request('/api/v1/admin/relationships', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -145,7 +145,7 @@ export function useRelationshipMutations({
     setDeleteRelError(null);
 
     try {
-      const response = await api.request(`/api/admin/relationships/${deleteRelTarget.id}`, {
+      const response = await api.request(`/api/v1/admin/relationships/${deleteRelTarget.id}`, {
         method: 'DELETE',
       });
 
@@ -171,7 +171,7 @@ export function useRelationshipMutations({
     setCreatingLayout(true);
 
     try {
-      const response = await api.request(`/api/admin/objects/${objectId}/page-layouts`, {
+      const response = await api.request(`/api/v1/admin/objects/${objectId}/page-layouts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: `${objectDef.label} - Default` }),

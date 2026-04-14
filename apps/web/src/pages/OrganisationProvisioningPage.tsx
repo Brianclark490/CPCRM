@@ -41,7 +41,7 @@ export function OrganisationProvisioningPage() {
     setSubmitting(true);
 
     try {
-      const response = await api.request('/api/organisations', {
+      const response = await api.request('/api/v1/organisations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
