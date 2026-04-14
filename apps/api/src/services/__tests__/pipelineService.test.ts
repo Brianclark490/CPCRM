@@ -23,7 +23,10 @@ const {
   const fakeRecords = new Map<string, Record<string, unknown>>();
 
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+    // Normalise whitespace and strip identifier-quoting double quotes so the
+    // same pattern matches raw-pg SQL and Kysely-generated SQL (which wraps
+    // identifiers in "…").
+    const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
     // SELECT id FROM object_definitions WHERE id = $1
     if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE ID')) {
