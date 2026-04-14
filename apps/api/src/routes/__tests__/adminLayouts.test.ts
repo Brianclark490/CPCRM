@@ -51,9 +51,11 @@ function mockReq(
   body: unknown,
   user = { userId: 'user-123', tenantId: 'tenant-abc' },
   params: Record<string, string> = { objectId: 'obj-1' },
+  query: Record<string, string> = {},
 ) {
   return {
     body,
+    query,
     path: '/admin/objects/obj-1/layouts',
     user,
     params,
@@ -192,7 +194,7 @@ describe('GET /admin/objects/:objectId/layouts', () => {
     mockListLayoutDefinitions.mockReset();
   });
 
-  it('returns 200 with all layouts', async () => {
+  it('returns 200 with all layouts wrapped in canonical pagination envelope', async () => {
     const layouts = [
       { id: 'l1', name: 'Default Form', layoutType: 'form', isDefault: true },
     ];
@@ -205,7 +207,20 @@ describe('GET /admin/objects/:objectId/layouts', () => {
 
     expect(mockListLayoutDefinitions).toHaveBeenCalledWith('tenant-abc', 'obj-1');
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(layouts);
+    expect(res.json).toHaveBeenCalledWith({
+      data: layouts,
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+    });
+  });
+
+  it('rejects limit greater than MAX_LIMIT with 400', async () => {
+    const req = mockReq({}, undefined, { objectId: 'obj-1' }, { limit: '500' });
+    const res = mockRes();
+
+    await handleListLayouts(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockListLayoutDefinitions).not.toHaveBeenCalled();
   });
 
   it('returns 404 when parent object not found', async () => {

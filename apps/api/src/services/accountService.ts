@@ -90,8 +90,8 @@ export interface ListAccountsParams {
   tenantId: string;
   ownerId: string;
   search?: string;
-  page: number;
   limit: number;
+  offset: number;
 }
 
 /**
@@ -107,8 +107,8 @@ export interface AccountListItem extends Account {
 export interface ListAccountsResult {
   data: AccountListItem[];
   total: number;
-  page: number;
   limit: number;
+  offset: number;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -305,8 +305,7 @@ export async function createAccount(
 export async function listAccounts(
   params: ListAccountsParams,
 ): Promise<ListAccountsResult> {
-  const { tenantId, ownerId, search, page, limit } = params;
-  const offset = (page - 1) * limit;
+  const { tenantId, ownerId, search, limit, offset } = params;
 
   const queryParams: unknown[] = [tenantId, ownerId];
   let whereClause = 'WHERE a.tenant_id = $1 AND a.owner_id = $2';
@@ -335,8 +334,8 @@ export async function listAccounts(
   return {
     data: dataResult.rows.map(rowToAccountListItem),
     total,
-    page,
     limit,
+    offset,
   };
 }
 

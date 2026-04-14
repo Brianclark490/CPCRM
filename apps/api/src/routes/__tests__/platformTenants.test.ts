@@ -216,7 +216,7 @@ describe('GET /api/platform/tenants', () => {
     mockListTenants.mockReset();
   });
 
-  it('returns 200 with tenant list', async () => {
+  it('returns 200 with tenant list wrapped in the canonical envelope', async () => {
     mockListTenants.mockResolvedValue({ tenants: [SAMPLE_TENANT], total: 1 });
 
     const req = mockReq({}, {}, { limit: '50', offset: '0' });
@@ -225,22 +225,30 @@ describe('GET /api/platform/tenants', () => {
     await handleListTenants(req, res);
 
     expect(res.json).toHaveBeenCalledWith({
-      tenants: [SAMPLE_TENANT],
-      total: 1,
-      limit: 50,
-      offset: 0,
+      data: [SAMPLE_TENANT],
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
     });
   });
 
-  it('clamps limit to 100', async () => {
-    mockListTenants.mockResolvedValue({ tenants: [], total: 0 });
-
+  it('rejects limit greater than the max with HTTP 400', async () => {
     const req = mockReq({}, {}, { limit: '500', offset: '0' });
     const res = mockRes();
 
     await handleListTenants(req, res);
 
-    expect(mockListTenants).toHaveBeenCalledWith(100, 0);
+    expect(mockListTenants).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('uses default limit and offset when not provided', async () => {
+    mockListTenants.mockResolvedValue({ tenants: [], total: 0 });
+
+    const req = mockReq({}, {}, {});
+    const res = mockRes();
+
+    await handleListTenants(req, res);
+
+    expect(mockListTenants).toHaveBeenCalledWith(50, 0);
   });
 
   it('returns 500 on unexpected error', async () => {
@@ -411,7 +419,7 @@ describe('GET /api/platform/tenants/:id/users', () => {
     mockListTenantUsers.mockReset();
   });
 
-  it('returns 200 with user list', async () => {
+  it('returns 200 with paginated user list wrapped in the canonical envelope', async () => {
     const users = [
       { userId: 'U1', loginId: 'admin@acme.com', email: 'admin@acme.com', name: 'John', roles: ['admin'], status: 'enabled', lastLogin: null },
     ];
@@ -423,7 +431,10 @@ describe('GET /api/platform/tenants/:id/users', () => {
     await handleListTenantUsers(req, res);
 
     expect(mockListTenantUsers).toHaveBeenCalledWith('acme-corp');
-    expect(res.json).toHaveBeenCalledWith(users);
+    expect(res.json).toHaveBeenCalledWith({
+      data: users,
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+    });
   });
 
   it('returns 500 on unexpected error', async () => {

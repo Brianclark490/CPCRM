@@ -18,8 +18,8 @@ interface TenantListItem {
 }
 
 interface TenantListResponse {
-  tenants: TenantListItem[];
-  total: number;
+  data: TenantListItem[];
+  pagination: { total: number; limit: number; offset: number; hasMore: boolean };
 }
 
 interface CreateTenantForm {
@@ -125,7 +125,7 @@ export function PlatformTenantsPage() {
 
       if (response.ok) {
         const data = (await response.json()) as TenantListResponse;
-        setTenants(data.tenants);
+        setTenants(data.data);
       } else {
         setError('Failed to load tenants.');
       }

@@ -58,9 +58,11 @@ beforeEach(() => {
 function mockReq(
   body: unknown,
   params: Record<string, string> = {},
+  query: Record<string, string> = {},
 ) {
   return {
     body,
+    query,
     path: '/api/admin/users',
     user: {
       userId: 'admin-user-1',
@@ -219,7 +221,20 @@ describe('GET /api/admin/users', () => {
 
     expect(mockListTenantUsers).toHaveBeenCalledWith('acme-corp');
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(users);
+    expect(res.json).toHaveBeenCalledWith({
+      data: users,
+      pagination: { total: 2, limit: 50, offset: 0, hasMore: false },
+    });
+  });
+
+  it('rejects limit greater than MAX_LIMIT with 400', async () => {
+    const req = mockReq({}, {}, { limit: '500' });
+    const res = mockRes();
+
+    await handleListUsers(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockListTenantUsers).not.toHaveBeenCalled();
   });
 
   it('returns 500 on unexpected error', async () => {

@@ -60,9 +60,11 @@ function mockReq(
   body: unknown,
   user = { userId: 'user-123', tenantId: 'tenant-abc' },
   params: Record<string, string> = {},
+  query: Record<string, string> = {},
 ) {
   return {
     body,
+    query,
     path: '/admin/pipelines',
     user,
     params,
@@ -206,7 +208,7 @@ describe('GET /admin/pipelines', () => {
     mockListPipelines.mockReset();
   });
 
-  it('returns 200 with all pipelines', async () => {
+  it('returns 200 with all pipelines wrapped in canonical pagination envelope', async () => {
     const pipelines = [
       { id: 'p1', name: 'Sales Pipeline', apiName: 'sales_pipeline', isSystem: true },
     ];
@@ -218,7 +220,20 @@ describe('GET /admin/pipelines', () => {
     await handleListPipelines(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(pipelines);
+    expect(res.json).toHaveBeenCalledWith({
+      data: pipelines,
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+    });
+  });
+
+  it('rejects limit greater than MAX_LIMIT with 400', async () => {
+    const req = mockReq({}, undefined, {}, { limit: '500' });
+    const res = mockRes();
+
+    await handleListPipelines(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockListPipelines).not.toHaveBeenCalled();
   });
 
   it('returns 500 on unexpected error', async () => {

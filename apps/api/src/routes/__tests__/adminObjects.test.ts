@@ -75,12 +75,14 @@ function mockReq(
   body: unknown,
   user = { userId: 'user-123', tenantId: 'tenant-abc' },
   params: Record<string, string> = {},
+  query: Record<string, string> = {},
 ) {
   return {
     body,
     path: '/admin/objects',
     user,
     params,
+    query,
   } as unknown as AuthenticatedRequest;
 }
 
@@ -220,7 +222,7 @@ describe('GET /admin/objects', () => {
     mockListObjectDefinitions.mockReset();
   });
 
-  it('returns 200 with all objects', async () => {
+  it('returns 200 with objects wrapped in the canonical pagination envelope', async () => {
     const now = new Date();
     const objects = [
       {
@@ -245,7 +247,20 @@ describe('GET /admin/objects', () => {
     await handleListObjects(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(objects);
+    expect(res.json).toHaveBeenCalledWith({
+      data: objects,
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+    });
+  });
+
+  it('rejects limit greater than the max with HTTP 400', async () => {
+    const req = mockReq({}, undefined, {}, { limit: '500' });
+    const res = mockRes();
+
+    await handleListObjects(req, res);
+
+    expect(mockListObjectDefinitions).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 
   it('returns 500 when the service throws an unexpected error', async () => {

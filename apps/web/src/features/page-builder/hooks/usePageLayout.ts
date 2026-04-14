@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../../../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../../../lib/apiClient.js';
 import {
   useSensor,
   useSensors,
@@ -104,7 +104,7 @@ export function usePageLayout(objectId: string | undefined) {
       setFields(objData.fields ?? []);
 
       if (relRes.ok) {
-        const relData = (await relRes.json()) as RelationshipApiItem[];
+        const relData = unwrapList<RelationshipApiItem>(await relRes.json());
         setRelationships(
           relData.map((r) => ({
             id: r.id,
@@ -157,12 +157,12 @@ export function usePageLayout(objectId: string | undefined) {
       }
 
       if (regRes.ok) {
-        const regData = (await regRes.json()) as ComponentDefinition[];
+        const regData = unwrapList<ComponentDefinition>(await regRes.json());
         setRegistry(regData);
       }
 
       if (layoutsRes.ok) {
-        const layoutsData = (await layoutsRes.json()) as PageLayoutListItem[];
+        const layoutsData = unwrapList<PageLayoutListItem>(await layoutsRes.json());
         setAllLayouts(layoutsData);
 
         if (layoutsData.length > 0) {

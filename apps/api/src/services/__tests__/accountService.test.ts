@@ -386,13 +386,13 @@ describe('listAccounts', () => {
     const result = await listAccounts({
       tenantId: 'tenant-abc',
       ownerId: 'user-123',
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
     expect(result.data).toHaveLength(2);
     expect(result.total).toBe(2);
-    expect(result.page).toBe(1);
+    expect(result.offset).toBe(0);
     expect(result.limit).toBe(20);
   });
 
@@ -400,8 +400,8 @@ describe('listAccounts', () => {
     const result = await listAccounts({
       tenantId: 'tenant-abc',
       ownerId: 'user-123',
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
     expect(result.data).toHaveLength(0);
@@ -415,8 +415,8 @@ describe('listAccounts', () => {
     const result = await listAccounts({
       tenantId: 'tenant-abc',
       ownerId: 'user-123',
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
     expect(result.data).toHaveLength(1);

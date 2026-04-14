@@ -11,6 +11,8 @@ import {
 } from '../services/stageGateService.js';
 import type { UpdateStageGateParams } from '../services/stageGateService.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginateInMemory } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 export const adminStageGatesRouter = Router({ mergeParams: true });
 
@@ -31,9 +33,22 @@ export async function handleListGates(
 ): Promise<void> {
   const { stageId } = req.params as { stageId: string };
 
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
   try {
     const gates = await listStageGates(req.user!.tenantId!, stageId);
-    res.status(200).json(gates);
+    res.status(200).json(paginateInMemory(gates, pagination));
   } catch (err: unknown) {
     const code = (err as Error & { code?: string }).code;
 

@@ -17,13 +17,19 @@ function mockFetchCounts(opportunityTotal = 0, accountTotal = 0) {
       if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ total: opportunityTotal }),
+          json: async () => ({
+            data: [],
+            pagination: { total: opportunityTotal, limit: 1, offset: 0, hasMore: false },
+          }),
         });
       }
       if (typeof url === 'string' && url.includes('/api/v1/objects/account')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ total: accountTotal }),
+          json: async () => ({
+            data: [],
+            pagination: { total: accountTotal, limit: 1, offset: 0, hasMore: false },
+          }),
         });
       }
       return Promise.resolve({ ok: false });

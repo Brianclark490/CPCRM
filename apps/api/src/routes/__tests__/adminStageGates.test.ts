@@ -45,9 +45,11 @@ function mockReq(
   body: unknown,
   user = { userId: 'user-123', tenantId: 'tenant-abc' },
   params: Record<string, string> = { stageId: 'stage-1' },
+  query: Record<string, string> = {},
 ) {
   return {
     body,
+    query,
     path: '/admin/stages/stage-1/gates',
     user,
     params,
@@ -79,7 +81,7 @@ describe('GET /admin/stages/:stageId/gates', () => {
     mockListStageGates.mockReset();
   });
 
-  it('returns 200 with all gates for a stage', async () => {
+  it('returns 200 with all gates wrapped in canonical pagination envelope', async () => {
     mockListStageGates.mockResolvedValue([sampleGate]);
 
     const req = mockReq({});
@@ -89,7 +91,20 @@ describe('GET /admin/stages/:stageId/gates', () => {
 
     expect(mockListStageGates).toHaveBeenCalledWith('tenant-abc', 'stage-1');
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith([sampleGate]);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [sampleGate],
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+    });
+  });
+
+  it('rejects limit greater than MAX_LIMIT with 400', async () => {
+    const req = mockReq({}, undefined, { stageId: 'stage-1' }, { limit: '500' });
+    const res = mockRes();
+
+    await handleListGates(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockListStageGates).not.toHaveBeenCalled();
   });
 
   it('returns 404 when stage not found', async () => {

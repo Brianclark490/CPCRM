@@ -21,7 +21,15 @@ function renderPage() {
 function mockFetchSuccess(data: { tenants: unknown[]; total: number }) {
   vi.mocked(fetch).mockResolvedValue({
     ok: true,
-    json: async () => data,
+    json: async () => ({
+      data: data.tenants,
+      pagination: {
+        total: data.total,
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+      },
+    }),
   } as Response);
 }
 

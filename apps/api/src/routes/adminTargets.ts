@@ -10,6 +10,8 @@ import {
 } from '../services/salesTargetService.js';
 import type { CreateTargetParams } from '../services/salesTargetService.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginateInMemory } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 import rateLimit from 'express-rate-limit';
 
 export const adminTargetsRouter = Router();
@@ -117,9 +119,22 @@ export async function handleListTargets(
   const periodStart = query.period_start ?? query.periodStart;
   const periodEnd = query.period_end ?? query.periodEnd;
 
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
   try {
     const targets = await listTargets(req.user!.tenantId!, periodStart, periodEnd);
-    res.status(200).json(targets);
+    res.status(200).json(paginateInMemory(targets, pagination));
   } catch (err: unknown) {
     logger.error({ err }, 'Unexpected error listing targets');
     res.status(500).json({ error: 'An unexpected error occurred' });

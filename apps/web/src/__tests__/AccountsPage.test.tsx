@@ -21,7 +21,10 @@ function renderPage() {
 function mockFetchSuccess(data: unknown[] = [], total = 0) {
   vi.mocked(fetch).mockResolvedValue({
     ok: true,
-    json: async () => ({ data, total, page: 1, limit: 20 }),
+    json: async () => ({
+      data,
+      pagination: { total, limit: 20, offset: 0, hasMore: total > data.length },
+    }),
   } as Response);
 }
 
@@ -84,9 +87,7 @@ describe('AccountsPage', () => {
             opportunityCount: 3,
           },
         ],
-        total: 1,
-        page: 1,
-        limit: 20,
+        pagination: { total: 1, limit: 20, offset: 0, hasMore: false },
       }),
     } as Response);
 
@@ -157,9 +158,7 @@ describe('AccountsPage', () => {
           name: `Account ${i}`,
           opportunityCount: 0,
         })),
-        total: 45,
-        page: 1,
-        limit: 20,
+        pagination: { total: 45, limit: 20, offset: 0, hasMore: true },
       }),
     } as Response);
 
@@ -184,9 +183,7 @@ describe('AccountsPage', () => {
             opportunityCount: 1,
           },
         ],
-        total: 1,
-        page: 1,
-        limit: 20,
+        pagination: { total: 1, limit: 20, offset: 0, hasMore: false },
       }),
     } as Response);
 

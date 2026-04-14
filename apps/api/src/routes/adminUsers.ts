@@ -11,6 +11,8 @@ import {
   removeUserFromTenant,
 } from '../services/adminUserService.js';
 import { logger } from '../lib/logger.js';
+import { parsePaginationQuery, paginateInMemory } from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 export const adminUsersRouter = Router();
 
@@ -88,9 +90,22 @@ export async function handleListUsers(
 ): Promise<void> {
   const tenantId = req.user!.tenantId!;
 
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(req.query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
+
   try {
     const users = await listTenantUsers(tenantId);
-    res.status(200).json(users);
+    res.status(200).json(paginateInMemory(users, pagination));
   } catch (err: unknown) {
     logger.error({ err, tenantId }, 'Unexpected error listing tenant users');
     res.status(500).json({ error: 'An unexpected error occurred' });

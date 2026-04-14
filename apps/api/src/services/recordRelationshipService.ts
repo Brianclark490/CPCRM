@@ -23,8 +23,8 @@ export interface RelatedRecordRow {
 export interface RelatedRecordsResult {
   data: RelatedRecordRow[];
   total: number;
-  page: number;
   limit: number;
+  offset: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -240,9 +240,10 @@ export async function getRelatedRecords(
   recordId: string,
   objectApiName: string,
   ownerId: string,
-  page: number,
   limit: number,
+  offset: number,
 ): Promise<RelatedRecordsResult> {
+  void ownerId;
   // Verify the record exists within the tenant
   const recordResult = await pool.query(
     'SELECT id, object_id FROM records WHERE id = $1 AND tenant_id = $2',
@@ -265,7 +266,6 @@ export async function getRelatedRecords(
   // Find related records in both directions:
   // 1. Records where our record is the source and the target belongs to the specified object type
   // 2. Records where our record is the target and the source belongs to the specified object type
-  const offset = (page - 1) * limit;
 
   const countResult = await pool.query(
     `SELECT COUNT(*) AS total FROM (
@@ -304,5 +304,5 @@ export async function getRelatedRecords(
     rowToRelatedRecord(row),
   );
 
-  return { data, total, page, limit };
+  return { data, total, limit, offset };
 }

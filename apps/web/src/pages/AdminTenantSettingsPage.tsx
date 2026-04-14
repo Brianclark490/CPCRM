@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import styles from './AdminTenantSettingsPage.module.css';
 
 /* ── Types ────────────────────────────────────────────────── */
@@ -138,7 +138,7 @@ export function AdminTenantSettingsPage() {
         }
 
         if (pipelinesRes.ok) {
-          const pipelineData = (await pipelinesRes.json()) as PipelineDefinition[];
+          const pipelineData = unwrapList<PipelineDefinition>(await pipelinesRes.json());
           if (!cancelled) setPipelines(pipelineData);
         }
       } catch {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { FieldInput } from '../components/FieldInput.js';
 import { StageFieldRenderer } from '../components/StageFieldRenderer.js';
 import styles from './CreateRecordPage.module.css';
@@ -131,7 +131,7 @@ export function CreateRecordPage() {
           return;
         }
 
-        const allObjects = (await objResponse.json()) as ObjectDefinition[];
+        const allObjects = unwrapList<ObjectDefinition>(await objResponse.json());
         const obj = allObjects.find((o) => o.apiName === apiName);
 
         if (!obj) {
@@ -151,7 +151,7 @@ export function CreateRecordPage() {
 
         let fieldDefs: FieldDefinition[] = [];
         if (fieldsResponse.ok) {
-          fieldDefs = (await fieldsResponse.json()) as FieldDefinition[];
+          fieldDefs = unwrapList<FieldDefinition>(await fieldsResponse.json());
         }
 
         // Fetch layouts
@@ -164,7 +164,7 @@ export function CreateRecordPage() {
         let layoutSections: LayoutSection[] | null = null;
 
         if (layoutsResponse.ok) {
-          const layouts = (await layoutsResponse.json()) as LayoutListItem[];
+          const layouts = unwrapList<LayoutListItem>(await layoutsResponse.json());
           const formLayout =
             layouts.find((l) => l.layoutType === 'form' && l.isDefault) ??
             layouts.find((l) => l.layoutType === 'form');

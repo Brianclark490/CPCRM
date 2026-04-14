@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { ObjectIcon } from '../components/ObjectIcon.js';
 import { slugify } from '../utils.js';
@@ -125,7 +125,7 @@ export function ObjectManagerPage() {
       const response = await api.request('/api/v1/admin/objects');
 
       if (response.ok) {
-        const data = (await response.json()) as ObjectDefinitionListItem[];
+        const data = unwrapList<ObjectDefinitionListItem>(await response.json());
         setObjects(data);
       } else {
         setError('Failed to load object definitions.');

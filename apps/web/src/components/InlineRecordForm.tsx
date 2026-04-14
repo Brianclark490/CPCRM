@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useApiClient } from '../lib/apiClient.js';
+import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { FieldInput } from './FieldInput.js';
 import styles from './InlineRecordForm.module.css';
 
@@ -74,10 +74,10 @@ export function InlineRecordForm({
           return;
         }
 
-        const allObjects = (await objRes.json()) as Array<{
+        const allObjects = unwrapList<{
           id: string;
           apiName: string;
-        }>;
+        }>(await objRes.json());
         const obj = allObjects.find((o) => o.apiName === relatedObjectApiName);
         if (!obj || cancelled) {
           setLoading(false);
@@ -93,7 +93,7 @@ export function InlineRecordForm({
           return;
         }
 
-        const fieldDefs = (await fieldsRes.json()) as FieldDefinition[];
+        const fieldDefs = unwrapList<FieldDefinition>(await fieldsRes.json());
 
         // Show only essential fields: required fields and first few fields
         // Exclude formula fields (computed, not user-provided)

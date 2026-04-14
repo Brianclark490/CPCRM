@@ -12,6 +12,13 @@ import {
 } from '../services/accountService.js';
 import type { UpdateAccountParams } from '../services/accountService.js';
 import { logger } from '../lib/logger.js';
+import {
+  parsePaginationQuery,
+  paginatedResponse,
+  DEFAULT_LIMIT,
+  MAX_LIMIT,
+} from '../lib/pagination.js';
+import { isAppError } from '../lib/appError.js';
 
 export const accountsRouter = Router();
 
@@ -107,11 +114,12 @@ export async function handleCreateAccount(
  *
  * Query parameters:
  *   search?: string — searches name and email (case-insensitive)
- *   page?: number — page number, defaults to 1
- *   limit?: number — results per page, defaults to 20 (max 100)
+ *   limit?:  number — results per page, defaults to {@link DEFAULT_LIMIT} (max {@link MAX_LIMIT})
+ *   offset?: number — results to skip, defaults to 0
  *
  * Responses:
- *   200  – { data: Account[], total: number, page: number, limit: number }
+ *   200  – { data: Account[], pagination: { total, limit, offset, hasMore } }
+ *   400  – invalid pagination parameters (limit > max, negative values, etc.)
  *   401  – missing or invalid Bearer token
  *   403  – authenticated but no active tenant context
  *   500  – unexpected server error
@@ -122,20 +130,31 @@ export async function handleListAccounts(
 ): Promise<void> {
   const { userId: requestingUserId, tenantId } = req.user!;
 
-  const query = req.query as { search?: string; page?: string; limit?: string };
-  const page = Math.max(1, parseInt(query.page ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? '20', 10) || 20));
+  const query = req.query as { search?: string; limit?: string; offset?: string };
+
+  let pagination;
+  try {
+    pagination = parsePaginationQuery(query);
+  } catch (err) {
+    if (isAppError(err)) {
+      res
+        .status(err.statusCode)
+        .json({ error: err.message, code: err.code, ...(err.details ?? {}) });
+      return;
+    }
+    throw err;
+  }
 
   try {
     const result = await listAccounts({
       tenantId: tenantId!,
       ownerId: requestingUserId,
       search: query.search,
-      page,
-      limit,
+      limit: pagination.limit,
+      offset: pagination.offset,
     });
 
-    res.status(200).json(result);
+    res.status(200).json(paginatedResponse(result.data, result.total, pagination));
   } catch (err: unknown) {
     logger.error({ err, tenantId, requestingUserId }, 'Unexpected error listing accounts');
     res.status(500).json({ error: 'An unexpected error occurred' });

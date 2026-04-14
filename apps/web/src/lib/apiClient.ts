@@ -491,3 +491,43 @@ export async function clearServerSession(): Promise<void> {
     // Best-effort — Descope logout will still clear the client-side session.
   }
 }
+
+// ─── Pagination helpers ─────────────────────────────────────────────────────
+
+/**
+ * Canonical pagination metadata returned by every API list endpoint.
+ */
+export interface PaginationMeta {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+/**
+ * Canonical list-response envelope returned by every API list endpoint.
+ */
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: PaginationMeta;
+}
+
+/**
+ * Extracts the `data` array from a paginated list response. Accepts either
+ * the canonical `{data, pagination}` envelope or a bare array so callers can
+ * tolerate legacy responses during migrations and tests.
+ */
+export function unwrapList<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'data' in payload &&
+    Array.isArray((payload as { data: unknown }).data)
+  ) {
+    return (payload as { data: T[] }).data;
+  }
+  return [];
+}

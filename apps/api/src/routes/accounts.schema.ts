@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { registry } from '../lib/openapi.js';
 import { commonResponses } from '../lib/openapi.js';
+import { paginatedResponseSchema, PaginationOpenApiQuery } from '../lib/pagination.js';
 
 // Request schemas
 export const CreateAccountRequestSchema = z.object({
@@ -98,24 +99,18 @@ registry.registerPath({
   request: {
     query: z.object({
       search: z.string().optional(),
-      page: z.string().optional(),
-      limit: z.string().optional(),
-    }),
+    }).merge(PaginationOpenApiQuery),
   },
   responses: {
     200: {
       description: 'Paginated list of accounts',
       content: {
         'application/json': {
-          schema: z.object({
-            data: z.array(AccountSchema),
-            total: z.number(),
-            page: z.number(),
-            limit: z.number(),
-          }),
+          schema: paginatedResponseSchema(AccountSchema),
         },
       },
     },
+    400: commonResponses[400],
     401: commonResponses[401],
     403: commonResponses[403],
     500: commonResponses[500],

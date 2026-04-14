@@ -372,8 +372,8 @@ describe('Record isolation', () => {
       tenantId: TENANT_A,
       apiName: 'account',
       ownerId: OWNER_A,
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
     expect(result.data).toHaveLength(0);
@@ -414,8 +414,8 @@ describe('Record isolation', () => {
       tenantId: TENANT_B,
       apiName: 'account',
       ownerId: OWNER_B,
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
     expect(result.data).toHaveLength(0);
@@ -431,8 +431,8 @@ describe('Record isolation', () => {
       apiName: 'account',
       ownerId: OWNER_A,
       search: 'Shared',
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
     expect(resultA.total).toBe(1);
@@ -449,16 +449,16 @@ describe('Record isolation', () => {
       tenantId: TENANT_A,
       apiName: 'account',
       ownerId: OWNER_A,
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
     const resultB = await listRecords({
       tenantId: TENANT_B,
       apiName: 'account',
       ownerId: OWNER_B,
-      page: 1,
       limit: 20,
+      offset: 0,
     });
 
     expect(resultA.total).toBe(2);

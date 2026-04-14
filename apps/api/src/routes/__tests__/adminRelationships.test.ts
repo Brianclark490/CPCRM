@@ -42,9 +42,11 @@ function mockReq(
   body: unknown,
   user = { userId: 'user-123', tenantId: 'tenant-abc' },
   params: Record<string, string> = {},
+  query: Record<string, string> = {},
 ) {
   return {
     body,
+    query,
     path: '/admin/relationships',
     user,
     params,
@@ -243,7 +245,20 @@ describe('GET /admin/objects/:objectId/relationships', () => {
 
     expect(mockListRelationshipDefinitions).toHaveBeenCalledWith('tenant-abc', 'obj-1');
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(relationships);
+    expect(res.json).toHaveBeenCalledWith({
+      data: relationships,
+      pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+    });
+  });
+
+  it('rejects limit greater than MAX_LIMIT with 400', async () => {
+    const req = mockReq({}, undefined, { objectId: 'obj-1' }, { limit: '500' });
+    const res = mockRes();
+
+    await handleListRelationships(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockListRelationshipDefinitions).not.toHaveBeenCalled();
   });
 
   it('returns 404 when object not found', async () => {

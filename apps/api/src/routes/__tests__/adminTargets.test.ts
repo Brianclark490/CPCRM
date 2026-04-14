@@ -182,7 +182,7 @@ describe('GET /admin/targets', () => {
     vi.clearAllMocks();
   });
 
-  it('returns 200 with targets list', async () => {
+  it('returns 200 with targets wrapped in canonical pagination envelope', async () => {
     const targets = [
       { id: 'target-1', target_type: 'business', target_value: 500000 },
       { id: 'target-2', target_type: 'team', target_value: 300000 },
@@ -196,8 +196,21 @@ describe('GET /admin/targets', () => {
     await handleListTargets(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(targets);
+    expect(res.json).toHaveBeenCalledWith({
+      data: targets,
+      pagination: { total: 2, limit: 50, offset: 0, hasMore: false },
+    });
     expect(mockListTargets).toHaveBeenCalledWith('tenant-abc', undefined, undefined);
+  });
+
+  it('rejects limit greater than MAX_LIMIT with 400', async () => {
+    const req = mockReq({}, {}, { limit: '500' });
+    const res = mockRes();
+
+    await handleListTargets(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockListTargets).not.toHaveBeenCalled();
   });
 
   it('passes period filters to service', async () => {
