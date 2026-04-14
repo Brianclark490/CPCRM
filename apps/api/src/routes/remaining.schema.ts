@@ -4,25 +4,59 @@ import { commonResponses } from '../lib/openapi.js';
 
 // Simple schemas for remaining admin routes
 
-
-// Re-use Stage schema
-const StageSchema = z.object({
+// Admin Stage Gates — camelCase response with field metadata
+const StageGateFieldSchema = z.object({
   id: z.string(),
-  pipeline_id: z.string(),
-  name: z.string(),
-  display_order: z.number(),
-  probability: z.number().nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  apiName: z.string(),
+  label: z.string(),
+  dataType: z.string(),
 });
-// Admin Stage Gates
-const StageGateSchema = z.object({
+
+const StageGateResponseSchema = z.object({
   id: z.string(),
-  stage_id: z.string(),
-  field_id: z.string(),
-  operator: z.string(),
-  value: z.string(),
-  created_at: z.string(),
+  stageId: z.string(),
+  fieldId: z.string(),
+  gateType: z.string(),
+  gateValue: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  field: StageGateFieldSchema.optional(),
+});
+
+const CreateStageGateRequestSchema = z.object({
+  field_id: z.string().optional(),
+  fieldId: z.string().optional(),
+  gate_type: z.string().optional(),
+  gateType: z.string().optional(),
+  gate_value: z.string().nullable().optional(),
+  gateValue: z.string().nullable().optional(),
+  error_message: z.string().nullable().optional(),
+  errorMessage: z.string().nullable().optional(),
+});
+
+const UpdateStageGateRequestSchema = z.object({
+  gate_type: z.string().optional(),
+  gateType: z.string().optional(),
+  gate_value: z.string().nullable().optional(),
+  gateValue: z.string().nullable().optional(),
+  error_message: z.string().nullable().optional(),
+  errorMessage: z.string().nullable().optional(),
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/admin/stages/{stageId}/gates',
+  description: 'List stage gate validation rules for a stage',
+  tags: ['Admin - Stage Gates'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ stageId: z.string() }) },
+  responses: {
+    200: { description: 'List of stage gates', content: { 'application/json': { schema: z.array(StageGateResponseSchema) } } },
+    401: commonResponses[401],
+    404: commonResponses[404],
+    500: commonResponses[500],
+  },
 });
 
 registry.registerPath({
@@ -33,98 +67,30 @@ registry.registerPath({
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ stageId: z.string() }),
-    body: { content: { 'application/json': { schema: z.object({ field_id: z.string(), operator: z.string(), value: z.string() }) } } },
+    body: { content: { 'application/json': { schema: CreateStageGateRequestSchema } } },
   },
   responses: {
-    201: { description: 'Stage gate created', content: { 'application/json': { schema: StageGateSchema } } },
+    201: { description: 'Stage gate created', content: { 'application/json': { schema: StageGateResponseSchema } } },
     400: commonResponses[400],
-    401: commonResponses[401],
-    500: commonResponses[500],
-  },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: '/admin/stages/{stageId}/gates',
-  description: 'List stage gates for a stage',
-  tags: ['Admin - Stage Gates'],
-  security: [{ bearerAuth: [] }],
-  request: { params: z.object({ stageId: z.string() }) },
-  responses: {
-    200: { description: 'List of stage gates', content: { 'application/json': { schema: z.array(StageGateSchema) } } },
-    401: commonResponses[401],
-    500: commonResponses[500],
-  },
-});
-
-registry.registerPath({
-  method: 'delete',
-  path: '/admin/stages/{stageId}/gates/{gateId}',
-  description: 'Delete a stage gate',
-  tags: ['Admin - Stage Gates'],
-  security: [{ bearerAuth: [] }],
-  request: { params: z.object({ stageId: z.string(), gateId: z.string() }) },
-  responses: {
-    200: { description: 'Gate deleted', content: { 'application/json': { schema: z.object({ ok: z.boolean() }) } } },
     401: commonResponses[401],
     404: commonResponses[404],
-    500: commonResponses[500],
-  },
-});
-
-// Admin Targets
-const TargetSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  target_value: z.number(),
-  period: z.string(),
-  tenant_id: z.string(),
-  created_at: z.string(),
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/admin/targets',
-  description: 'Create a target definition',
-  tags: ['Admin - Targets'],
-  security: [{ bearerAuth: [] }],
-  request: {
-    body: { content: { 'application/json': { schema: z.object({ name: z.string(), target_value: z.number(), period: z.string() }) } } },
-  },
-  responses: {
-    201: { description: 'Target created', content: { 'application/json': { schema: TargetSchema } } },
-    400: commonResponses[400],
-    401: commonResponses[401],
-    500: commonResponses[500],
-  },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: '/admin/targets',
-  description: 'List all targets',
-  tags: ['Admin - Targets'],
-  security: [{ bearerAuth: [] }],
-  request: {},
-  responses: {
-    200: { description: 'List of targets', content: { 'application/json': { schema: z.array(TargetSchema) } } },
-    401: commonResponses[401],
+    409: commonResponses[409],
     500: commonResponses[500],
   },
 });
 
 registry.registerPath({
   method: 'put',
-  path: '/admin/targets/{id}',
-  description: 'Update a target',
-  tags: ['Admin - Targets'],
+  path: '/admin/stages/{stageId}/gates/{id}',
+  description: 'Update a stage gate validation rule',
+  tags: ['Admin - Stage Gates'],
   security: [{ bearerAuth: [] }],
   request: {
-    params: z.object({ id: z.string() }),
-    body: { content: { 'application/json': { schema: z.object({ name: z.string().optional(), target_value: z.number().optional() }) } } },
+    params: z.object({ stageId: z.string(), id: z.string() }),
+    body: { content: { 'application/json': { schema: UpdateStageGateRequestSchema } } },
   },
   responses: {
-    200: { description: 'Target updated', content: { 'application/json': { schema: TargetSchema } } },
+    200: { description: 'Stage gate updated', content: { 'application/json': { schema: StageGateResponseSchema } } },
     400: commonResponses[400],
     401: commonResponses[401],
     404: commonResponses[404],
@@ -134,14 +100,100 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'delete',
+  path: '/admin/stages/{stageId}/gates/{id}',
+  description: 'Delete a stage gate validation rule',
+  tags: ['Admin - Stage Gates'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ stageId: z.string(), id: z.string() }) },
+  responses: {
+    204: { description: 'Gate deleted' },
+    401: commonResponses[401],
+    404: commonResponses[404],
+    500: commonResponses[500],
+  },
+});
+
+// Admin Targets — snake_case fields to match adminTargets request/response
+const CreateTargetRequestSchema = z.object({
+  target_type: z.enum(['business', 'team', 'user']).optional(),
+  targetType: z.enum(['business', 'team', 'user']).optional(),
+  target_entity_id: z.string().nullable().optional(),
+  targetEntityId: z.string().nullable().optional(),
+  period_type: z.enum(['monthly', 'quarterly', 'annual']).optional(),
+  periodType: z.enum(['monthly', 'quarterly', 'annual']).optional(),
+  period_start: z.string().optional(),
+  periodStart: z.string().optional(),
+  period_end: z.string().optional(),
+  periodEnd: z.string().optional(),
+  target_value: z.number().optional(),
+  targetValue: z.number().optional(),
+  currency: z.string().optional(),
+});
+
+const TargetSchema = z.object({
+  id: z.string(),
+  tenant_id: z.string(),
+  target_type: z.string(),
+  target_entity_id: z.string().nullable(),
+  period_type: z.string(),
+  period_start: z.string(),
+  period_end: z.string(),
+  target_value: z.number(),
+  currency: z.string().nullable(),
+  created_by: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/admin/targets',
+  description: 'Create or update (upsert) a sales target',
+  tags: ['Admin - Targets'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: { content: { 'application/json': { schema: CreateTargetRequestSchema } } },
+  },
+  responses: {
+    201: { description: 'Target created/updated', content: { 'application/json': { schema: TargetSchema } } },
+    400: commonResponses[400],
+    401: commonResponses[401],
+    403: commonResponses[403],
+    500: commonResponses[500],
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/admin/targets',
+  description: 'List all sales targets for the tenant, optionally filtered by period',
+  tags: ['Admin - Targets'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    query: z.object({
+      period_start: z.string().optional(),
+      period_end: z.string().optional(),
+    }),
+  },
+  responses: {
+    200: { description: 'List of targets', content: { 'application/json': { schema: z.array(TargetSchema) } } },
+    401: commonResponses[401],
+    403: commonResponses[403],
+    500: commonResponses[500],
+  },
+});
+
+registry.registerPath({
+  method: 'delete',
   path: '/admin/targets/{id}',
-  description: 'Delete a target',
+  description: 'Delete a sales target by ID',
   tags: ['Admin - Targets'],
   security: [{ bearerAuth: [] }],
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { description: 'Target deleted', content: { 'application/json': { schema: z.object({ ok: z.boolean() }) } } },
+    204: { description: 'Target deleted' },
     401: commonResponses[401],
+    403: commonResponses[403],
     404: commonResponses[404],
     500: commonResponses[500],
   },
@@ -163,27 +215,59 @@ registry.registerPath({
 });
 
 // Platform Tenants
+const CreateTenantRequestSchema = z.object({
+  name: z.string(),
+  slug: z.string(),
+  adminEmail: z.string().email(),
+  adminName: z.string(),
+  plan: z.string().optional(),
+});
+
+const UpdateTenantRequestSchema = z.object({
+  name: z.string().optional(),
+  status: z.string().optional(),
+  plan: z.string().optional(),
+});
+
 const TenantSchema = z.object({
   id: z.string(),
   name: z.string(),
-  is_active: z.boolean(),
-  created_at: z.string(),
+  slug: z.string(),
+  status: z.string(),
+  plan: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+});
+
+const ProvisionTenantResultSchema = z.object({
+  tenant: TenantSchema,
+  descopeTenantId: z.string().optional(),
+  adminUserId: z.string().optional(),
+  inviteUrl: z.string().optional(),
+}).passthrough();
+
+const ListTenantsResponseSchema = z.object({
+  tenants: z.array(TenantSchema),
+  total: z.number(),
+  limit: z.number(),
+  offset: z.number(),
 });
 
 registry.registerPath({
   method: 'post',
   path: '/platform/tenants',
-  description: 'Create a new tenant (platform admin only)',
+  description: 'Provision a new tenant end-to-end (super-admin only)',
   tags: ['Platform - Tenants'],
   security: [{ bearerAuth: [] }],
   request: {
-    body: { content: { 'application/json': { schema: z.object({ name: z.string() }) } } },
+    body: { content: { 'application/json': { schema: CreateTenantRequestSchema } } },
   },
   responses: {
-    201: { description: 'Tenant created', content: { 'application/json': { schema: TenantSchema } } },
+    201: { description: 'Tenant provisioned', content: { 'application/json': { schema: ProvisionTenantResultSchema } } },
     400: commonResponses[400],
     401: commonResponses[401],
     403: commonResponses[403],
+    409: commonResponses[409],
     500: commonResponses[500],
   },
 });
@@ -191,36 +275,95 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: '/platform/tenants',
-  description: 'List all tenants (platform admin only)',
+  description: 'List tenants with pagination (super-admin only)',
   tags: ['Platform - Tenants'],
   security: [{ bearerAuth: [] }],
-  request: {},
+  request: {
+    query: z.object({
+      limit: z.string().optional(),
+      offset: z.string().optional(),
+    }),
+  },
   responses: {
-    200: { description: 'List of tenants', content: { 'application/json': { schema: z.array(TenantSchema) } } },
+    200: { description: 'Paginated list of tenants', content: { 'application/json': { schema: ListTenantsResponseSchema } } },
     401: commonResponses[401],
     403: commonResponses[403],
     500: commonResponses[500],
   },
 });
 
-// Pipeline Analytics
 registry.registerPath({
   method: 'get',
-  path: '/pipelines/{pipelineId}/analytics',
-  description: 'Get pipeline analytics and metrics',
+  path: '/platform/tenants/{id}',
+  description: 'Get a single tenant with its user count (super-admin only)',
+  tags: ['Platform - Tenants'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { description: 'Tenant details', content: { 'application/json': { schema: TenantSchema } } },
+    401: commonResponses[401],
+    403: commonResponses[403],
+    404: commonResponses[404],
+    500: commonResponses[500],
+  },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/platform/tenants/{id}',
+  description: 'Update a tenant (super-admin only)',
+  tags: ['Platform - Tenants'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ id: z.string() }),
+    body: { content: { 'application/json': { schema: UpdateTenantRequestSchema } } },
+  },
+  responses: {
+    200: { description: 'Tenant updated', content: { 'application/json': { schema: TenantSchema } } },
+    400: commonResponses[400],
+    401: commonResponses[401],
+    403: commonResponses[403],
+    404: commonResponses[404],
+    500: commonResponses[500],
+  },
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/platform/tenants/{id}',
+  description: 'Suspend a tenant (super-admin only). Pass ?cascade=true to also remove from Descope.',
+  tags: ['Platform - Tenants'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ id: z.string() }),
+    query: z.object({ cascade: z.string().optional() }),
+  },
+  responses: {
+    204: { description: 'Tenant suspended' },
+    401: commonResponses[401],
+    403: commonResponses[403],
+    404: commonResponses[404],
+    500: commonResponses[500],
+  },
+});
+
+// Pipeline Analytics — real endpoints: /summary, /velocity, /overdue
+registry.registerPath({
+  method: 'get',
+  path: '/pipelines/{pipelineId}/summary',
+  description: 'Pipeline summary with per-stage aggregates and totals',
   tags: ['Analytics'],
   security: [{ bearerAuth: [] }],
   request: { params: z.object({ pipelineId: z.string() }) },
   responses: {
     200: {
-      description: 'Pipeline analytics',
+      description: 'Pipeline summary',
       content: {
         'application/json': {
           schema: z.object({
-            total_value: z.number(),
-            stage_distribution: z.record(z.string(), z.number()),
-            win_rate: z.number(),
-          }),
+            stages: z.array(z.record(z.string(), z.unknown())),
+            totals: z.record(z.string(), z.unknown()),
+          }).passthrough(),
         },
       },
     },
@@ -230,19 +373,29 @@ registry.registerPath({
   },
 });
 
-// Record Relationships
 registry.registerPath({
-  method: 'post',
-  path: '/records/{recordId}/relationships',
-  description: 'Link records via a relationship',
-  tags: ['Record Relationships'],
+  method: 'get',
+  path: '/pipelines/{pipelineId}/velocity',
+  description: 'Stage-by-stage conversion metrics for the given period',
+  tags: ['Analytics'],
   security: [{ bearerAuth: [] }],
   request: {
-    params: z.object({ recordId: z.string() }),
-    body: { content: { 'application/json': { schema: z.object({ relationship_id: z.string(), related_record_id: z.string() }) } } },
+    params: z.object({ pipelineId: z.string() }),
+    query: z.object({
+      period: z.enum(['7d', '30d', '90d', 'all']).optional(),
+    }),
   },
   responses: {
-    201: { description: 'Relationship created', content: { 'application/json': { schema: z.object({ ok: z.boolean() }) } } },
+    200: {
+      description: 'Velocity metrics per stage',
+      content: {
+        'application/json': {
+          schema: z.object({
+            stages: z.array(z.record(z.string(), z.unknown())),
+          }).passthrough(),
+        },
+      },
+    },
     400: commonResponses[400],
     401: commonResponses[401],
     404: commonResponses[404],
@@ -251,15 +404,108 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'get',
+  path: '/pipelines/{pipelineId}/overdue',
+  description: 'Records that have exceeded their stage expected_days threshold',
+  tags: ['Analytics'],
+  security: [{ bearerAuth: [] }],
+  request: { params: z.object({ pipelineId: z.string() }) },
+  responses: {
+    200: { description: 'Overdue records', content: { 'application/json': { schema: z.array(z.record(z.string(), z.unknown())) } } },
+    401: commonResponses[401],
+    404: commonResponses[404],
+    500: commonResponses[500],
+  },
+});
+
+// Record Relationships
+const LinkRecordsRequestSchema = z.object({
+  relationship_id: z.string().optional(),
+  relationshipId: z.string().optional(),
+  target_record_id: z.string().optional(),
+  targetRecordId: z.string().optional(),
+});
+
+const RecordLinkSchema = z.object({
+  id: z.string(),
+  sourceRecordId: z.string(),
+  targetRecordId: z.string(),
+  relationshipId: z.string(),
+  createdAt: z.string(),
+}).passthrough();
+
+const RelatedRecordRowSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  fieldValues: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
+
+registry.registerPath({
+  method: 'post',
+  path: '/records/{id}/relationships',
+  description: 'Link the record to another record via a defined relationship',
+  tags: ['Record Relationships'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ id: z.string() }),
+    body: { content: { 'application/json': { schema: LinkRecordsRequestSchema } } },
+  },
+  responses: {
+    201: { description: 'Relationship created', content: { 'application/json': { schema: RecordLinkSchema } } },
+    400: commonResponses[400],
+    401: commonResponses[401],
+    403: commonResponses[403],
+    404: commonResponses[404],
+    409: commonResponses[409],
+    500: commonResponses[500],
+  },
+});
+
+registry.registerPath({
   method: 'delete',
-  path: '/records/{recordId}/relationships/{relationshipId}/{relatedRecordId}',
+  path: '/records/{id}/relationships/{relId}',
   description: 'Unlink related records',
   tags: ['Record Relationships'],
   security: [{ bearerAuth: [] }],
-  request: { params: z.object({ recordId: z.string(), relationshipId: z.string(), relatedRecordId: z.string() }) },
+  request: { params: z.object({ id: z.string(), relId: z.string() }) },
   responses: {
-    200: { description: 'Relationship deleted', content: { 'application/json': { schema: z.object({ ok: z.boolean() }) } } },
+    204: { description: 'Relationship deleted' },
     401: commonResponses[401],
+    403: commonResponses[403],
+    404: commonResponses[404],
+    500: commonResponses[500],
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/records/{id}/related/{objectApiName}',
+  description: 'Get records related to this record that belong to a specific object type',
+  tags: ['Record Relationships'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ id: z.string(), objectApiName: z.string() }),
+    query: z.object({
+      page: z.string().optional(),
+      limit: z.string().optional(),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Paginated related records',
+      content: {
+        'application/json': {
+          schema: z.object({
+            data: z.array(RelatedRecordRowSchema),
+            total: z.number(),
+            page: z.number(),
+            limit: z.number(),
+          }),
+        },
+      },
+    },
+    401: commonResponses[401],
+    403: commonResponses[403],
     404: commonResponses[404],
     500: commonResponses[500],
   },
@@ -367,8 +613,6 @@ registry.registerPath({
   },
 });
 
-// Add 5 more routes to reach 80% threshold
-
 registry.registerPath({
   method: 'get',
   path: '/admin/objects/{objectId}/layouts',
@@ -397,57 +641,3 @@ registry.registerPath({
     500: commonResponses[500],
   },
 });
-
-registry.registerPath({
-  method: 'get',
-  path: '/admin/pipelines/{pipelineId}/stages',
-  description: 'List stages in a pipeline',
-  tags: ['Admin - Pipelines'],
-  security: [{ bearerAuth: [] }],
-  request: { params: z.object({ pipelineId: z.string() }) },
-  responses: {
-    200: { description: 'List of stages', content: { 'application/json': { schema: z.array(StageSchema) } } },
-    401: commonResponses[401],
-    404: commonResponses[404],
-    500: commonResponses[500],
-  },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/admin/pipelines/{pipelineId}/stages/reorder',
-  description: 'Reorder stages in a pipeline',
-  tags: ['Admin - Pipelines'],
-  security: [{ bearerAuth: [] }],
-  request: {
-    params: z.object({ pipelineId: z.string() }),
-    body: { content: { 'application/json': { schema: z.object({ orderedIds: z.array(z.string()) }) } } },
-  },
-  responses: {
-    200: { description: 'Stages reordered', content: { 'application/json': { schema: z.object({ ok: z.boolean() }) } } },
-    400: commonResponses[400],
-    401: commonResponses[401],
-    500: commonResponses[500],
-  },
-});
-
-registry.registerPath({
-  method: 'put',
-  path: '/platform/tenants/{id}',
-  description: 'Update a tenant (platform admin only)',
-  tags: ['Platform - Tenants'],
-  security: [{ bearerAuth: [] }],
-  request: {
-    params: z.object({ id: z.string() }),
-    body: { content: { 'application/json': { schema: z.object({ name: z.string().optional(), is_active: z.boolean().optional() }) } } },
-  },
-  responses: {
-    200: { description: 'Tenant updated', content: { 'application/json': { schema: TenantSchema } } },
-    400: commonResponses[400],
-    401: commonResponses[401],
-    403: commonResponses[403],
-    404: commonResponses[404],
-    500: commonResponses[500],
-  },
-});
-

@@ -263,9 +263,9 @@ registry.registerPath({
   },
 });
 
-// POST /admin/objects/reorder
+// PUT /admin/objects/reorder
 registry.registerPath({
-  method: 'post',
+  method: 'put',
   path: '/admin/objects/reorder',
   description: 'Reorder object definitions',
   tags: ['Admin - Objects'],
@@ -280,15 +280,8 @@ registry.registerPath({
     },
   },
   responses: {
-    200: {
+    204: {
       description: 'Objects reordered successfully',
-      content: {
-        'application/json': {
-          schema: z.object({
-            ok: z.boolean(),
-          }),
-        },
-      },
     },
     400: commonResponses[400],
     401: commonResponses[401],

@@ -3,32 +3,44 @@ import { registry } from '../lib/openapi.js';
 import { commonResponses } from '../lib/openapi.js';
 
 // Request schemas
+const LinkToSchema = z.object({
+  recordId: z.string(),
+  relationshipId: z.string(),
+  direction: z.enum(['source', 'target']).optional(),
+});
+
 export const CreateRecordRequestSchema = z.object({
-  fieldValues: z.record(z.string(), z.unknown()).optional(),
-  field_values: z.record(z.string(), z.unknown()).optional(),
-  linkTo: z.string().optional(),
-  parent_record_id: z.string().optional(),
+  fieldValues: z.record(z.string(), z.unknown()),
+  linkTo: LinkToSchema.optional(),
 });
 
 export const UpdateRecordRequestSchema = z.object({
-  fieldValues: z.record(z.string(), z.unknown()).optional(),
-  field_values: z.record(z.string(), z.unknown()).optional(),
+  fieldValues: z.record(z.string(), z.unknown()),
 });
 
-// Response schema
+// Response schema — camelCase to match recordService / records.ts responses
 const RecordSchema = z.object({
   id: z.string(),
   objectId: z.string(),
   tenantId: z.string(),
   ownerId: z.string(),
+  name: z.string().optional(),
+  pipelineId: z.string().optional(),
+  currentStageId: z.string().optional(),
   fieldValues: z.record(z.string(), z.unknown()),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
+const ObjectDefinitionSummarySchema = z.object({
+  id: z.string(),
+  apiName: z.string(),
+  label: z.string(),
+  pluralLabel: z.string(),
+}).passthrough();
+
 const RecordWithRelationsSchema = RecordSchema.extend({
   relatedRecords: z.record(z.string(), z.array(z.unknown())).optional(),
-  related_records: z.record(z.string(), z.array(z.unknown())).optional(),
 });
 
 // Register routes
@@ -72,7 +84,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: '/objects/{apiName}/records',
-  description: 'List records for an object',
+  description: 'List records for an object with pagination, search and sorting',
   tags: ['Records'],
   security: [{ bearerAuth: [] }],
   request: {
@@ -80,20 +92,24 @@ registry.registerPath({
       apiName: z.string(),
     }),
     query: z.object({
+      search: z.string().optional(),
       page: z.string().optional(),
       limit: z.string().optional(),
+      sort_by: z.string().optional(),
+      sort_dir: z.enum(['asc', 'desc']).optional(),
     }),
   },
   responses: {
     200: {
-      description: 'List of records',
+      description: 'Paginated list of records',
       content: {
         'application/json': {
           schema: z.object({
-            records: z.array(RecordSchema),
+            data: z.array(RecordSchema),
             total: z.number(),
             page: z.number(),
             limit: z.number(),
+            object: ObjectDefinitionSummarySchema,
           }),
         },
       },
@@ -182,15 +198,8 @@ registry.registerPath({
     }),
   },
   responses: {
-    200: {
+    204: {
       description: 'Record deleted successfully',
-      content: {
-        'application/json': {
-          schema: z.object({
-            ok: z.boolean(),
-          }),
-        },
-      },
     },
     401: commonResponses[401],
     404: commonResponses[404],

@@ -2542,7 +2542,7 @@
       }
     },
     "/admin/objects/reorder": {
-      "post": {
+      "put": {
         "description": "Reorder object definitions",
         "tags": [
           "Admin - Objects"
@@ -2573,23 +2573,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Objects reordered successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
+          "204": {
+            "description": "Objects reordered successfully"
           },
           "400": {
             "description": "Validation error",
@@ -5335,97 +5320,6 @@
             }
           }
         }
-      },
-      "post": {
-        "description": "Reorder stages in a pipeline",
-        "tags": [
-          "Admin - Pipelines"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "pipelineId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "orderedIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "required": [
-                  "orderedIds"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Stages reordered",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/admin/users/invite": {
@@ -5828,19 +5722,32 @@
                       "nullable": true
                     }
                   },
-                  "field_values": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "nullable": true
-                    }
-                  },
                   "linkTo": {
-                    "type": "string"
-                  },
-                  "parent_record_id": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": {
+                      "recordId": {
+                        "type": "string"
+                      },
+                      "relationshipId": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "source",
+                          "target"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "recordId",
+                      "relationshipId"
+                    ]
                   }
-                }
+                },
+                "required": [
+                  "fieldValues"
+                ]
               }
             }
           }
@@ -5863,6 +5770,15 @@
                       "type": "string"
                     },
                     "ownerId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "pipelineId": {
+                      "type": "string"
+                    },
+                    "currentStageId": {
                       "type": "string"
                     },
                     "fieldValues": {
@@ -5934,7 +5850,7 @@
         }
       },
       "get": {
-        "description": "List records for an object",
+        "description": "List records for an object with pagination, search and sorting",
         "tags": [
           "Records"
         ],
@@ -5957,6 +5873,14 @@
               "type": "string"
             },
             "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
             "name": "page",
             "in": "query"
           },
@@ -5967,17 +5891,37 @@
             "required": false,
             "name": "limit",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "sort_by",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "required": false,
+            "name": "sort_dir",
+            "in": "query"
           }
         ],
         "responses": {
           "200": {
-            "description": "List of records",
+            "description": "Paginated list of records",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "records": {
+                    "data": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -5992,6 +5936,15 @@
                             "type": "string"
                           },
                           "ownerId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "pipelineId": {
+                            "type": "string"
+                          },
+                          "currentStageId": {
                             "type": "string"
                           },
                           "fieldValues": {
@@ -6026,13 +5979,40 @@
                     },
                     "limit": {
                       "type": "number"
+                    },
+                    "object": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "apiName": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "pluralLabel": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "apiName",
+                        "label",
+                        "pluralLabel"
+                      ],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
                     }
                   },
                   "required": [
-                    "records",
+                    "data",
                     "total",
                     "page",
-                    "limit"
+                    "limit",
+                    "object"
                   ]
                 }
               }
@@ -6120,6 +6100,15 @@
                     "ownerId": {
                       "type": "string"
                     },
+                    "name": {
+                      "type": "string"
+                    },
+                    "pipelineId": {
+                      "type": "string"
+                    },
+                    "currentStageId": {
+                      "type": "string"
+                    },
                     "fieldValues": {
                       "type": "object",
                       "additionalProperties": {
@@ -6133,15 +6122,6 @@
                       "type": "string"
                     },
                     "relatedRecords": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                          "nullable": true
-                        }
-                      }
-                    },
-                    "related_records": {
                       "type": "object",
                       "additionalProperties": {
                         "type": "array",
@@ -6235,14 +6215,11 @@
                     "additionalProperties": {
                       "nullable": true
                     }
-                  },
-                  "field_values": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "nullable": true
-                    }
                   }
-                }
+                },
+                "required": [
+                  "fieldValues"
+                ]
               }
             }
           }
@@ -6265,6 +6242,15 @@
                       "type": "string"
                     },
                     "ownerId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "pipelineId": {
+                      "type": "string"
+                    },
+                    "currentStageId": {
                       "type": "string"
                     },
                     "fieldValues": {
@@ -6364,23 +6350,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Record deleted successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
+          "204": {
+            "description": "Record deleted successfully"
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
@@ -6416,124 +6387,8 @@
       }
     },
     "/admin/stages/{stageId}/gates": {
-      "post": {
-        "description": "Create a stage gate validation rule",
-        "tags": [
-          "Admin - Stage Gates"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "stageId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "field_id": {
-                    "type": "string"
-                  },
-                  "operator": {
-                    "type": "string"
-                  },
-                  "value": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "field_id",
-                  "operator",
-                  "value"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Stage gate created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "stage_id": {
-                      "type": "string"
-                    },
-                    "field_id": {
-                      "type": "string"
-                    },
-                    "operator": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "string"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "stage_id",
-                    "field_id",
-                    "operator",
-                    "value",
-                    "created_at"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
-        "description": "List stage gates for a stage",
+        "description": "List stage gate validation rules for a stage",
         "tags": [
           "Admin - Stage Gates"
         ],
@@ -6565,29 +6420,62 @@
                       "id": {
                         "type": "string"
                       },
-                      "stage_id": {
+                      "stageId": {
                         "type": "string"
                       },
-                      "field_id": {
+                      "fieldId": {
                         "type": "string"
                       },
-                      "operator": {
+                      "gateType": {
                         "type": "string"
                       },
-                      "value": {
+                      "gateValue": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "errorMessage": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "createdAt": {
                         "type": "string"
                       },
-                      "created_at": {
+                      "updatedAt": {
                         "type": "string"
+                      },
+                      "field": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "apiName": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "dataType": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "apiName",
+                          "label",
+                          "dataType"
+                        ]
                       }
                     },
                     "required": [
                       "id",
-                      "stage_id",
-                      "field_id",
-                      "operator",
-                      "value",
-                      "created_at"
+                      "stageId",
+                      "fieldId",
+                      "gateType",
+                      "gateValue",
+                      "errorMessage",
+                      "createdAt",
+                      "updatedAt"
                     ]
                   }
                 }
@@ -6596,6 +6484,199 @@
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Create a stage gate validation rule",
+        "tags": [
+          "Admin - Stage Gates"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "stageId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "field_id": {
+                    "type": "string"
+                  },
+                  "fieldId": {
+                    "type": "string"
+                  },
+                  "gate_type": {
+                    "type": "string"
+                  },
+                  "gateType": {
+                    "type": "string"
+                  },
+                  "gate_value": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "gateValue": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "error_message": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "errorMessage": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stage gate created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "stageId": {
+                      "type": "string"
+                    },
+                    "fieldId": {
+                      "type": "string"
+                    },
+                    "gateType": {
+                      "type": "string"
+                    },
+                    "gateValue": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "errorMessage": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "apiName": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "dataType": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "apiName",
+                        "label",
+                        "dataType"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "stageId",
+                    "fieldId",
+                    "gateType",
+                    "gateValue",
+                    "errorMessage",
+                    "createdAt",
+                    "updatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -6617,9 +6698,9 @@
         }
       }
     },
-    "/admin/stages/{stageId}/gates/{gateId}": {
-      "delete": {
-        "description": "Delete a stage gate",
+    "/admin/stages/{stageId}/gates/{id}": {
+      "put": {
+        "description": "Update a stage gate validation rule",
         "tags": [
           "Admin - Stage Gates"
         ],
@@ -6642,28 +6723,188 @@
               "type": "string"
             },
             "required": true,
-            "name": "gateId",
+            "name": "id",
             "in": "path"
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "gate_type": {
+                    "type": "string"
+                  },
+                  "gateType": {
+                    "type": "string"
+                  },
+                  "gate_value": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "gateValue": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "error_message": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "errorMessage": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Gate deleted",
+            "description": "Stage gate updated",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean"
+                    "id": {
+                      "type": "string"
+                    },
+                    "stageId": {
+                      "type": "string"
+                    },
+                    "fieldId": {
+                      "type": "string"
+                    },
+                    "gateType": {
+                      "type": "string"
+                    },
+                    "gateValue": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "errorMessage": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "apiName": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "dataType": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "apiName",
+                        "label",
+                        "dataType"
+                      ]
                     }
                   },
                   "required": [
-                    "ok"
+                    "id",
+                    "stageId",
+                    "fieldId",
+                    "gateType",
+                    "gateValue",
+                    "errorMessage",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
             }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "Delete a stage gate validation rule",
+        "tags": [
+          "Admin - Stage Gates"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "stageId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gate deleted"
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
@@ -6700,7 +6941,7 @@
     },
     "/admin/targets": {
       "post": {
-        "description": "Create a target definition",
+        "description": "Create or update (upsert) a sales target",
         "tags": [
           "Admin - Targets"
         ],
@@ -6715,28 +6956,75 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": {
+                  "target_type": {
+                    "type": "string",
+                    "enum": [
+                      "business",
+                      "team",
+                      "user"
+                    ]
+                  },
+                  "targetType": {
+                    "type": "string",
+                    "enum": [
+                      "business",
+                      "team",
+                      "user"
+                    ]
+                  },
+                  "target_entity_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "targetEntityId": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "period_type": {
+                    "type": "string",
+                    "enum": [
+                      "monthly",
+                      "quarterly",
+                      "annual"
+                    ]
+                  },
+                  "periodType": {
+                    "type": "string",
+                    "enum": [
+                      "monthly",
+                      "quarterly",
+                      "annual"
+                    ]
+                  },
+                  "period_start": {
+                    "type": "string"
+                  },
+                  "periodStart": {
+                    "type": "string"
+                  },
+                  "period_end": {
+                    "type": "string"
+                  },
+                  "periodEnd": {
                     "type": "string"
                   },
                   "target_value": {
                     "type": "number"
                   },
-                  "period": {
+                  "targetValue": {
+                    "type": "number"
+                  },
+                  "currency": {
                     "type": "string"
                   }
-                },
-                "required": [
-                  "name",
-                  "target_value",
-                  "period"
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Target created",
+            "description": "Target created/updated",
             "content": {
               "application/json": {
                 "schema": {
@@ -6745,29 +7033,55 @@
                     "id": {
                       "type": "string"
                     },
-                    "name": {
+                    "tenant_id": {
+                      "type": "string"
+                    },
+                    "target_type": {
+                      "type": "string"
+                    },
+                    "target_entity_id": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "period_type": {
+                      "type": "string"
+                    },
+                    "period_start": {
+                      "type": "string"
+                    },
+                    "period_end": {
                       "type": "string"
                     },
                     "target_value": {
                       "type": "number"
                     },
-                    "period": {
-                      "type": "string"
+                    "currency": {
+                      "type": "string",
+                      "nullable": true
                     },
-                    "tenant_id": {
+                    "created_by": {
                       "type": "string"
                     },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
                       "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "name",
-                    "target_value",
-                    "period",
                     "tenant_id",
-                    "created_at"
+                    "target_type",
+                    "target_entity_id",
+                    "period_type",
+                    "period_start",
+                    "period_end",
+                    "target_value",
+                    "currency",
+                    "created_by",
+                    "created_at",
+                    "updated_at"
                   ]
                 }
               }
@@ -6793,6 +7107,16 @@
               }
             }
           },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -6806,13 +7130,31 @@
         }
       },
       "get": {
-        "description": "List all targets",
+        "description": "List all sales targets for the tenant, optionally filtered by period",
         "tags": [
           "Admin - Targets"
         ],
         "security": [
           {
             "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "period_start",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "period_end",
+            "in": "query"
           }
         ],
         "responses": {
@@ -6828,29 +7170,55 @@
                       "id": {
                         "type": "string"
                       },
-                      "name": {
+                      "tenant_id": {
+                        "type": "string"
+                      },
+                      "target_type": {
+                        "type": "string"
+                      },
+                      "target_entity_id": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "period_type": {
+                        "type": "string"
+                      },
+                      "period_start": {
+                        "type": "string"
+                      },
+                      "period_end": {
                         "type": "string"
                       },
                       "target_value": {
                         "type": "number"
                       },
-                      "period": {
-                        "type": "string"
+                      "currency": {
+                        "type": "string",
+                        "nullable": true
                       },
-                      "tenant_id": {
+                      "created_by": {
                         "type": "string"
                       },
                       "created_at": {
+                        "type": "string"
+                      },
+                      "updated_at": {
                         "type": "string"
                       }
                     },
                     "required": [
                       "id",
-                      "name",
-                      "target_value",
-                      "period",
                       "tenant_id",
-                      "created_at"
+                      "target_type",
+                      "target_entity_id",
+                      "period_type",
+                      "period_start",
+                      "period_end",
+                      "target_value",
+                      "currency",
+                      "created_by",
+                      "created_at",
+                      "updated_at"
                     ]
                   }
                 }
@@ -6859,6 +7227,16 @@
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -6881,126 +7259,8 @@
       }
     },
     "/admin/targets/{id}": {
-      "put": {
-        "description": "Update a target",
-        "tags": [
-          "Admin - Targets"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "target_value": {
-                    "type": "number"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Target updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "target_value": {
-                      "type": "number"
-                    },
-                    "period": {
-                      "type": "string"
-                    },
-                    "tenant_id": {
-                      "type": "string"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "target_value",
-                    "period",
-                    "tenant_id",
-                    "created_at"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
       "delete": {
-        "description": "Delete a target",
+        "description": "Delete a sales target by ID",
         "tags": [
           "Admin - Targets"
         ],
@@ -7020,26 +7280,21 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Target deleted",
+          "204": {
+            "description": "Target deleted"
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
           },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -7098,29 +7353,55 @@
                           "id": {
                             "type": "string"
                           },
-                          "name": {
+                          "tenant_id": {
+                            "type": "string"
+                          },
+                          "target_type": {
+                            "type": "string"
+                          },
+                          "target_entity_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "period_type": {
+                            "type": "string"
+                          },
+                          "period_start": {
+                            "type": "string"
+                          },
+                          "period_end": {
                             "type": "string"
                           },
                           "target_value": {
                             "type": "number"
                           },
-                          "period": {
-                            "type": "string"
+                          "currency": {
+                            "type": "string",
+                            "nullable": true
                           },
-                          "tenant_id": {
+                          "created_by": {
                             "type": "string"
                           },
                           "created_at": {
+                            "type": "string"
+                          },
+                          "updated_at": {
                             "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name",
-                          "target_value",
-                          "period",
                           "tenant_id",
-                          "created_at"
+                          "target_type",
+                          "target_entity_id",
+                          "period_type",
+                          "period_start",
+                          "period_end",
+                          "target_value",
+                          "currency",
+                          "created_by",
+                          "created_at",
+                          "updated_at"
                         ]
                       },
                       "progress": {
@@ -7161,7 +7442,7 @@
     },
     "/platform/tenants": {
       "post": {
-        "description": "Create a new tenant (platform admin only)",
+        "description": "Provision a new tenant end-to-end (super-admin only)",
         "tags": [
           "Platform - Tenants"
         ],
@@ -7178,10 +7459,26 @@
                 "properties": {
                   "name": {
                     "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "adminEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "adminName": {
+                    "type": "string"
+                  },
+                  "plan": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "name"
+                  "name",
+                  "slug",
+                  "adminEmail",
+                  "adminName"
                 ]
               }
             }
@@ -7189,31 +7486,62 @@
         },
         "responses": {
           "201": {
-            "description": "Tenant created",
+            "description": "Tenant provisioned",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
+                    "tenant": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "plan": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "slug",
+                        "status",
+                        "createdAt"
+                      ]
+                    },
+                    "descopeTenantId": {
                       "type": "string"
                     },
-                    "name": {
+                    "adminUserId": {
                       "type": "string"
                     },
-                    "is_active": {
-                      "type": "boolean"
-                    },
-                    "created_at": {
+                    "inviteUrl": {
                       "type": "string"
                     }
                   },
                   "required": [
-                    "id",
-                    "name",
-                    "is_active",
-                    "created_at"
-                  ]
+                    "tenant"
+                  ],
+                  "additionalProperties": {
+                    "nullable": true
+                  }
                 }
               }
             }
@@ -7240,6 +7568,16 @@
           },
           "403": {
             "description": "Forbidden - insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -7261,7 +7599,7 @@
         }
       },
       "get": {
-        "description": "List all tenants (platform admin only)",
+        "description": "List tenants with pagination (super-admin only)",
         "tags": [
           "Platform - Tenants"
         ],
@@ -7270,36 +7608,85 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "List of tenants",
+            "description": "Paginated list of tenants",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "is_active": {
-                        "type": "boolean"
-                      },
-                      "created_at": {
-                        "type": "string"
+                  "type": "object",
+                  "properties": {
+                    "tenants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "plan": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "slug",
+                          "status",
+                          "createdAt"
+                        ]
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "is_active",
-                      "created_at"
-                    ]
-                  }
+                    "total": {
+                      "type": "number"
+                    },
+                    "limit": {
+                      "type": "number"
+                    },
+                    "offset": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "tenants",
+                    "total",
+                    "limit",
+                    "offset"
+                  ]
                 }
               }
             }
@@ -7337,9 +7724,323 @@
         }
       }
     },
-    "/pipelines/{pipelineId}/analytics": {
+    "/platform/tenants/{id}": {
       "get": {
-        "description": "Get pipeline analytics and metrics",
+        "description": "Get a single tenant with its user count (super-admin only)",
+        "tags": [
+          "Platform - Tenants"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "status",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "description": "Update a tenant (super-admin only)",
+        "tags": [
+          "Platform - Tenants"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "plan": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tenant updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "plan": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "status",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "Suspend a tenant (super-admin only). Pass ?cascade=true to also remove from Descope.",
+        "tags": [
+          "Platform - Tenants"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cascade",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tenant suspended"
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipelines/{pipelineId}/summary": {
+      "get": {
+        "description": "Pipeline summary with per-stage aggregates and totals",
         "tags": [
           "Analytics"
         ],
@@ -7360,30 +8061,35 @@
         ],
         "responses": {
           "200": {
-            "description": "Pipeline analytics",
+            "description": "Pipeline summary",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "total_value": {
-                      "type": "number"
-                    },
-                    "stage_distribution": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "number"
+                    "stages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "nullable": true
+                        }
                       }
                     },
-                    "win_rate": {
-                      "type": "number"
+                    "totals": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "nullable": true
+                      }
                     }
                   },
                   "required": [
-                    "total_value",
-                    "stage_distribution",
-                    "win_rate"
-                  ]
+                    "stages",
+                    "totals"
+                  ],
+                  "additionalProperties": {
+                    "nullable": true
+                  }
                 }
               }
             }
@@ -7421,11 +8127,11 @@
         }
       }
     },
-    "/records/{recordId}/relationships": {
-      "post": {
-        "description": "Link records via a relationship",
+    "/pipelines/{pipelineId}/velocity": {
+      "get": {
+        "description": "Stage-by-stage conversion metrics for the given period",
         "tags": [
-          "Record Relationships"
+          "Analytics"
         ],
         "security": [
           {
@@ -7438,46 +8144,48 @@
               "type": "string"
             },
             "required": true,
-            "name": "recordId",
+            "name": "pipelineId",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d",
+                "all"
+              ]
+            },
+            "required": false,
+            "name": "period",
+            "in": "query"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "relationship_id": {
-                    "type": "string"
-                  },
-                  "related_record_id": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "relationship_id",
-                  "related_record_id"
-                ]
-              }
-            }
-          }
-        },
         "responses": {
-          "201": {
-            "description": "Relationship created",
+          "200": {
+            "description": "Velocity metrics per stage",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean"
+                    "stages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      }
                     }
                   },
                   "required": [
-                    "ok"
-                  ]
+                    "stages"
+                  ],
+                  "additionalProperties": {
+                    "nullable": true
+                  }
                 }
               }
             }
@@ -7525,7 +8233,223 @@
         }
       }
     },
-    "/records/{recordId}/relationships/{relationshipId}/{relatedRecordId}": {
+    "/pipelines/{pipelineId}/overdue": {
+      "get": {
+        "description": "Records that have exceeded their stage expected_days threshold",
+        "tags": [
+          "Analytics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "pipelineId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Overdue records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/records/{id}/relationships": {
+      "post": {
+        "description": "Link the record to another record via a defined relationship",
+        "tags": [
+          "Record Relationships"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "relationship_id": {
+                    "type": "string"
+                  },
+                  "relationshipId": {
+                    "type": "string"
+                  },
+                  "target_record_id": {
+                    "type": "string"
+                  },
+                  "targetRecordId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Relationship created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "sourceRecordId": {
+                      "type": "string"
+                    },
+                    "targetRecordId": {
+                      "type": "string"
+                    },
+                    "relationshipId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "sourceRecordId",
+                    "targetRecordId",
+                    "relationshipId",
+                    "createdAt"
+                  ],
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/records/{id}/relationships/{relId}": {
       "delete": {
         "description": "Unlink related records",
         "tags": [
@@ -7542,7 +8466,7 @@
               "type": "string"
             },
             "required": true,
-            "name": "recordId",
+            "name": "id",
             "in": "path"
           },
           {
@@ -7550,32 +8474,151 @@
               "type": "string"
             },
             "required": true,
-            "name": "relationshipId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "relatedRecordId",
+            "name": "relId",
             "in": "path"
           }
         ],
         "responses": {
+          "204": {
+            "description": "Relationship deleted"
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/records/{id}/related/{objectApiName}": {
+      "get": {
+        "description": "Get records related to this record that belong to a specific object type",
+        "tags": [
+          "Record Relationships"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "objectApiName",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
           "200": {
-            "description": "Relationship deleted",
+            "description": "Paginated related records",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean"
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "fieldValues": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            }
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "page": {
+                      "type": "number"
+                    },
+                    "limit": {
+                      "type": "number"
                     }
                   },
                   "required": [
-                    "ok"
+                    "data",
+                    "total",
+                    "page",
+                    "limit"
                   ]
                 }
               }
@@ -7583,6 +8626,16 @@
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -8213,229 +9266,6 @@
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/pipelines/{pipelineId}/stages": {
-      "get": {
-        "description": "List stages in a pipeline",
-        "tags": [
-          "Admin - Pipelines"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "pipelineId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of stages",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "pipeline_id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "display_order": {
-                        "type": "number"
-                      },
-                      "probability": {
-                        "type": "number",
-                        "nullable": true
-                      },
-                      "created_at": {
-                        "type": "string"
-                      },
-                      "updated_at": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "pipeline_id",
-                      "name",
-                      "display_order",
-                      "probability",
-                      "created_at",
-                      "updated_at"
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/platform/tenants/{id}": {
-      "put": {
-        "description": "Update a tenant (platform admin only)",
-        "tags": [
-          "Platform - Tenants"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "is_active": {
-                    "type": "boolean"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Tenant updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "is_active": {
-                      "type": "boolean"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "is_active",
-                    "created_at"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
