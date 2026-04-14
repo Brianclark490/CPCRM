@@ -20,7 +20,7 @@ export const CreateAccountRequestSchema = z.object({
 
 export const UpdateAccountRequestSchema = CreateAccountRequestSchema.partial();
 
-// Response schema
+// Response schema - camelCase to match API
 const AccountSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -28,17 +28,17 @@ const AccountSchema = z.object({
   website: z.string().nullable(),
   phone: z.string().nullable(),
   email: z.string().nullable(),
-  address_line_1: z.string().nullable(),
-  address_line_2: z.string().nullable(),
+  addressLine1: z.string().nullable(),
+  addressLine2: z.string().nullable(),
   city: z.string().nullable(),
   region: z.string().nullable(),
-  postal_code: z.string().nullable(),
+  postalCode: z.string().nullable(),
   country: z.string().nullable(),
   notes: z.string().nullable(),
-  tenant_id: z.string(),
-  owner_id: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  tenantId: z.string(),
+  ownerId: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 const OpportunitySchema = z.object({
@@ -46,8 +46,8 @@ const OpportunitySchema = z.object({
   name: z.string(),
   amount: z.number().nullable(),
   stage: z.string(),
-  close_date: z.string().nullable(),
-  created_at: z.string(),
+  closeDate: z.string().nullable(),
+  createdAt: z.string(),
 });
 
 const AccountWithOpportunitiesSchema = AccountSchema.extend({
@@ -88,24 +88,36 @@ registry.registerPath({
   },
 });
 
-// GET /accounts
+// GET /accounts - returns paginated response
 registry.registerPath({
   method: 'get',
   path: '/accounts',
-  description: 'List all accounts',
+  description: 'List accounts with pagination and search',
   tags: ['Accounts'],
   security: [{ bearerAuth: [] }],
-  request: {},
+  request: {
+    query: z.object({
+      search: z.string().optional(),
+      page: z.string().optional(),
+      limit: z.string().optional(),
+    }),
+  },
   responses: {
     200: {
-      description: 'List of accounts',
+      description: 'Paginated list of accounts',
       content: {
         'application/json': {
-          schema: z.array(AccountSchema),
+          schema: z.object({
+            data: z.array(AccountSchema),
+            total: z.number(),
+            page: z.number(),
+            limit: z.number(),
+          }),
         },
       },
     },
     401: commonResponses[401],
+    403: commonResponses[403],
     500: commonResponses[500],
   },
 });
@@ -132,6 +144,7 @@ registry.registerPath({
       },
     },
     401: commonResponses[401],
+    403: commonResponses[403],
     404: commonResponses[404],
     500: commonResponses[500],
   },
@@ -167,12 +180,13 @@ registry.registerPath({
     },
     400: commonResponses[400],
     401: commonResponses[401],
+    403: commonResponses[403],
     404: commonResponses[404],
     500: commonResponses[500],
   },
 });
 
-// DELETE /accounts/:id
+// DELETE /accounts/:id - returns 204
 registry.registerPath({
   method: 'delete',
   path: '/accounts/{id}',
@@ -185,17 +199,11 @@ registry.registerPath({
     }),
   },
   responses: {
-    200: {
+    204: {
       description: 'Account deleted successfully',
-      content: {
-        'application/json': {
-          schema: z.object({
-            ok: z.boolean(),
-          }),
-        },
-      },
     },
     401: commonResponses[401],
+    403: commonResponses[403],
     404: commonResponses[404],
     500: commonResponses[500],
   },

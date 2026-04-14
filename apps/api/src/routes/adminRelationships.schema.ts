@@ -4,28 +4,43 @@ import { commonResponses } from '../lib/openapi.js';
 
 // Request schemas
 export const CreateRelationshipRequestSchema = z.object({
-  from_object_id: z.string(),
-  to_object_id: z.string(),
-  label: z.string().min(1, 'Label is required'),
-  relationship_type: z.enum(['one_to_many', 'many_to_one', 'many_to_many']),
-  cascade_delete: z.boolean().optional(),
-});
-
-export const UpdateRelationshipRequestSchema = z.object({
+  sourceObjectId: z.string().optional(),
+  source_object_id: z.string().optional(),
+  targetObjectId: z.string().optional(),
+  target_object_id: z.string().optional(),
+  relationshipType: z.enum(['lookup', 'parent_child']).optional(),
+  relationship_type: z.enum(['lookup', 'parent_child']).optional(),
+  apiName: z.string().optional(),
+  api_name: z.string().optional(),
   label: z.string().optional(),
-  cascade_delete: z.boolean().optional(),
+  reverseLabel: z.string().optional(),
+  reverse_label: z.string().optional(),
+  required: z.boolean().optional(),
 });
 
 // Response schema
 const RelationshipSchema = z.object({
   id: z.string(),
-  from_object_id: z.string(),
-  to_object_id: z.string(),
+  sourceObjectId: z.string(),
+  targetObjectId: z.string(),
+  apiName: z.string(),
   label: z.string(),
-  relationship_type: z.string(),
-  cascade_delete: z.boolean(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  reverseLabel: z.string().optional(),
+  relationshipType: z.string(),
+  required: z.boolean().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const RelationshipWithObjectsSchema = RelationshipSchema.extend({
+  sourceObject: z.object({
+    label: z.string(),
+    pluralLabel: z.string(),
+  }).optional(),
+  targetObject: z.object({
+    label: z.string(),
+    pluralLabel: z.string(),
+  }).optional(),
 });
 
 // Register routes
@@ -61,57 +76,27 @@ registry.registerPath({
   },
 });
 
-// GET /admin/relationships
+// GET /admin/objects/:objectId/relationships
 registry.registerPath({
   method: 'get',
-  path: '/admin/relationships',
-  description: 'List all relationships',
-  tags: ['Admin - Relationships'],
-  security: [{ bearerAuth: [] }],
-  request: {},
-  responses: {
-    200: {
-      description: 'List of relationships',
-      content: {
-        'application/json': {
-          schema: z.array(RelationshipSchema),
-        },
-      },
-    },
-    401: commonResponses[401],
-    500: commonResponses[500],
-  },
-});
-
-// PUT /admin/relationships/:id
-registry.registerPath({
-  method: 'put',
-  path: '/admin/relationships/{id}',
-  description: 'Update a relationship',
+  path: '/admin/objects/{objectId}/relationships',
+  description: 'List relationships for an object',
   tags: ['Admin - Relationships'],
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      objectId: z.string(),
     }),
-    body: {
-      content: {
-        'application/json': {
-          schema: UpdateRelationshipRequestSchema,
-        },
-      },
-    },
   },
   responses: {
     200: {
-      description: 'Relationship updated successfully',
+      description: 'List of relationships with object metadata',
       content: {
         'application/json': {
-          schema: RelationshipSchema,
+          schema: z.array(RelationshipWithObjectsSchema),
         },
       },
     },
-    400: commonResponses[400],
     401: commonResponses[401],
     404: commonResponses[404],
     500: commonResponses[500],
@@ -122,7 +107,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'delete',
   path: '/admin/relationships/{id}',
-  description: 'Delete a relationship',
+  description: 'Delete a relationship definition',
   tags: ['Admin - Relationships'],
   security: [{ bearerAuth: [] }],
   request: {
@@ -131,16 +116,10 @@ registry.registerPath({
     }),
   },
   responses: {
-    200: {
+    204: {
       description: 'Relationship deleted successfully',
-      content: {
-        'application/json': {
-          schema: z.object({
-            ok: z.boolean(),
-          }),
-        },
-      },
     },
+    400: commonResponses[400],
     401: commonResponses[401],
     404: commonResponses[404],
     500: commonResponses[500],

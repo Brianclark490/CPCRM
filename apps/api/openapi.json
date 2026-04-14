@@ -643,11 +643,11 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "address_line_1": {
+                    "addressLine1": {
                       "type": "string",
                       "nullable": true
                     },
-                    "address_line_2": {
+                    "addressLine2": {
                       "type": "string",
                       "nullable": true
                     },
@@ -659,7 +659,7 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "postal_code": {
+                    "postalCode": {
                       "type": "string",
                       "nullable": true
                     },
@@ -671,16 +671,16 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "tenant_id": {
+                    "tenantId": {
                       "type": "string"
                     },
-                    "owner_id": {
+                    "ownerId": {
                       "type": "string"
                     },
-                    "created_at": {
+                    "createdAt": {
                       "type": "string"
                     },
-                    "updated_at": {
+                    "updatedAt": {
                       "type": "string"
                     }
                   },
@@ -691,17 +691,17 @@
                     "website",
                     "phone",
                     "email",
-                    "address_line_1",
-                    "address_line_2",
+                    "addressLine1",
+                    "addressLine2",
                     "city",
                     "region",
-                    "postal_code",
+                    "postalCode",
                     "country",
                     "notes",
-                    "tenant_id",
-                    "owner_id",
-                    "created_at",
-                    "updated_at"
+                    "tenantId",
+                    "ownerId",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -750,7 +750,7 @@
         }
       },
       "get": {
-        "description": "List all accounts",
+        "description": "List accounts with pagination and search",
         "tags": [
           "Accounts"
         ],
@@ -759,105 +759,161 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "List of accounts",
+            "description": "Paginated list of accounts",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "industry": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "website": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "phone": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "email": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "address_line_1": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "address_line_2": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "city": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "region": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "postal_code": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "country": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "notes": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "tenant_id": {
-                        "type": "string"
-                      },
-                      "owner_id": {
-                        "type": "string"
-                      },
-                      "created_at": {
-                        "type": "string"
-                      },
-                      "updated_at": {
-                        "type": "string"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "industry": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "website": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "phone": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "email": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "addressLine1": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "addressLine2": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "city": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "region": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "postalCode": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "country": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "notes": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "tenantId": {
+                            "type": "string"
+                          },
+                          "ownerId": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "industry",
+                          "website",
+                          "phone",
+                          "email",
+                          "addressLine1",
+                          "addressLine2",
+                          "city",
+                          "region",
+                          "postalCode",
+                          "country",
+                          "notes",
+                          "tenantId",
+                          "ownerId",
+                          "createdAt",
+                          "updatedAt"
+                        ]
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "industry",
-                      "website",
-                      "phone",
-                      "email",
-                      "address_line_1",
-                      "address_line_2",
-                      "city",
-                      "region",
-                      "postal_code",
-                      "country",
-                      "notes",
-                      "tenant_id",
-                      "owner_id",
-                      "created_at",
-                      "updated_at"
-                    ]
-                  }
+                    "total": {
+                      "type": "number"
+                    },
+                    "page": {
+                      "type": "number"
+                    },
+                    "limit": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "total",
+                    "page",
+                    "limit"
+                  ]
                 }
               }
             }
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -930,11 +986,11 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "address_line_1": {
+                    "addressLine1": {
                       "type": "string",
                       "nullable": true
                     },
-                    "address_line_2": {
+                    "addressLine2": {
                       "type": "string",
                       "nullable": true
                     },
@@ -946,7 +1002,7 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "postal_code": {
+                    "postalCode": {
                       "type": "string",
                       "nullable": true
                     },
@@ -958,16 +1014,16 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "tenant_id": {
+                    "tenantId": {
                       "type": "string"
                     },
-                    "owner_id": {
+                    "ownerId": {
                       "type": "string"
                     },
-                    "created_at": {
+                    "createdAt": {
                       "type": "string"
                     },
-                    "updated_at": {
+                    "updatedAt": {
                       "type": "string"
                     },
                     "opportunities": {
@@ -988,11 +1044,11 @@
                           "stage": {
                             "type": "string"
                           },
-                          "close_date": {
+                          "closeDate": {
                             "type": "string",
                             "nullable": true
                           },
-                          "created_at": {
+                          "createdAt": {
                             "type": "string"
                           }
                         },
@@ -1001,8 +1057,8 @@
                           "name",
                           "amount",
                           "stage",
-                          "close_date",
-                          "created_at"
+                          "closeDate",
+                          "createdAt"
                         ]
                       }
                     }
@@ -1014,17 +1070,17 @@
                     "website",
                     "phone",
                     "email",
-                    "address_line_1",
-                    "address_line_2",
+                    "addressLine1",
+                    "addressLine2",
                     "city",
                     "region",
-                    "postal_code",
+                    "postalCode",
                     "country",
                     "notes",
-                    "tenant_id",
-                    "owner_id",
-                    "created_at",
-                    "updated_at",
+                    "tenantId",
+                    "ownerId",
+                    "createdAt",
+                    "updatedAt",
                     "opportunities"
                   ]
                 }
@@ -1033,6 +1089,16 @@
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -1163,11 +1229,11 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "address_line_1": {
+                    "addressLine1": {
                       "type": "string",
                       "nullable": true
                     },
-                    "address_line_2": {
+                    "addressLine2": {
                       "type": "string",
                       "nullable": true
                     },
@@ -1179,7 +1245,7 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "postal_code": {
+                    "postalCode": {
                       "type": "string",
                       "nullable": true
                     },
@@ -1191,16 +1257,16 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "tenant_id": {
+                    "tenantId": {
                       "type": "string"
                     },
-                    "owner_id": {
+                    "ownerId": {
                       "type": "string"
                     },
-                    "created_at": {
+                    "createdAt": {
                       "type": "string"
                     },
-                    "updated_at": {
+                    "updatedAt": {
                       "type": "string"
                     }
                   },
@@ -1211,17 +1277,17 @@
                     "website",
                     "phone",
                     "email",
-                    "address_line_1",
-                    "address_line_2",
+                    "addressLine1",
+                    "addressLine2",
                     "city",
                     "region",
-                    "postal_code",
+                    "postalCode",
                     "country",
                     "notes",
-                    "tenant_id",
-                    "owner_id",
-                    "created_at",
-                    "updated_at"
+                    "tenantId",
+                    "ownerId",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -1239,6 +1305,16 @@
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -1290,26 +1366,21 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Account deleted successfully",
+          "204": {
+            "description": "Account deleted successfully"
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
           },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -1360,24 +1431,21 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "user_id": {
-                      "type": "string"
-                    },
-                    "name": {
+                    "userId": {
                       "type": "string"
                     },
                     "email": {
                       "type": "string",
                       "format": "email"
                     },
+                    "displayName": {
+                      "type": "string"
+                    },
                     "phone": {
                       "type": "string",
                       "nullable": true
                     },
-                    "title": {
+                    "jobTitle": {
                       "type": "string",
                       "nullable": true
                     },
@@ -1385,23 +1453,21 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "created_at": {
+                    "createdAt": {
                       "type": "string"
                     },
-                    "updated_at": {
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "updatedBy": {
                       "type": "string"
                     }
                   },
                   "required": [
-                    "id",
-                    "user_id",
-                    "name",
+                    "userId",
                     "email",
-                    "phone",
-                    "title",
-                    "department",
-                    "created_at",
-                    "updated_at"
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -1445,20 +1511,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": {
+                  "displayName": {
                     "type": "string"
                   },
-                  "email": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "phone": {
-                    "type": "string"
-                  },
-                  "title": {
-                    "type": "string"
-                  },
-                  "department": {
+                  "jobTitle": {
                     "type": "string"
                   }
                 }
@@ -1474,24 +1530,21 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "user_id": {
-                      "type": "string"
-                    },
-                    "name": {
+                    "userId": {
                       "type": "string"
                     },
                     "email": {
                       "type": "string",
                       "format": "email"
                     },
+                    "displayName": {
+                      "type": "string"
+                    },
                     "phone": {
                       "type": "string",
                       "nullable": true
                     },
-                    "title": {
+                    "jobTitle": {
                       "type": "string",
                       "nullable": true
                     },
@@ -1499,23 +1552,21 @@
                       "type": "string",
                       "nullable": true
                     },
-                    "created_at": {
+                    "createdAt": {
                       "type": "string"
                     },
-                    "updated_at": {
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "updatedBy": {
                       "type": "string"
                     }
                   },
                   "required": [
-                    "id",
-                    "user_id",
-                    "name",
+                    "userId",
                     "email",
-                    "phone",
-                    "title",
-                    "department",
-                    "created_at",
-                    "updated_at"
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -1533,6 +1584,16 @@
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1621,10 +1682,16 @@
                     "id": {
                       "type": "string"
                     },
+                    "apiName": {
+                      "type": "string"
+                    },
                     "api_name": {
                       "type": "string"
                     },
                     "label": {
+                      "type": "string"
+                    },
+                    "pluralLabel": {
                       "type": "string"
                     },
                     "plural_label": {
@@ -1638,19 +1705,37 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "isSystem": {
+                      "type": "boolean"
+                    },
                     "is_system": {
                       "type": "boolean"
                     },
+                    "tenantId": {
+                      "type": "string"
+                    },
                     "tenant_id": {
+                      "type": "string"
+                    },
+                    "ownerId": {
                       "type": "string"
                     },
                     "owner_id": {
                       "type": "string"
                     },
+                    "displayOrder": {
+                      "type": "number"
+                    },
                     "display_order": {
                       "type": "number"
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -1659,17 +1744,17 @@
                   },
                   "required": [
                     "id",
-                    "api_name",
+                    "apiName",
                     "label",
-                    "plural_label",
+                    "pluralLabel",
                     "description",
                     "icon",
-                    "is_system",
-                    "tenant_id",
-                    "owner_id",
-                    "display_order",
-                    "created_at",
-                    "updated_at"
+                    "isSystem",
+                    "tenantId",
+                    "ownerId",
+                    "displayOrder",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -1740,10 +1825,16 @@
                       "id": {
                         "type": "string"
                       },
+                      "apiName": {
+                        "type": "string"
+                      },
                       "api_name": {
                         "type": "string"
                       },
                       "label": {
+                        "type": "string"
+                      },
+                      "pluralLabel": {
                         "type": "string"
                       },
                       "plural_label": {
@@ -1757,25 +1848,49 @@
                         "type": "string",
                         "nullable": true
                       },
+                      "isSystem": {
+                        "type": "boolean"
+                      },
                       "is_system": {
                         "type": "boolean"
                       },
+                      "tenantId": {
+                        "type": "string"
+                      },
                       "tenant_id": {
+                        "type": "string"
+                      },
+                      "ownerId": {
                         "type": "string"
                       },
                       "owner_id": {
                         "type": "string"
                       },
+                      "displayOrder": {
+                        "type": "number"
+                      },
                       "display_order": {
                         "type": "number"
                       },
+                      "createdAt": {
+                        "type": "string"
+                      },
                       "created_at": {
+                        "type": "string"
+                      },
+                      "updatedAt": {
                         "type": "string"
                       },
                       "updated_at": {
                         "type": "string"
                       },
+                      "fieldCount": {
+                        "type": "number"
+                      },
                       "field_count": {
+                        "type": "number"
+                      },
+                      "recordCount": {
                         "type": "number"
                       },
                       "record_count": {
@@ -1784,19 +1899,19 @@
                     },
                     "required": [
                       "id",
-                      "api_name",
+                      "apiName",
                       "label",
-                      "plural_label",
+                      "pluralLabel",
                       "description",
                       "icon",
-                      "is_system",
-                      "tenant_id",
-                      "owner_id",
-                      "display_order",
-                      "created_at",
-                      "updated_at",
-                      "field_count",
-                      "record_count"
+                      "isSystem",
+                      "tenantId",
+                      "ownerId",
+                      "displayOrder",
+                      "createdAt",
+                      "updatedAt",
+                      "fieldCount",
+                      "recordCount"
                     ]
                   }
                 }
@@ -1858,10 +1973,16 @@
                     "id": {
                       "type": "string"
                     },
+                    "apiName": {
+                      "type": "string"
+                    },
                     "api_name": {
                       "type": "string"
                     },
                     "label": {
+                      "type": "string"
+                    },
+                    "pluralLabel": {
                       "type": "string"
                     },
                     "plural_label": {
@@ -1875,19 +1996,37 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "isSystem": {
+                      "type": "boolean"
+                    },
                     "is_system": {
                       "type": "boolean"
                     },
+                    "tenantId": {
+                      "type": "string"
+                    },
                     "tenant_id": {
+                      "type": "string"
+                    },
+                    "ownerId": {
                       "type": "string"
                     },
                     "owner_id": {
                       "type": "string"
                     },
+                    "displayOrder": {
+                      "type": "number"
+                    },
                     "display_order": {
                       "type": "number"
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -1901,7 +2040,13 @@
                           "id": {
                             "type": "string"
                           },
+                          "objectId": {
+                            "type": "string"
+                          },
                           "object_id": {
+                            "type": "string"
+                          },
+                          "apiName": {
                             "type": "string"
                           },
                           "api_name": {
@@ -1910,14 +2055,26 @@
                           "label": {
                             "type": "string"
                           },
+                          "dataType": {
+                            "type": "string"
+                          },
                           "data_type": {
                             "type": "string"
+                          },
+                          "isRequired": {
+                            "type": "boolean"
                           },
                           "is_required": {
                             "type": "boolean"
                           },
+                          "isSystem": {
+                            "type": "boolean"
+                          },
                           "is_system": {
                             "type": "boolean"
+                          },
+                          "displayOrder": {
+                            "type": "number"
                           },
                           "display_order": {
                             "type": "number"
@@ -1929,7 +2086,13 @@
                               "nullable": true
                             }
                           },
+                          "createdAt": {
+                            "type": "string"
+                          },
                           "created_at": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
                             "type": "string"
                           },
                           "updated_at": {
@@ -1938,16 +2101,16 @@
                         },
                         "required": [
                           "id",
-                          "object_id",
-                          "api_name",
+                          "objectId",
+                          "apiName",
                           "label",
-                          "data_type",
-                          "is_required",
-                          "is_system",
-                          "display_order",
+                          "dataType",
+                          "isRequired",
+                          "isSystem",
+                          "displayOrder",
                           "constraints",
-                          "created_at",
-                          "updated_at"
+                          "createdAt",
+                          "updatedAt"
                         ]
                       }
                     },
@@ -1959,22 +2122,43 @@
                           "id": {
                             "type": "string"
                           },
+                          "sourceObjectId": {
+                            "type": "string"
+                          },
                           "from_object_id": {
+                            "type": "string"
+                          },
+                          "targetObjectId": {
                             "type": "string"
                           },
                           "to_object_id": {
                             "type": "string"
                           },
+                          "apiName": {
+                            "type": "string"
+                          },
                           "label": {
+                            "type": "string"
+                          },
+                          "relationshipType": {
                             "type": "string"
                           },
                           "relationship_type": {
                             "type": "string"
                           },
-                          "cascade_delete": {
+                          "reverseLabel": {
+                            "type": "string"
+                          },
+                          "required": {
                             "type": "boolean"
                           },
+                          "createdAt": {
+                            "type": "string"
+                          },
                           "created_at": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
                             "type": "string"
                           },
                           "updated_at": {
@@ -1983,13 +2167,13 @@
                         },
                         "required": [
                           "id",
-                          "from_object_id",
-                          "to_object_id",
+                          "sourceObjectId",
+                          "targetObjectId",
+                          "apiName",
                           "label",
-                          "relationship_type",
-                          "cascade_delete",
-                          "created_at",
-                          "updated_at"
+                          "relationshipType",
+                          "createdAt",
+                          "updatedAt"
                         ]
                       }
                     },
@@ -2001,7 +2185,13 @@
                           "id": {
                             "type": "string"
                           },
+                          "objectId": {
+                            "type": "string"
+                          },
                           "object_id": {
+                            "type": "string"
+                          },
+                          "layoutType": {
                             "type": "string"
                           },
                           "layout_type": {
@@ -2013,7 +2203,13 @@
                               "nullable": true
                             }
                           },
+                          "createdAt": {
+                            "type": "string"
+                          },
                           "created_at": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
                             "type": "string"
                           },
                           "updated_at": {
@@ -2022,28 +2218,28 @@
                         },
                         "required": [
                           "id",
-                          "object_id",
-                          "layout_type",
+                          "objectId",
+                          "layoutType",
                           "config",
-                          "created_at",
-                          "updated_at"
+                          "createdAt",
+                          "updatedAt"
                         ]
                       }
                     }
                   },
                   "required": [
                     "id",
-                    "api_name",
+                    "apiName",
                     "label",
-                    "plural_label",
+                    "pluralLabel",
                     "description",
                     "icon",
-                    "is_system",
-                    "tenant_id",
-                    "owner_id",
-                    "display_order",
-                    "created_at",
-                    "updated_at",
+                    "isSystem",
+                    "tenantId",
+                    "ownerId",
+                    "displayOrder",
+                    "createdAt",
+                    "updatedAt",
                     "fields",
                     "relationships",
                     "layouts"
@@ -2143,10 +2339,16 @@
                     "id": {
                       "type": "string"
                     },
+                    "apiName": {
+                      "type": "string"
+                    },
                     "api_name": {
                       "type": "string"
                     },
                     "label": {
+                      "type": "string"
+                    },
+                    "pluralLabel": {
                       "type": "string"
                     },
                     "plural_label": {
@@ -2160,19 +2362,37 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "isSystem": {
+                      "type": "boolean"
+                    },
                     "is_system": {
                       "type": "boolean"
                     },
+                    "tenantId": {
+                      "type": "string"
+                    },
                     "tenant_id": {
+                      "type": "string"
+                    },
+                    "ownerId": {
                       "type": "string"
                     },
                     "owner_id": {
                       "type": "string"
                     },
+                    "displayOrder": {
+                      "type": "number"
+                    },
                     "display_order": {
                       "type": "number"
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -2181,17 +2401,17 @@
                   },
                   "required": [
                     "id",
-                    "api_name",
+                    "apiName",
                     "label",
-                    "plural_label",
+                    "pluralLabel",
                     "description",
                     "icon",
-                    "is_system",
-                    "tenant_id",
-                    "owner_id",
-                    "display_order",
-                    "created_at",
-                    "updated_at"
+                    "isSystem",
+                    "tenantId",
+                    "ownerId",
+                    "displayOrder",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -2489,13 +2709,22 @@
                     "id": {
                       "type": "string"
                     },
+                    "objectId": {
+                      "type": "string"
+                    },
                     "object_id": {
+                      "type": "string"
+                    },
+                    "apiName": {
                       "type": "string"
                     },
                     "api_name": {
                       "type": "string"
                     },
                     "label": {
+                      "type": "string"
+                    },
+                    "dataType": {
                       "type": "string"
                     },
                     "data_type": {
@@ -2505,15 +2734,28 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "isRequired": {
+                      "type": "boolean"
+                    },
                     "is_required": {
+                      "type": "boolean"
+                    },
+                    "isSystem": {
                       "type": "boolean"
                     },
                     "is_system": {
                       "type": "boolean"
                     },
+                    "defaultValue": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "default_value": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "displayOrder": {
+                      "type": "number"
                     },
                     "display_order": {
                       "type": "number"
@@ -2525,7 +2767,13 @@
                         "nullable": true
                       }
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -2534,18 +2782,18 @@
                   },
                   "required": [
                     "id",
-                    "object_id",
-                    "api_name",
+                    "objectId",
+                    "apiName",
                     "label",
-                    "data_type",
+                    "dataType",
                     "description",
-                    "is_required",
-                    "is_system",
-                    "default_value",
-                    "display_order",
+                    "isRequired",
+                    "isSystem",
+                    "defaultValue",
+                    "displayOrder",
                     "constraints",
-                    "created_at",
-                    "updated_at"
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -2636,13 +2884,22 @@
                       "id": {
                         "type": "string"
                       },
+                      "objectId": {
+                        "type": "string"
+                      },
                       "object_id": {
+                        "type": "string"
+                      },
+                      "apiName": {
                         "type": "string"
                       },
                       "api_name": {
                         "type": "string"
                       },
                       "label": {
+                        "type": "string"
+                      },
+                      "dataType": {
                         "type": "string"
                       },
                       "data_type": {
@@ -2652,15 +2909,28 @@
                         "type": "string",
                         "nullable": true
                       },
+                      "isRequired": {
+                        "type": "boolean"
+                      },
                       "is_required": {
+                        "type": "boolean"
+                      },
+                      "isSystem": {
                         "type": "boolean"
                       },
                       "is_system": {
                         "type": "boolean"
                       },
+                      "defaultValue": {
+                        "type": "string",
+                        "nullable": true
+                      },
                       "default_value": {
                         "type": "string",
                         "nullable": true
+                      },
+                      "displayOrder": {
+                        "type": "number"
                       },
                       "display_order": {
                         "type": "number"
@@ -2672,7 +2942,13 @@
                           "nullable": true
                         }
                       },
+                      "createdAt": {
+                        "type": "string"
+                      },
                       "created_at": {
+                        "type": "string"
+                      },
+                      "updatedAt": {
                         "type": "string"
                       },
                       "updated_at": {
@@ -2681,18 +2957,18 @@
                     },
                     "required": [
                       "id",
-                      "object_id",
-                      "api_name",
+                      "objectId",
+                      "apiName",
                       "label",
-                      "data_type",
+                      "dataType",
                       "description",
-                      "is_required",
-                      "is_system",
-                      "default_value",
-                      "display_order",
+                      "isRequired",
+                      "isSystem",
+                      "defaultValue",
+                      "displayOrder",
                       "constraints",
-                      "created_at",
-                      "updated_at"
+                      "createdAt",
+                      "updatedAt"
                     ]
                   }
                 }
@@ -2798,13 +3074,22 @@
                     "id": {
                       "type": "string"
                     },
+                    "objectId": {
+                      "type": "string"
+                    },
                     "object_id": {
+                      "type": "string"
+                    },
+                    "apiName": {
                       "type": "string"
                     },
                     "api_name": {
                       "type": "string"
                     },
                     "label": {
+                      "type": "string"
+                    },
+                    "dataType": {
                       "type": "string"
                     },
                     "data_type": {
@@ -2814,15 +3099,28 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "isRequired": {
+                      "type": "boolean"
+                    },
                     "is_required": {
+                      "type": "boolean"
+                    },
+                    "isSystem": {
                       "type": "boolean"
                     },
                     "is_system": {
                       "type": "boolean"
                     },
+                    "defaultValue": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "default_value": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "displayOrder": {
+                      "type": "number"
                     },
                     "display_order": {
                       "type": "number"
@@ -2834,7 +3132,13 @@
                         "nullable": true
                       }
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -2843,18 +3147,18 @@
                   },
                   "required": [
                     "id",
-                    "object_id",
-                    "api_name",
+                    "objectId",
+                    "apiName",
                     "label",
-                    "data_type",
+                    "dataType",
                     "description",
-                    "is_required",
-                    "is_system",
-                    "default_value",
-                    "display_order",
+                    "isRequired",
+                    "isSystem",
+                    "defaultValue",
+                    "displayOrder",
                     "constraints",
-                    "created_at",
-                    "updated_at"
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -2931,23 +3235,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Field definition deleted successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
+          "204": {
+            "description": "Field definition deleted successfully"
           },
           "400": {
             "description": "Validation error",
@@ -2993,7 +3282,7 @@
       }
     },
     "/admin/objects/{objectId}/fields/reorder": {
-      "post": {
+      "patch": {
         "description": "Reorder field definitions for the specified object",
         "tags": [
           "Admin - Fields"
@@ -3019,16 +3308,19 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "orderedIds": {
+                  "field_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "fieldIds": {
                     "type": "array",
                     "items": {
                       "type": "string"
                     }
                   }
-                },
-                "required": [
-                  "orderedIds"
-                ]
+                }
               }
             }
           }
@@ -3039,196 +3331,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/relationships": {
-      "post": {
-        "description": "Create a new relationship between objects",
-        "tags": [
-          "Admin - Relationships"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "from_object_id": {
-                    "type": "string"
-                  },
-                  "to_object_id": {
-                    "type": "string"
-                  },
-                  "label": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "relationship_type": {
-                    "type": "string",
-                    "enum": [
-                      "one_to_many",
-                      "many_to_one",
-                      "many_to_many"
-                    ]
-                  },
-                  "cascade_delete": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "from_object_id",
-                  "to_object_id",
-                  "label",
-                  "relationship_type"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Relationship created successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "from_object_id": {
-                      "type": "string"
-                    },
-                    "to_object_id": {
-                      "type": "string"
-                    },
-                    "label": {
-                      "type": "string"
-                    },
-                    "relationship_type": {
-                      "type": "string"
-                    },
-                    "cascade_delete": {
-                      "type": "boolean"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    },
-                    "updated_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "from_object_id",
-                    "to_object_id",
-                    "label",
-                    "relationship_type",
-                    "cascade_delete",
-                    "created_at",
-                    "updated_at"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "description": "List all relationships",
-        "tags": [
-          "Admin - Relationships"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of relationships",
-            "content": {
-              "application/json": {
-                "schema": {
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -3236,22 +3338,71 @@
                       "id": {
                         "type": "string"
                       },
-                      "from_object_id": {
+                      "objectId": {
                         "type": "string"
                       },
-                      "to_object_id": {
+                      "object_id": {
+                        "type": "string"
+                      },
+                      "apiName": {
+                        "type": "string"
+                      },
+                      "api_name": {
                         "type": "string"
                       },
                       "label": {
                         "type": "string"
                       },
-                      "relationship_type": {
+                      "dataType": {
                         "type": "string"
                       },
-                      "cascade_delete": {
+                      "data_type": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "isRequired": {
                         "type": "boolean"
                       },
+                      "is_required": {
+                        "type": "boolean"
+                      },
+                      "isSystem": {
+                        "type": "boolean"
+                      },
+                      "is_system": {
+                        "type": "boolean"
+                      },
+                      "defaultValue": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "default_value": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "displayOrder": {
+                        "type": "number"
+                      },
+                      "display_order": {
+                        "type": "number"
+                      },
+                      "constraints": {
+                        "type": "object",
+                        "nullable": true,
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
                       "created_at": {
+                        "type": "string"
+                      },
+                      "updatedAt": {
                         "type": "string"
                       },
                       "updated_at": {
@@ -3260,123 +3411,20 @@
                     },
                     "required": [
                       "id",
-                      "from_object_id",
-                      "to_object_id",
+                      "objectId",
+                      "apiName",
                       "label",
-                      "relationship_type",
-                      "cascade_delete",
-                      "created_at",
-                      "updated_at"
+                      "dataType",
+                      "description",
+                      "isRequired",
+                      "isSystem",
+                      "defaultValue",
+                      "displayOrder",
+                      "constraints",
+                      "createdAt",
+                      "updatedAt"
                     ]
                   }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/relationships/{id}": {
-      "put": {
-        "description": "Update a relationship",
-        "tags": [
-          "Admin - Relationships"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "label": {
-                    "type": "string"
-                  },
-                  "cascade_delete": {
-                    "type": "boolean"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Relationship updated successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "from_object_id": {
-                      "type": "string"
-                    },
-                    "to_object_id": {
-                      "type": "string"
-                    },
-                    "label": {
-                      "type": "string"
-                    },
-                    "relationship_type": {
-                      "type": "string"
-                    },
-                    "cascade_delete": {
-                      "type": "boolean"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    },
-                    "updated_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "from_object_id",
-                    "to_object_id",
-                    "label",
-                    "relationship_type",
-                    "cascade_delete",
-                    "created_at",
-                    "updated_at"
-                  ]
                 }
               }
             }
@@ -3422,9 +3470,303 @@
             }
           }
         }
-      },
+      }
+    },
+    "/admin/relationships": {
+      "post": {
+        "description": "Create a new relationship between objects",
+        "tags": [
+          "Admin - Relationships"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sourceObjectId": {
+                    "type": "string"
+                  },
+                  "source_object_id": {
+                    "type": "string"
+                  },
+                  "targetObjectId": {
+                    "type": "string"
+                  },
+                  "target_object_id": {
+                    "type": "string"
+                  },
+                  "relationshipType": {
+                    "type": "string",
+                    "enum": [
+                      "lookup",
+                      "parent_child"
+                    ]
+                  },
+                  "relationship_type": {
+                    "type": "string",
+                    "enum": [
+                      "lookup",
+                      "parent_child"
+                    ]
+                  },
+                  "apiName": {
+                    "type": "string"
+                  },
+                  "api_name": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "reverseLabel": {
+                    "type": "string"
+                  },
+                  "reverse_label": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Relationship created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "sourceObjectId": {
+                      "type": "string"
+                    },
+                    "targetObjectId": {
+                      "type": "string"
+                    },
+                    "apiName": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "reverseLabel": {
+                      "type": "string"
+                    },
+                    "relationshipType": {
+                      "type": "string"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "sourceObjectId",
+                    "targetObjectId",
+                    "apiName",
+                    "label",
+                    "relationshipType",
+                    "createdAt",
+                    "updatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/objects/{objectId}/relationships": {
+      "get": {
+        "description": "List relationships for an object",
+        "tags": [
+          "Admin - Relationships"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "objectId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of relationships with object metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "sourceObjectId": {
+                        "type": "string"
+                      },
+                      "targetObjectId": {
+                        "type": "string"
+                      },
+                      "apiName": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "reverseLabel": {
+                        "type": "string"
+                      },
+                      "relationshipType": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "updatedAt": {
+                        "type": "string"
+                      },
+                      "sourceObject": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "pluralLabel": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "pluralLabel"
+                        ]
+                      },
+                      "targetObject": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "pluralLabel": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "pluralLabel"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "sourceObjectId",
+                      "targetObjectId",
+                      "apiName",
+                      "label",
+                      "relationshipType",
+                      "createdAt",
+                      "updatedAt"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/relationships/{id}": {
       "delete": {
-        "description": "Delete a relationship",
+        "description": "Delete a relationship definition",
         "tags": [
           "Admin - Relationships"
         ],
@@ -3444,20 +3786,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Relationship deleted successfully",
+          "204": {
+            "description": "Relationship deleted successfully"
+          },
+          "400": {
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3516,16 +3853,24 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "description": {
+                  "apiName": {
+                    "type": "string"
+                  },
+                  "api_name": {
+                    "type": "string"
+                  },
+                  "objectId": {
                     "type": "string"
                   },
                   "object_id": {
                     "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "name",
-                  "object_id"
+                  "name"
                 ]
               }
             }
@@ -3542,20 +3887,56 @@
                     "id": {
                       "type": "string"
                     },
+                    "objectId": {
+                      "type": "string"
+                    },
+                    "object_id": {
+                      "type": "string"
+                    },
                     "name": {
+                      "type": "string"
+                    },
+                    "apiName": {
+                      "type": "string"
+                    },
+                    "api_name": {
                       "type": "string"
                     },
                     "description": {
                       "type": "string",
                       "nullable": true
                     },
-                    "object_id": {
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "is_default": {
+                      "type": "boolean"
+                    },
+                    "isSystem": {
+                      "type": "boolean"
+                    },
+                    "is_system": {
+                      "type": "boolean"
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "owner_id": {
+                      "type": "string"
+                    },
+                    "tenantId": {
                       "type": "string"
                     },
                     "tenant_id": {
                       "type": "string"
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -3564,12 +3945,16 @@
                   },
                   "required": [
                     "id",
+                    "objectId",
                     "name",
+                    "apiName",
                     "description",
-                    "object_id",
-                    "tenant_id",
-                    "created_at",
-                    "updated_at"
+                    "isDefault",
+                    "isSystem",
+                    "ownerId",
+                    "tenantId",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -3630,20 +4015,56 @@
                       "id": {
                         "type": "string"
                       },
+                      "objectId": {
+                        "type": "string"
+                      },
+                      "object_id": {
+                        "type": "string"
+                      },
                       "name": {
+                        "type": "string"
+                      },
+                      "apiName": {
+                        "type": "string"
+                      },
+                      "api_name": {
                         "type": "string"
                       },
                       "description": {
                         "type": "string",
                         "nullable": true
                       },
-                      "object_id": {
+                      "isDefault": {
+                        "type": "boolean"
+                      },
+                      "is_default": {
+                        "type": "boolean"
+                      },
+                      "isSystem": {
+                        "type": "boolean"
+                      },
+                      "is_system": {
+                        "type": "boolean"
+                      },
+                      "ownerId": {
+                        "type": "string"
+                      },
+                      "owner_id": {
+                        "type": "string"
+                      },
+                      "tenantId": {
                         "type": "string"
                       },
                       "tenant_id": {
                         "type": "string"
                       },
+                      "createdAt": {
+                        "type": "string"
+                      },
                       "created_at": {
+                        "type": "string"
+                      },
+                      "updatedAt": {
                         "type": "string"
                       },
                       "updated_at": {
@@ -3657,20 +4078,63 @@
                             "id": {
                               "type": "string"
                             },
+                            "pipelineId": {
+                              "type": "string"
+                            },
                             "pipeline_id": {
                               "type": "string"
                             },
                             "name": {
                               "type": "string"
                             },
-                            "display_order": {
+                            "apiName": {
+                              "type": "string"
+                            },
+                            "api_name": {
+                              "type": "string"
+                            },
+                            "sortOrder": {
                               "type": "number"
                             },
-                            "probability": {
+                            "sort_order": {
+                              "type": "number"
+                            },
+                            "stageType": {
+                              "type": "string"
+                            },
+                            "stage_type": {
+                              "type": "string"
+                            },
+                            "colour": {
+                              "type": "string"
+                            },
+                            "defaultProbability": {
                               "type": "number",
                               "nullable": true
                             },
+                            "default_probability": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "expectedDays": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "expected_days": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "description": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
                             "created_at": {
+                              "type": "string"
+                            },
+                            "updatedAt": {
                               "type": "string"
                             },
                             "updated_at": {
@@ -3679,24 +4143,33 @@
                           },
                           "required": [
                             "id",
-                            "pipeline_id",
+                            "pipelineId",
                             "name",
-                            "display_order",
-                            "probability",
-                            "created_at",
-                            "updated_at"
+                            "apiName",
+                            "sortOrder",
+                            "stageType",
+                            "colour",
+                            "defaultProbability",
+                            "expectedDays",
+                            "description",
+                            "createdAt",
+                            "updatedAt"
                           ]
                         }
                       }
                     },
                     "required": [
                       "id",
+                      "objectId",
                       "name",
+                      "apiName",
                       "description",
-                      "object_id",
-                      "tenant_id",
-                      "created_at",
-                      "updated_at",
+                      "isDefault",
+                      "isSystem",
+                      "ownerId",
+                      "tenantId",
+                      "createdAt",
+                      "updatedAt",
                       "stages"
                     ]
                   }
@@ -3759,20 +4232,56 @@
                     "id": {
                       "type": "string"
                     },
+                    "objectId": {
+                      "type": "string"
+                    },
+                    "object_id": {
+                      "type": "string"
+                    },
                     "name": {
+                      "type": "string"
+                    },
+                    "apiName": {
+                      "type": "string"
+                    },
+                    "api_name": {
                       "type": "string"
                     },
                     "description": {
                       "type": "string",
                       "nullable": true
                     },
-                    "object_id": {
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "is_default": {
+                      "type": "boolean"
+                    },
+                    "isSystem": {
+                      "type": "boolean"
+                    },
+                    "is_system": {
+                      "type": "boolean"
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "owner_id": {
+                      "type": "string"
+                    },
+                    "tenantId": {
                       "type": "string"
                     },
                     "tenant_id": {
                       "type": "string"
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -3786,20 +4295,63 @@
                           "id": {
                             "type": "string"
                           },
+                          "pipelineId": {
+                            "type": "string"
+                          },
                           "pipeline_id": {
                             "type": "string"
                           },
                           "name": {
                             "type": "string"
                           },
-                          "display_order": {
+                          "apiName": {
+                            "type": "string"
+                          },
+                          "api_name": {
+                            "type": "string"
+                          },
+                          "sortOrder": {
                             "type": "number"
                           },
-                          "probability": {
+                          "sort_order": {
+                            "type": "number"
+                          },
+                          "stageType": {
+                            "type": "string"
+                          },
+                          "stage_type": {
+                            "type": "string"
+                          },
+                          "colour": {
+                            "type": "string"
+                          },
+                          "defaultProbability": {
                             "type": "number",
                             "nullable": true
                           },
+                          "default_probability": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "expectedDays": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "expected_days": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
                           "created_at": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
                             "type": "string"
                           },
                           "updated_at": {
@@ -3808,24 +4360,33 @@
                         },
                         "required": [
                           "id",
-                          "pipeline_id",
+                          "pipelineId",
                           "name",
-                          "display_order",
-                          "probability",
-                          "created_at",
-                          "updated_at"
+                          "apiName",
+                          "sortOrder",
+                          "stageType",
+                          "colour",
+                          "defaultProbability",
+                          "expectedDays",
+                          "description",
+                          "createdAt",
+                          "updatedAt"
                         ]
                       }
                     }
                   },
                   "required": [
                     "id",
+                    "objectId",
                     "name",
+                    "apiName",
                     "description",
-                    "object_id",
-                    "tenant_id",
-                    "created_at",
-                    "updated_at",
+                    "isDefault",
+                    "isSystem",
+                    "ownerId",
+                    "tenantId",
+                    "createdAt",
+                    "updatedAt",
                     "stages"
                   ]
                 }
@@ -3896,6 +4457,12 @@
                   "description": {
                     "type": "string",
                     "nullable": true
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  },
+                  "is_default": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -3913,20 +4480,56 @@
                     "id": {
                       "type": "string"
                     },
+                    "objectId": {
+                      "type": "string"
+                    },
+                    "object_id": {
+                      "type": "string"
+                    },
                     "name": {
+                      "type": "string"
+                    },
+                    "apiName": {
+                      "type": "string"
+                    },
+                    "api_name": {
                       "type": "string"
                     },
                     "description": {
                       "type": "string",
                       "nullable": true
                     },
-                    "object_id": {
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "is_default": {
+                      "type": "boolean"
+                    },
+                    "isSystem": {
+                      "type": "boolean"
+                    },
+                    "is_system": {
+                      "type": "boolean"
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "owner_id": {
+                      "type": "string"
+                    },
+                    "tenantId": {
                       "type": "string"
                     },
                     "tenant_id": {
                       "type": "string"
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -3935,12 +4538,16 @@
                   },
                   "required": [
                     "id",
+                    "objectId",
                     "name",
+                    "apiName",
                     "description",
-                    "object_id",
-                    "tenant_id",
-                    "created_at",
-                    "updated_at"
+                    "isDefault",
+                    "isSystem",
+                    "ownerId",
+                    "tenantId",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -3989,7 +4596,7 @@
         }
       },
       "delete": {
-        "description": "Delete a pipeline",
+        "description": "Delete a pipeline (custom pipelines only)",
         "tags": [
           "Admin - Pipelines"
         ],
@@ -4009,20 +4616,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Pipeline deleted successfully",
+          "204": {
+            "description": "Pipeline deleted successfully"
+          },
+          "400": {
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4091,13 +4693,39 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "display_order": {
-                    "type": "number"
+                  "apiName": {
+                    "type": "string"
                   },
-                  "probability": {
+                  "api_name": {
+                    "type": "string"
+                  },
+                  "stageType": {
+                    "type": "string"
+                  },
+                  "stage_type": {
+                    "type": "string"
+                  },
+                  "colour": {
+                    "type": "string"
+                  },
+                  "defaultProbability": {
                     "type": "number",
                     "minimum": 0,
                     "maximum": 100
+                  },
+                  "default_probability": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "expectedDays": {
+                    "type": "number"
+                  },
+                  "expected_days": {
+                    "type": "number"
+                  },
+                  "description": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -4118,20 +4746,63 @@
                     "id": {
                       "type": "string"
                     },
+                    "pipelineId": {
+                      "type": "string"
+                    },
                     "pipeline_id": {
                       "type": "string"
                     },
                     "name": {
                       "type": "string"
                     },
-                    "display_order": {
+                    "apiName": {
+                      "type": "string"
+                    },
+                    "api_name": {
+                      "type": "string"
+                    },
+                    "sortOrder": {
                       "type": "number"
                     },
-                    "probability": {
+                    "sort_order": {
+                      "type": "number"
+                    },
+                    "stageType": {
+                      "type": "string"
+                    },
+                    "stage_type": {
+                      "type": "string"
+                    },
+                    "colour": {
+                      "type": "string"
+                    },
+                    "defaultProbability": {
                       "type": "number",
                       "nullable": true
                     },
+                    "default_probability": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "expectedDays": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "expected_days": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -4140,12 +4811,17 @@
                   },
                   "required": [
                     "id",
-                    "pipeline_id",
+                    "pipelineId",
                     "name",
-                    "display_order",
-                    "probability",
-                    "created_at",
-                    "updated_at"
+                    "apiName",
+                    "sortOrder",
+                    "stageType",
+                    "colour",
+                    "defaultProbability",
+                    "expectedDays",
+                    "description",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -4230,16 +4906,40 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string",
-                    "minLength": 1
+                    "type": "string"
                   },
-                  "display_order": {
-                    "type": "number"
+                  "stageType": {
+                    "type": "string"
                   },
-                  "probability": {
+                  "stage_type": {
+                    "type": "string"
+                  },
+                  "colour": {
+                    "type": "string"
+                  },
+                  "defaultProbability": {
                     "type": "number",
+                    "nullable": true,
                     "minimum": 0,
                     "maximum": 100
+                  },
+                  "default_probability": {
+                    "type": "number",
+                    "nullable": true,
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "expectedDays": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "expected_days": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true
                   }
                 }
               }
@@ -4257,20 +4957,63 @@
                     "id": {
                       "type": "string"
                     },
+                    "pipelineId": {
+                      "type": "string"
+                    },
                     "pipeline_id": {
                       "type": "string"
                     },
                     "name": {
                       "type": "string"
                     },
-                    "display_order": {
+                    "apiName": {
+                      "type": "string"
+                    },
+                    "api_name": {
+                      "type": "string"
+                    },
+                    "sortOrder": {
                       "type": "number"
                     },
-                    "probability": {
+                    "sort_order": {
+                      "type": "number"
+                    },
+                    "stageType": {
+                      "type": "string"
+                    },
+                    "stage_type": {
+                      "type": "string"
+                    },
+                    "colour": {
+                      "type": "string"
+                    },
+                    "defaultProbability": {
                       "type": "number",
                       "nullable": true
                     },
+                    "default_probability": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "expectedDays": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "expected_days": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "created_at": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
                       "type": "string"
                     },
                     "updated_at": {
@@ -4279,12 +5022,17 @@
                   },
                   "required": [
                     "id",
-                    "pipeline_id",
+                    "pipelineId",
                     "name",
-                    "display_order",
-                    "probability",
-                    "created_at",
-                    "updated_at"
+                    "apiName",
+                    "sortOrder",
+                    "stageType",
+                    "colour",
+                    "defaultProbability",
+                    "expectedDays",
+                    "description",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -4333,7 +5081,7 @@
         }
       },
       "delete": {
-        "description": "Delete a stage",
+        "description": "Delete a stage (custom stages only)",
         "tags": [
           "Admin - Pipelines"
         ],
@@ -4361,20 +5109,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Stage deleted successfully",
+          "204": {
+            "description": "Stage deleted successfully"
+          },
+          "400": {
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4412,9 +5155,282 @@
         }
       }
     },
-    "/admin/users": {
+    "/admin/pipelines/{pipelineId}/stages/reorder": {
+      "patch": {
+        "description": "Reorder stages in a pipeline",
+        "tags": [
+          "Admin - Pipelines"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "pipelineId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stage_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "stageIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stages reordered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "pipelineId": {
+                        "type": "string"
+                      },
+                      "pipeline_id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "apiName": {
+                        "type": "string"
+                      },
+                      "api_name": {
+                        "type": "string"
+                      },
+                      "sortOrder": {
+                        "type": "number"
+                      },
+                      "sort_order": {
+                        "type": "number"
+                      },
+                      "stageType": {
+                        "type": "string"
+                      },
+                      "stage_type": {
+                        "type": "string"
+                      },
+                      "colour": {
+                        "type": "string"
+                      },
+                      "defaultProbability": {
+                        "type": "number",
+                        "nullable": true
+                      },
+                      "default_probability": {
+                        "type": "number",
+                        "nullable": true
+                      },
+                      "expectedDays": {
+                        "type": "number",
+                        "nullable": true
+                      },
+                      "expected_days": {
+                        "type": "number",
+                        "nullable": true
+                      },
+                      "description": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "type": "string"
+                      },
+                      "updatedAt": {
+                        "type": "string"
+                      },
+                      "updated_at": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "pipelineId",
+                      "name",
+                      "apiName",
+                      "sortOrder",
+                      "stageType",
+                      "colour",
+                      "defaultProbability",
+                      "expectedDays",
+                      "description",
+                      "createdAt",
+                      "updatedAt"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
-        "description": "Create a new user",
+        "description": "Reorder stages in a pipeline",
+        "tags": [
+          "Admin - Pipelines"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "pipelineId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "orderedIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "orderedIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stages reordered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated - missing or invalid Bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/invite": {
+      "post": {
+        "description": "Invite a user to the tenant",
         "tags": [
           "Admin - Users"
         ],
@@ -4443,7 +5459,8 @@
                 },
                 "required": [
                   "email",
-                  "name"
+                  "name",
+                  "role"
                 ]
               }
             }
@@ -4451,48 +5468,26 @@
         },
         "responses": {
           "201": {
-            "description": "User created successfully",
+            "description": "User invited successfully",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
+                    "userId": {
                       "type": "string"
                     },
                     "email": {
-                      "type": "string",
-                      "format": "email"
-                    },
-                    "name": {
                       "type": "string"
                     },
                     "role": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "is_active": {
-                      "type": "boolean"
-                    },
-                    "tenant_id": {
-                      "type": "string"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    },
-                    "updated_at": {
                       "type": "string"
                     }
                   },
                   "required": [
-                    "id",
+                    "userId",
                     "email",
-                    "name",
-                    "role",
-                    "is_active",
-                    "tenant_id",
-                    "created_at",
-                    "updated_at"
+                    "role"
                   ]
                 }
               }
@@ -4518,92 +5513,8 @@
               }
             }
           },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "description": "List all users",
-        "tags": [
-          "Admin - Users"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of users",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "email": {
-                        "type": "string",
-                        "format": "email"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "role": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "is_active": {
-                        "type": "boolean"
-                      },
-                      "tenant_id": {
-                        "type": "string"
-                      },
-                      "created_at": {
-                        "type": "string"
-                      },
-                      "updated_at": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "email",
-                      "name",
-                      "role",
-                      "is_active",
-                      "tenant_id",
-                      "created_at",
-                      "updated_at"
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -4625,9 +5536,9 @@
         }
       }
     },
-    "/admin/users/{id}": {
+    "/admin/users": {
       "get": {
-        "description": "Get user details",
+        "description": "List all users in the tenant",
         "tags": [
           "Admin - Users"
         ],
@@ -4636,61 +5547,51 @@
             "bearerAuth": []
           }
         ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
         "responses": {
           "200": {
-            "description": "User details",
+            "description": "List of users",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "userId": {
+                        "type": "string"
+                      },
+                      "loginId": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "roles": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "lastLogin": {
+                        "type": "string"
+                      }
                     },
-                    "email": {
-                      "type": "string",
-                      "format": "email"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "role": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "is_active": {
-                      "type": "boolean"
-                    },
-                    "tenant_id": {
-                      "type": "string"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    },
-                    "updated_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "email",
-                    "name",
-                    "role",
-                    "is_active",
-                    "tenant_id",
-                    "created_at",
-                    "updated_at"
-                  ]
+                    "required": [
+                      "userId",
+                      "loginId",
+                      "email",
+                      "name",
+                      "roles",
+                      "status"
+                    ]
+                  }
                 }
               }
             }
@@ -4705,8 +5606,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found",
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -4726,9 +5627,11 @@
             }
           }
         }
-      },
+      }
+    },
+    "/admin/users/{loginId}/role": {
       "put": {
-        "description": "Update a user",
+        "description": "Change a user's role",
         "tags": [
           "Admin - Users"
         ],
@@ -4743,7 +5646,7 @@
               "type": "string"
             },
             "required": true,
-            "name": "id",
+            "name": "loginId",
             "in": "path"
           }
         ],
@@ -4753,64 +5656,39 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": {
-                    "type": "string"
-                  },
                   "role": {
                     "type": "string"
-                  },
-                  "is_active": {
-                    "type": "boolean"
                   }
-                }
+                },
+                "required": [
+                  "role"
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "User updated successfully",
+            "description": "Role updated successfully",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
+                    "loginId": {
                       "type": "string"
                     },
-                    "email": {
-                      "type": "string",
-                      "format": "email"
-                    },
-                    "name": {
+                    "tenantId": {
                       "type": "string"
                     },
                     "role": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "is_active": {
-                      "type": "boolean"
-                    },
-                    "tenant_id": {
-                      "type": "string"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    },
-                    "updated_at": {
                       "type": "string"
                     }
                   },
                   "required": [
-                    "id",
-                    "email",
-                    "name",
-                    "role",
-                    "is_active",
-                    "tenant_id",
-                    "created_at",
-                    "updated_at"
+                    "loginId",
+                    "tenantId",
+                    "role"
                   ]
                 }
               }
@@ -4836,8 +5714,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found",
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -4857,9 +5735,11 @@
             }
           }
         }
-      },
+      }
+    },
+    "/admin/users/{loginId}": {
       "delete": {
-        "description": "Deactivate a user",
+        "description": "Remove a user from the tenant",
         "tags": [
           "Admin - Users"
         ],
@@ -4874,28 +5754,13 @@
               "type": "string"
             },
             "required": true,
-            "name": "id",
+            "name": "loginId",
             "in": "path"
           }
         ],
         "responses": {
-          "200": {
-            "description": "User deactivated successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
+          "204": {
+            "description": "User removed from tenant successfully"
           },
           "401": {
             "description": "Unauthenticated - missing or invalid Bearer token",
@@ -4907,8 +5772,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found",
+          "403": {
+            "description": "Forbidden - insufficient permissions",
             "content": {
               "application/json": {
                 "schema": {
@@ -4957,19 +5822,25 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "fieldValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  },
                   "field_values": {
                     "type": "object",
                     "additionalProperties": {
                       "nullable": true
                     }
                   },
+                  "linkTo": {
+                    "type": "string"
+                  },
                   "parent_record_id": {
                     "type": "string"
                   }
-                },
-                "required": [
-                  "field_values"
-                ]
+                }
               }
             }
           }
@@ -4985,36 +5856,36 @@
                     "id": {
                       "type": "string"
                     },
-                    "object_id": {
+                    "objectId": {
                       "type": "string"
                     },
-                    "tenant_id": {
+                    "tenantId": {
                       "type": "string"
                     },
-                    "owner_id": {
+                    "ownerId": {
                       "type": "string"
                     },
-                    "field_values": {
+                    "fieldValues": {
                       "type": "object",
                       "additionalProperties": {
                         "nullable": true
                       }
                     },
-                    "created_at": {
+                    "createdAt": {
                       "type": "string"
                     },
-                    "updated_at": {
+                    "updatedAt": {
                       "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "object_id",
-                    "tenant_id",
-                    "owner_id",
-                    "field_values",
-                    "created_at",
-                    "updated_at"
+                    "objectId",
+                    "tenantId",
+                    "ownerId",
+                    "fieldValues",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -5114,36 +5985,36 @@
                           "id": {
                             "type": "string"
                           },
-                          "object_id": {
+                          "objectId": {
                             "type": "string"
                           },
-                          "tenant_id": {
+                          "tenantId": {
                             "type": "string"
                           },
-                          "owner_id": {
+                          "ownerId": {
                             "type": "string"
                           },
-                          "field_values": {
+                          "fieldValues": {
                             "type": "object",
                             "additionalProperties": {
                               "nullable": true
                             }
                           },
-                          "created_at": {
+                          "createdAt": {
                             "type": "string"
                           },
-                          "updated_at": {
+                          "updatedAt": {
                             "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "object_id",
-                          "tenant_id",
-                          "owner_id",
-                          "field_values",
-                          "created_at",
-                          "updated_at"
+                          "objectId",
+                          "tenantId",
+                          "ownerId",
+                          "fieldValues",
+                          "createdAt",
+                          "updatedAt"
                         ]
                       }
                     },
@@ -5240,26 +6111,35 @@
                     "id": {
                       "type": "string"
                     },
-                    "object_id": {
+                    "objectId": {
                       "type": "string"
                     },
-                    "tenant_id": {
+                    "tenantId": {
                       "type": "string"
                     },
-                    "owner_id": {
+                    "ownerId": {
                       "type": "string"
                     },
-                    "field_values": {
+                    "fieldValues": {
                       "type": "object",
                       "additionalProperties": {
                         "nullable": true
                       }
                     },
-                    "created_at": {
+                    "createdAt": {
                       "type": "string"
                     },
-                    "updated_at": {
+                    "updatedAt": {
                       "type": "string"
+                    },
+                    "relatedRecords": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "nullable": true
+                        }
+                      }
                     },
                     "related_records": {
                       "type": "object",
@@ -5273,12 +6153,12 @@
                   },
                   "required": [
                     "id",
-                    "object_id",
-                    "tenant_id",
-                    "owner_id",
-                    "field_values",
-                    "created_at",
-                    "updated_at"
+                    "objectId",
+                    "tenantId",
+                    "ownerId",
+                    "fieldValues",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -5350,16 +6230,19 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "fieldValues": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  },
                   "field_values": {
                     "type": "object",
                     "additionalProperties": {
                       "nullable": true
                     }
                   }
-                },
-                "required": [
-                  "field_values"
-                ]
+                }
               }
             }
           }
@@ -5375,36 +6258,36 @@
                     "id": {
                       "type": "string"
                     },
-                    "object_id": {
+                    "objectId": {
                       "type": "string"
                     },
-                    "tenant_id": {
+                    "tenantId": {
                       "type": "string"
                     },
-                    "owner_id": {
+                    "ownerId": {
                       "type": "string"
                     },
-                    "field_values": {
+                    "fieldValues": {
                       "type": "object",
                       "additionalProperties": {
                         "nullable": true
                       }
                     },
-                    "created_at": {
+                    "createdAt": {
                       "type": "string"
                     },
-                    "updated_at": {
+                    "updatedAt": {
                       "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "object_id",
-                    "tenant_id",
-                    "owner_id",
-                    "field_values",
-                    "created_at",
-                    "updated_at"
+                    "objectId",
+                    "tenantId",
+                    "ownerId",
+                    "fieldValues",
+                    "createdAt",
+                    "updatedAt"
                   ]
                 }
               }
@@ -7441,99 +8324,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/pipelines/{pipelineId}/stages/reorder": {
-      "post": {
-        "description": "Reorder stages in a pipeline",
-        "tags": [
-          "Admin - Pipelines"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "pipelineId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "orderedIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "required": [
-                  "orderedIds"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Stages reordered",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthenticated - missing or invalid Bearer token",
             "content": {
               "application/json": {
                 "schema": {

@@ -3,60 +3,63 @@ import { registry } from '../lib/openapi.js';
 import { commonResponses } from '../lib/openapi.js';
 
 // Request schemas
-export const CreateUserRequestSchema = z.object({
+export const InviteUserRequestSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1, 'Name is required'),
-  role: z.string().optional(),
+  role: z.string(),
 });
 
-export const UpdateUserRequestSchema = z.object({
-  name: z.string().optional(),
-  role: z.string().optional(),
-  is_active: z.boolean().optional(),
+export const ChangeRoleRequestSchema = z.object({
+  role: z.string(),
 });
 
 // Response schema
 const UserSchema = z.object({
-  id: z.string(),
+  userId: z.string(),
+  loginId: z.string(),
   email: z.string().email(),
   name: z.string(),
-  role: z.string().nullable(),
-  is_active: z.boolean(),
-  tenant_id: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  roles: z.array(z.string()),
+  status: z.string(),
+  lastLogin: z.string().optional(),
+});
+
+const InviteResultSchema = z.object({
+  userId: z.string(),
+  email: z.string(),
+  role: z.string(),
 });
 
 // Register routes
 
-// POST /admin/users
+// POST /admin/users/invite
 registry.registerPath({
   method: 'post',
-  path: '/admin/users',
-  description: 'Create a new user',
+  path: '/admin/users/invite',
+  description: 'Invite a user to the tenant',
   tags: ['Admin - Users'],
   security: [{ bearerAuth: [] }],
   request: {
     body: {
       content: {
         'application/json': {
-          schema: CreateUserRequestSchema,
+          schema: InviteUserRequestSchema,
         },
       },
     },
   },
   responses: {
     201: {
-      description: 'User created successfully',
+      description: 'User invited successfully',
       content: {
         'application/json': {
-          schema: UserSchema,
+          schema: InviteResultSchema,
         },
       },
     },
     400: commonResponses[400],
     401: commonResponses[401],
-    409: commonResponses[409],
+    403: commonResponses[403],
     500: commonResponses[500],
   },
 });
@@ -65,7 +68,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: '/admin/users',
-  description: 'List all users',
+  description: 'List all users in the tenant',
   tags: ['Admin - Users'],
   security: [{ bearerAuth: [] }],
   request: {},
@@ -79,97 +82,68 @@ registry.registerPath({
       },
     },
     401: commonResponses[401],
+    403: commonResponses[403],
     500: commonResponses[500],
   },
 });
 
-// GET /admin/users/:id
-registry.registerPath({
-  method: 'get',
-  path: '/admin/users/{id}',
-  description: 'Get user details',
-  tags: ['Admin - Users'],
-  security: [{ bearerAuth: [] }],
-  request: {
-    params: z.object({
-      id: z.string(),
-    }),
-  },
-  responses: {
-    200: {
-      description: 'User details',
-      content: {
-        'application/json': {
-          schema: UserSchema,
-        },
-      },
-    },
-    401: commonResponses[401],
-    404: commonResponses[404],
-    500: commonResponses[500],
-  },
-});
-
-// PUT /admin/users/:id
+// PUT /admin/users/:loginId/role
 registry.registerPath({
   method: 'put',
-  path: '/admin/users/{id}',
-  description: 'Update a user',
+  path: '/admin/users/{loginId}/role',
+  description: 'Change a user\'s role',
   tags: ['Admin - Users'],
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      loginId: z.string(),
     }),
     body: {
       content: {
         'application/json': {
-          schema: UpdateUserRequestSchema,
+          schema: ChangeRoleRequestSchema,
         },
       },
     },
   },
   responses: {
     200: {
-      description: 'User updated successfully',
+      description: 'Role updated successfully',
       content: {
         'application/json': {
-          schema: UserSchema,
+          schema: z.object({
+            loginId: z.string(),
+            tenantId: z.string(),
+            role: z.string(),
+          }),
         },
       },
     },
     400: commonResponses[400],
     401: commonResponses[401],
-    404: commonResponses[404],
+    403: commonResponses[403],
     500: commonResponses[500],
   },
 });
 
-// DELETE /admin/users/:id
+// DELETE /admin/users/:loginId
 registry.registerPath({
   method: 'delete',
-  path: '/admin/users/{id}',
-  description: 'Deactivate a user',
+  path: '/admin/users/{loginId}',
+  description: 'Remove a user from the tenant',
   tags: ['Admin - Users'],
   security: [{ bearerAuth: [] }],
   request: {
     params: z.object({
-      id: z.string(),
+      loginId: z.string(),
     }),
   },
   responses: {
-    200: {
-      description: 'User deactivated successfully',
-      content: {
-        'application/json': {
-          schema: z.object({
-            ok: z.boolean(),
-          }),
-        },
-      },
+    204: {
+      description: 'User removed from tenant successfully',
     },
     401: commonResponses[401],
-    404: commonResponses[404],
+    403: commonResponses[403],
     500: commonResponses[500],
   },
 });

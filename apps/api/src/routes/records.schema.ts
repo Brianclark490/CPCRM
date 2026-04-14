@@ -4,26 +4,30 @@ import { commonResponses } from '../lib/openapi.js';
 
 // Request schemas
 export const CreateRecordRequestSchema = z.object({
-  field_values: z.record(z.string(), z.unknown()),
+  fieldValues: z.record(z.string(), z.unknown()).optional(),
+  field_values: z.record(z.string(), z.unknown()).optional(),
+  linkTo: z.string().optional(),
   parent_record_id: z.string().optional(),
 });
 
 export const UpdateRecordRequestSchema = z.object({
-  field_values: z.record(z.string(), z.unknown()),
+  fieldValues: z.record(z.string(), z.unknown()).optional(),
+  field_values: z.record(z.string(), z.unknown()).optional(),
 });
 
 // Response schema
 const RecordSchema = z.object({
   id: z.string(),
-  object_id: z.string(),
-  tenant_id: z.string(),
-  owner_id: z.string(),
-  field_values: z.record(z.string(), z.unknown()),
-  created_at: z.string(),
-  updated_at: z.string(),
+  objectId: z.string(),
+  tenantId: z.string(),
+  ownerId: z.string(),
+  fieldValues: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 const RecordWithRelationsSchema = RecordSchema.extend({
+  relatedRecords: z.record(z.string(), z.array(z.unknown())).optional(),
   related_records: z.record(z.string(), z.array(z.unknown())).optional(),
 });
 

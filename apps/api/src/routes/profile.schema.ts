@@ -4,24 +4,21 @@ import { commonResponses } from '../lib/openapi.js';
 
 // Request schema
 export const UpdateProfileRequestSchema = z.object({
-  name: z.string().optional(),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  title: z.string().optional(),
-  department: z.string().optional(),
+  displayName: z.string().optional(),
+  jobTitle: z.string().optional(),
 });
 
 // Response schema
 const ProfileSchema = z.object({
-  id: z.string(),
-  user_id: z.string(),
-  name: z.string(),
+  userId: z.string(),
   email: z.string().email(),
-  phone: z.string().nullable(),
-  title: z.string().nullable(),
-  department: z.string().nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  displayName: z.string().optional(),
+  phone: z.string().nullable().optional(),
+  jobTitle: z.string().nullable().optional(),
+  department: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  updatedBy: z.string().optional(),
 });
 
 // Register routes
@@ -75,6 +72,7 @@ registry.registerPath({
     },
     400: commonResponses[400],
     401: commonResponses[401],
+    404: commonResponses[404],
     500: commonResponses[500],
   },
 });

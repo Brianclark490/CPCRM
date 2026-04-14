@@ -26,24 +26,34 @@ export const UpdateFieldDefinitionRequestSchema = z.object({
 });
 
 export const ReorderFieldDefinitionsRequestSchema = z.object({
-  orderedIds: z.array(z.string()),
+  field_ids: z.array(z.string()).optional(),
+  fieldIds: z.array(z.string()).optional(),
 });
 
 // Response schema
 const FieldDefinitionSchema = z.object({
   id: z.string(),
-  object_id: z.string(),
-  api_name: z.string(),
+  objectId: z.string(),
+  object_id: z.string().optional(),
+  apiName: z.string(),
+  api_name: z.string().optional(),
   label: z.string(),
-  data_type: z.string(),
+  dataType: z.string(),
+  data_type: z.string().optional(),
   description: z.string().nullable(),
-  is_required: z.boolean(),
-  is_system: z.boolean(),
-  default_value: z.string().nullable(),
-  display_order: z.number(),
+  isRequired: z.boolean(),
+  is_required: z.boolean().optional(),
+  isSystem: z.boolean(),
+  is_system: z.boolean().optional(),
+  defaultValue: z.string().nullable(),
+  default_value: z.string().nullable().optional(),
+  displayOrder: z.number(),
+  display_order: z.number().optional(),
   constraints: z.record(z.string(), z.unknown()).nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  createdAt: z.string(),
+  created_at: z.string().optional(),
+  updatedAt: z.string(),
+  updated_at: z.string().optional(),
 });
 
 // Register routes
@@ -160,15 +170,8 @@ registry.registerPath({
     }),
   },
   responses: {
-    200: {
+    204: {
       description: 'Field definition deleted successfully',
-      content: {
-        'application/json': {
-          schema: z.object({
-            ok: z.boolean(),
-          }),
-        },
-      },
     },
     400: commonResponses[400],
     401: commonResponses[401],
@@ -177,9 +180,9 @@ registry.registerPath({
   },
 });
 
-// POST /admin/objects/:objectId/fields/reorder
+// PATCH /admin/objects/:objectId/fields/reorder
 registry.registerPath({
-  method: 'post',
+  method: 'patch',
   path: '/admin/objects/{objectId}/fields/reorder',
   description: 'Reorder field definitions for the specified object',
   tags: ['Admin - Fields'],
@@ -201,14 +204,13 @@ registry.registerPath({
       description: 'Fields reordered successfully',
       content: {
         'application/json': {
-          schema: z.object({
-            ok: z.boolean(),
-          }),
+          schema: z.array(FieldDefinitionSchema),
         },
       },
     },
     400: commonResponses[400],
     401: commonResponses[401],
+    404: commonResponses[404],
     500: commonResponses[500],
   },
 });
