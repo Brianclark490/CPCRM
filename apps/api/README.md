@@ -12,7 +12,8 @@ RLS-aware connection pool (`src/db/client.ts`):
   still fully supported.
 - **[Kysely](https://kysely.dev)**, via the `db` instance exported from
   `src/db/kysely.ts`. This is the type-safe query builder adopted in
-  [ADR-006](../../docs/architecture/adr-006-query-builder-evaluation.md).
+  ADR-006 (query-builder evaluation — the ADR document lands in a
+  separate PR; see #440).
 
 Both paths go through the same `Pool` proxy, so Row-Level Security
 (migration 025) applies to either style. Services can migrate to Kysely

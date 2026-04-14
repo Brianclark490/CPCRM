@@ -1,4 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Suppress the `[db/client] WARNING: Database connection is not configured`
+// log emitted by ../client.ts when this test file imports ../kysely.js. The
+// pool is fully mocked below via `vi.mock('pg', ...)`, so the missing URL is
+// intentional and the warning would just add noise to CI output.
+process.env.DATABASE_URL ??= 'postgres://mock:mock@127.0.0.1:5432/mock';
 
 /**
  * Kysely RLS Integration Tests
@@ -178,16 +184,14 @@ const LIVE_DB_URL = process.env.TEST_DATABASE_URL;
 const describeLive = LIVE_DB_URL ? describe : describe.skip;
 
 describeLive('Kysely RLS against a live Postgres (TEST_DATABASE_URL)', () => {
-  // We import pg and Kysely directly here so these tests bypass the module
-  // mock above. Vitest's `vi.mock` is scoped per file, so we use a child
-  // worker config by dynamic import of a separate helper only when the live
-  // URL is present.
-  //
-  // Note: the mock of `pg` above would normally intercept this import too,
-  // which is why we gate the whole block on `LIVE_DB_URL` and unmock inline.
+  // We bypass the `vi.mock('pg', ...)` above by dynamically importing the
+  // real `pg` with `vi.importActual` inside `beforeEach`.  Each test gets a
+  // fresh Pool + Kysely instance and cleans up in `afterEach` so nothing
+  // leaks between tests — including the tenants/records seeded below.
 
   let realDb: import('kysely').Kysely<import('../kysely.types.js').DB>;
-  let cleanup: (() => Promise<void>) | undefined;
+  let realPool: import('pg').Pool;
+  const seededTenantIds: string[] = [];
 
   beforeEach(async () => {
     vi.resetModules();
@@ -197,11 +201,11 @@ describeLive('Kysely RLS against a live Postgres (TEST_DATABASE_URL)', () => {
     const { Kysely, PostgresDialect } = await import('kysely');
     const { tenantStore: liveStore } = await import('../tenantContext.js');
 
-    const pool = new pg.Pool({ connectionString: LIVE_DB_URL });
+    realPool = new pg.Pool({ connectionString: LIVE_DB_URL });
 
     // Wrap the raw pool in the same proxy shape as client.ts so RLS context
     // is applied per-connection.
-    const wrapped = new Proxy(pool, {
+    const wrapped = new Proxy(realPool, {
       get(target, prop, receiver) {
         if (prop === 'connect') {
           return async () => {
@@ -223,24 +227,40 @@ describeLive('Kysely RLS against a live Postgres (TEST_DATABASE_URL)', () => {
     });
 
     realDb = new Kysely({ dialect: new PostgresDialect({ pool: wrapped }) });
-
-    cleanup = async () => {
-      await realDb.destroy().catch(() => {});
-      await pool.end().catch(() => {});
-    };
   });
 
-  afterAll(async () => {
-    await cleanup?.();
+  afterEach(async () => {
+    // Always clean up any seeded data, even if the test failed part-way
+    // through, so the next run starts from a clean slate. Deletes run
+    // outside a tenant context and therefore use the RLS bypass policy.
+    try {
+      if (realDb && seededTenantIds.length > 0) {
+        await realDb
+          .deleteFrom('records')
+          .where('tenant_id', 'in', seededTenantIds)
+          .execute()
+          .catch(() => {});
+        await realDb
+          .deleteFrom('tenants')
+          .where('id', 'in', seededTenantIds)
+          .execute()
+          .catch(() => {});
+      }
+    } finally {
+      seededTenantIds.length = 0;
+      await realDb?.destroy().catch(() => {});
+      await realPool?.end().catch(() => {});
+    }
   });
 
   it('only returns rows belonging to the active tenant', async () => {
     const { tenantStore: liveStore } = await import('../tenantContext.js');
 
-    // Create two tenants and one record each. The RLS bypass path (no
-    // tenant context) is used to seed so that we can insert across tenants.
     const tenantAId = crypto.randomUUID();
     const tenantBId = crypto.randomUUID();
+    // Track the seeded tenants for afterEach cleanup *before* any insert so
+    // a mid-test failure still triggers cleanup.
+    seededTenantIds.push(tenantAId, tenantBId);
 
     await realDb
       .insertInto('tenants')
@@ -251,6 +271,9 @@ describeLive('Kysely RLS against a live Postgres (TEST_DATABASE_URL)', () => {
       .execute();
 
     // Fetch the system object id for `records` so we have a valid FK.
+    // Seed migration 011 ships the `lead` object definition, so if it's
+    // missing the dev DB is broken — fail loud instead of silently
+    // passing an RLS test that validated nothing.
     const [objectDef] = await realDb
       .selectFrom('object_definitions')
       .selectAll()
@@ -259,8 +282,11 @@ describeLive('Kysely RLS against a live Postgres (TEST_DATABASE_URL)', () => {
       .execute();
 
     if (!objectDef) {
-      // Seed data missing — skip rather than fail noisily.
-      return;
+      throw new Error(
+        "Expected system object 'lead' from migration 011 to exist in " +
+          'TEST_DATABASE_URL. Did you forget to run migrations? ' +
+          'Cannot meaningfully validate RLS without seed data.',
+      );
     }
 
     await realDb
@@ -300,15 +326,5 @@ describeLive('Kysely RLS against a live Postgres (TEST_DATABASE_URL)', () => {
     expect(bravoRows.every((r) => r.tenant_id === tenantBId)).toBe(true);
     expect(bravoRows.some((r) => r.name === 'Bravo Record')).toBe(true);
     expect(bravoRows.some((r) => r.name === 'Alpha Record')).toBe(false);
-
-    // Clean up seed data (bypass RLS by running without tenant context).
-    await realDb
-      .deleteFrom('records')
-      .where('tenant_id', 'in', [tenantAId, tenantBId])
-      .execute();
-    await realDb
-      .deleteFrom('tenants')
-      .where('id', 'in', [tenantAId, tenantBId])
-      .execute();
   });
 });
