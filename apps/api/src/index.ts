@@ -4,6 +4,8 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import pinoHttp from 'pino-http';
 import type { Options, HttpLogger } from 'pino-http';
+import swaggerUi from 'swagger-ui-express';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config } from './lib/config.js';
@@ -92,6 +94,29 @@ app.use('/api', writeMethodLimiter);
 //   - GET  /api/auth/csrf-token is what *refreshes* it
 //   - DELETE /api/auth/session tears down the session (no CSRF needed)
 app.use('/api/auth', authSessionRouter);
+
+// Serve OpenAPI documentation in dev/staging (not production)
+if (config.env !== 'production') {
+  try {
+    const openapiPath = join(__dirname, '../openapi.json');
+    const openapiDoc = JSON.parse(readFileSync(openapiPath, 'utf-8'));
+
+    // Serve the raw OpenAPI spec as JSON
+    app.get('/api/openapi.json', (_req, res) => {
+      res.json(openapiDoc);
+    });
+
+    // Serve Swagger UI
+    app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiDoc, {
+      customSiteTitle: 'CPCRM API Documentation',
+      customCss: '.swagger-ui .topbar { display: none }',
+    }));
+
+    logger.info('OpenAPI documentation available at /api/docs');
+  } catch (err) {
+    logger.warn({ err }, 'OpenAPI spec not found - run build to generate it');
+  }
+}
 
 // CSRF protection for all other state-changing API requests.
 app.use('/api', requireCsrf);

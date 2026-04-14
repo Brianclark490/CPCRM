@@ -1,0 +1,12 @@
+// Import all schema files to register routes with OpenAPI registry
+// This file must be imported before generating the OpenAPI document
+
+import './routes/health.schema.js';
+import './routes/authSession.schema.js';
+import './routes/me.schema.js';
+import './routes/organisations.schema.js';
+import './routes/adminObjects.schema.js';
+import './routes/adminFields.schema.js';
+
+// Export the registry and document generator for use in the app
+export { registry, generateOpenAPIDocument } from './lib/openapi.js';

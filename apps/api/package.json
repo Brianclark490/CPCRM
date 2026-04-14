@@ -5,14 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && node -e \"require('node:fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
+    "build": "tsc && node -e \"require('node:fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\" && npm run generate-openapi",
     "start": "node dist/index.js",
     "test": "vitest run",
     "lint": "echo 'lint not yet implemented'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "generate-openapi": "node dist/generateOpenAPI.js"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@descope/node-sdk": "^1.10.0",
+    "@types/swagger-ui-express": "^4.1.8",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.1",
@@ -22,6 +25,7 @@
     "pg": "^8.20.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
+    "swagger-ui-express": "^5.0.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
