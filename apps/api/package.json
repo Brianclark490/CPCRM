@@ -10,7 +10,8 @@
     "test": "vitest run",
     "lint": "echo 'lint not yet implemented'",
     "typecheck": "tsc --noEmit",
-    "generate-openapi": "node dist/generateOpenAPI.js"
+    "generate-openapi": "node dist/generateOpenAPI.js",
+    "db:types": "kysely-codegen --dialect postgres --url $DATABASE_URL --out-file src/db/kysely.types.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
@@ -21,6 +22,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
     "helmet": "^8.1.0",
+    "kysely": "^0.28.16",
     "pg": "^8.20.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
@@ -34,6 +36,8 @@
     "@types/node": "^25.5.2",
     "@types/pg": "^8.20.0",
     "@types/pino-http": "^6.1.0",
+    "@types/swagger-ui-express": "^4.1.8",
+    "kysely-codegen": "^0.20.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"

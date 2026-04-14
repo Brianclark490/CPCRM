@@ -67,6 +67,62 @@ Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`.
 - Tenant-specific data must always be scoped in queries (never fetch cross-tenant data).
 - Shared packages (`packages/types`, `packages/config`) must remain tenant-agnostic.
 
+## Database Query Layer (Kysely)
+
+The API uses [Kysely](https://kysely.dev/) as a type-safe query builder on top of PostgreSQL. Kysely queries automatically respect Row-Level Security (RLS) policies through the RLS-aware connection pool.
+
+### When to regenerate types
+
+Run `npm run db:types` in `apps/api` **after every SQL migration**:
+
+```bash
+cd apps/api
+npm run db:types
+```
+
+This regenerates `src/db/kysely.types.ts` by introspecting the database schema. The types file is **auto-generated** — never edit it manually.
+
+### Using Kysely in services
+
+Import the `db` instance from `src/db/kysely.ts`:
+
+```typescript
+import { db } from '../db/kysely.js';
+
+// Type-safe queries
+const accounts = await db
+  .selectFrom('accounts')
+  .selectAll()
+  .where('owner_id', '=', userId)
+  .execute();
+
+// Tenant context is automatic — RLS filters rows to current tenant
+```
+
+### Incremental adoption pattern
+
+Services can adopt Kysely incrementally while raw `pg` queries continue to work:
+
+1. **Parallel implementation**: Implement new logic using Kysely alongside existing raw SQL
+2. **Comparison tests**: Verify Kysely returns identical results to raw SQL
+3. **Replace**: Remove raw SQL once Kysely implementation is validated
+
+Both `pool` (from `src/db/client.ts`) and `db` (from `src/db/kysely.ts`) use the same RLS-aware connection pool, so tenant isolation is guaranteed regardless of which you use.
+
+### Transactions
+
+Kysely transactions maintain tenant context:
+
+```typescript
+await db.transaction().execute(async (trx) => {
+  await trx.insertInto('accounts').values({ ... }).execute();
+  await trx.insertInto('contacts').values({ ... }).execute();
+  // Both queries respect the active tenant context
+});
+```
+
+See `src/db/__tests__/kyselyRls.test.ts` for integration test examples.
+
 ## Security Advisory Exceptions
 
 CI runs `npm audit --audit-level=high` on every pull request and fails the build
