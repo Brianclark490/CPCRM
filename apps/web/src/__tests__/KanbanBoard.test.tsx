@@ -9,6 +9,19 @@ vi.mock('@descope/react-sdk', () => ({
 
 const { useSession } = await import('@descope/react-sdk');
 
+/**
+ * Wraps a list of items in the paginated envelope returned by the real
+ * `/api/v1/admin/pipelines` endpoint (`paginateInMemory`). Using this in
+ * mocks keeps the tests honest about the response shape so regressions
+ * like unwrapping a `.find()` call directly on the envelope are caught.
+ */
+function paginated<T>(items: readonly T[]) {
+  return {
+    data: items,
+    pagination: { total: items.length, limit: 20, offset: 0, hasMore: false },
+  };
+}
+
 const mockPipeline = {
   id: 'pipe-1',
   name: 'Sales Pipeline',
@@ -128,7 +141,7 @@ function mockFetch() {
     if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
       return Promise.resolve({
         ok: true,
-        json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+        json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
       } as Response);
     }
 
@@ -283,7 +296,7 @@ describe('KanbanBoard', () => {
         if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
           return Promise.resolve({
             ok: true,
-            json: async () => [],
+            json: async () => paginated([]),
           } as Response);
         }
         return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
@@ -294,6 +307,25 @@ describe('KanbanBoard', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('no-pipeline')).toBeInTheDocument();
+    });
+  });
+
+  it('unwraps the paginated envelope returned by /admin/pipelines', async () => {
+    // Regression test for the "Failed to load pipeline configuration"
+    // bug: the admin/pipelines endpoint returns a `{ data, pagination }`
+    // envelope (via paginateInMemory), not a raw array. Calling
+    // `.find()` directly on that object throws TypeError and flips the
+    // board into its error state. Render the board against a real-
+    // shape response and assert the stages render — which can only
+    // happen if unwrapList peeled off `data` successfully.
+    vi.stubGlobal('fetch', mockFetch());
+
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByText('Prospecting')).toBeInTheDocument();
+      expect(screen.getByText('Qualification')).toBeInTheDocument();
     });
   });
 
@@ -349,7 +381,7 @@ describe('KanbanBoard', () => {
         if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
           return Promise.resolve({
             ok: true,
-            json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+            json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
           } as Response);
         }
         if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
@@ -452,7 +484,7 @@ describe('KanbanBoard', () => {
       if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
         return Promise.resolve({
           ok: true,
-          json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+          json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
         } as Response);
       }
       if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
@@ -538,7 +570,7 @@ describe('KanbanBoard', () => {
       if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
         return Promise.resolve({
           ok: true,
-          json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+          json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
         } as Response);
       }
       if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
@@ -627,7 +659,7 @@ describe('KanbanBoard', () => {
         if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
           return Promise.resolve({
             ok: true,
-            json: async () => [{ ...mockPipeline, object_id: 'obj-1' }],
+            json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
           } as Response);
         }
         if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {

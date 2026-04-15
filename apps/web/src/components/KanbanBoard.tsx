@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { ApiError, useApiClient } from '../lib/apiClient.js';
+import { ApiError, unwrapList, useApiClient } from '../lib/apiClient.js';
 import { useTenantLocale } from '../useTenantLocale.js';
 import { KanbanCard } from './KanbanCard.js';
 import type { KanbanCardRecord } from './KanbanCard.js';
@@ -228,14 +228,18 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
     const loadAll = async () => {
       try {
-        // 1. Find pipeline for this object
+        // 1. Find pipeline for this object. The admin/pipelines endpoint
+        // returns a paginated `{ data, pagination }` envelope, so unwrap
+        // via unwrapList (which also tolerates a bare array for future-
+        // proofing against endpoint shape changes).
         let pipelines: Array<
           PipelineDefinition & { objectId?: string; object_id?: string }
         >;
         try {
-          pipelines = await api.get<
-            Array<PipelineDefinition & { objectId?: string; object_id?: string }>
-          >('/api/v1/admin/pipelines');
+          const payload = await api.get<unknown>('/api/v1/admin/pipelines');
+          pipelines = unwrapList<
+            PipelineDefinition & { objectId?: string; object_id?: string }
+          >(payload);
         } catch {
           if (!cancelled) {
             setError('Failed to load pipeline configuration.');
