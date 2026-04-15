@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
+import type { Selectable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { Accounts, Opportunities } from '../db/kysely.types.js';
 
 // ─── Local type aliases ───────────────────────────────────────────────────────
 
@@ -175,35 +177,64 @@ export function validateWebsite(website: unknown): string | null {
 
 // ─── Row → domain model ───────────────────────────────────────────────────────
 
-function rowToAccount(row: Record<string, unknown>): Account {
+/**
+ * Typing the row mapper against `Selectable<Accounts>` (rather than
+ * `Record<string, unknown>`) means a column rename or nullability change
+ * on the generated schema becomes a compile-time error at this service,
+ * rather than an `unknown` cast leaking an incorrect runtime shape into
+ * the domain model.
+ */
+function rowToAccount(row: Selectable<Accounts>): Account {
   return {
-    id: row.id as string,
-    tenantId: row.tenant_id as string,
-    name: row.name as string,
-    industry: (row.industry as string | null) ?? undefined,
-    website: (row.website as string | null) ?? undefined,
-    phone: (row.phone as string | null) ?? undefined,
-    email: (row.email as string | null) ?? undefined,
-    addressLine1: (row.address_line1 as string | null) ?? undefined,
-    addressLine2: (row.address_line2 as string | null) ?? undefined,
-    city: (row.city as string | null) ?? undefined,
-    region: (row.region as string | null) ?? undefined,
-    postalCode: (row.postal_code as string | null) ?? undefined,
-    country: (row.country as string | null) ?? undefined,
-    notes: (row.notes as string | null) ?? undefined,
-    ownerId: row.owner_id as string,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
-    createdBy: row.created_by as string,
+    id: row.id,
+    tenantId: row.tenant_id,
+    name: row.name,
+    industry: row.industry ?? undefined,
+    website: row.website ?? undefined,
+    phone: row.phone ?? undefined,
+    email: row.email ?? undefined,
+    addressLine1: row.address_line1 ?? undefined,
+    addressLine2: row.address_line2 ?? undefined,
+    city: row.city ?? undefined,
+    region: row.region ?? undefined,
+    postalCode: row.postal_code ?? undefined,
+    country: row.country ?? undefined,
+    notes: row.notes ?? undefined,
+    ownerId: row.owner_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
   };
 }
 
-function rowToAccountListItem(row: Record<string, unknown>): AccountListItem {
+/**
+ * The list query adds a scalar subquery `opportunity_count` onto the
+ * base Accounts row. We type against the intersection so a rename on
+ * Accounts still surfaces here at compile time.
+ */
+type AccountListRow = Selectable<Accounts> & { opportunity_count: string | number };
+
+function rowToAccountListItem(row: AccountListRow): AccountListItem {
   return {
     ...rowToAccount(row),
-    opportunityCount: parseInt(row.opportunity_count as string, 10) || 0,
+    opportunityCount:
+      typeof row.opportunity_count === 'number'
+        ? row.opportunity_count
+        : parseInt(row.opportunity_count, 10) || 0,
   };
 }
+
+type OpportunityRow = Pick<
+  Selectable<Opportunities>,
+  | 'id'
+  | 'title'
+  | 'stage'
+  | 'value'
+  | 'currency'
+  | 'expected_close_date'
+  | 'created_at'
+  | 'updated_at'
+>;
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
@@ -264,75 +295,115 @@ export async function createAccount(
 
   logger.info({ tenantId, accountId, requestingUserId }, 'Creating new account');
 
-  const result = await pool.query(
-    `INSERT INTO accounts
-       (id, tenant_id, name, industry, website, phone, email,
-        address_line1, address_line2, city, region, postal_code, country, notes,
-        owner_id, created_by, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-     RETURNING *`,
-    [
-      accountId,
-      tenantId,
-      name.trim(),
-      industry?.trim() ?? null,
-      website?.trim() ?? null,
-      phone?.trim() ?? null,
-      email?.trim() ?? null,
-      addressLine1?.trim() ?? null,
-      addressLine2?.trim() ?? null,
-      city?.trim() ?? null,
-      region?.trim() ?? null,
-      postalCode?.trim() ?? null,
-      country?.trim() ?? null,
-      notes?.trim() ?? null,
-      requestingUserId,
-      requestingUserId,
-      now,
-      now,
-    ],
-  );
+  const row = await db
+    .insertInto('accounts')
+    .values({
+      id: accountId,
+      tenant_id: tenantId,
+      name: name.trim(),
+      industry: industry?.trim() ?? null,
+      website: website?.trim() ?? null,
+      phone: phone?.trim() ?? null,
+      email: email?.trim() ?? null,
+      address_line1: addressLine1?.trim() ?? null,
+      address_line2: addressLine2?.trim() ?? null,
+      city: city?.trim() ?? null,
+      region: region?.trim() ?? null,
+      postal_code: postalCode?.trim() ?? null,
+      country: country?.trim() ?? null,
+      notes: notes?.trim() ?? null,
+      owner_id: requestingUserId,
+      created_by: requestingUserId,
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ tenantId, accountId }, 'Account created successfully');
 
-  return rowToAccount(result.rows[0]);
+  return rowToAccount(row);
 }
 
 /**
  * Returns a paginated list of accounts belonging to the authenticated user.
  * Supports searching by name and email.
+ *
+ * The opportunity_count for each row is emitted as a correlated scalar
+ * subquery. The count path projects the full accounts row plus the
+ * subquery; the total-count path uses a separate lightweight COUNT(*)
+ * so we don't dedupe wide rows just to learn a number.
  */
 export async function listAccounts(
   params: ListAccountsParams,
 ): Promise<ListAccountsResult> {
   const { tenantId, ownerId, search, limit, offset } = params;
 
-  const queryParams: unknown[] = [tenantId, ownerId];
-  let whereClause = 'WHERE a.tenant_id = $1 AND a.owner_id = $2';
+  const searchTerm =
+    search && search.trim().length > 0
+      ? `%${escapeLikePattern(search.trim())}%`
+      : null;
 
-  if (search && search.trim().length > 0) {
-    const searchTerm = `%${escapeLikePattern(search.trim())}%`;
-    queryParams.push(searchTerm);
-    whereClause += ` AND (a.name ILIKE $${queryParams.length} OR a.email ILIKE $${queryParams.length})`;
+  // Count query — small, id-less projection for cheap COUNT(*).
+  let countQuery = db
+    .selectFrom('accounts as a')
+    .select((eb) => eb.fn.countAll<string>().as('total'))
+    .where('a.tenant_id', '=', tenantId)
+    .where('a.owner_id', '=', ownerId);
+
+  if (searchTerm) {
+    countQuery = countQuery.where((eb) =>
+      eb.or([
+        eb('a.name', 'ilike', searchTerm),
+        eb('a.email', 'ilike', searchTerm),
+      ]),
+    );
   }
 
-  const countResult = await pool.query(
-    `SELECT COUNT(*) AS total FROM accounts a ${whereClause}`,
-    queryParams,
-  );
-  const total = parseInt(countResult.rows[0].total as string, 10);
+  const countRow = await countQuery.executeTakeFirstOrThrow();
+  const total = parseInt(countRow.total, 10);
 
-  queryParams.push(limit, offset);
-  const dataResult = await pool.query(
-    `SELECT a.*, (SELECT COUNT(*) FROM opportunities o WHERE o.account_id = a.id AND o.tenant_id = a.tenant_id) AS opportunity_count
-     FROM accounts a ${whereClause}
-     ORDER BY a.created_at DESC
-     LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
-    queryParams,
-  );
+  // Data query with correlated opportunity_count subquery.
+  //
+  // The subquery is explicitly scoped by tenant_id on both halves
+  // (the outer a.tenant_id and the inner o.tenant_id) as
+  // defence-in-depth (ADR-006).
+  let dataQuery = db
+    .selectFrom('accounts as a')
+    .selectAll('a')
+    .select((eb) =>
+      eb
+        .selectFrom('opportunities as o')
+        .select(eb.fn.countAll<string>().as('count'))
+        .whereRef('o.account_id', '=', 'a.id')
+        .whereRef('o.tenant_id', '=', 'a.tenant_id')
+        .as('opportunity_count'),
+    )
+    .where('a.tenant_id', '=', tenantId)
+    .where('a.owner_id', '=', ownerId);
+
+  if (searchTerm) {
+    dataQuery = dataQuery.where((eb) =>
+      eb.or([
+        eb('a.name', 'ilike', searchTerm),
+        eb('a.email', 'ilike', searchTerm),
+      ]),
+    );
+  }
+
+  const rows = await dataQuery
+    .orderBy('a.created_at', 'desc')
+    .limit(limit)
+    .offset(offset)
+    .execute();
 
   return {
-    data: dataResult.rows.map(rowToAccountListItem),
+    data: rows.map((r) =>
+      rowToAccountListItem({
+        ...r,
+        opportunity_count: r.opportunity_count ?? '0',
+      }),
+    ),
     total,
     limit,
     offset,
@@ -349,34 +420,44 @@ export async function getAccountWithOpportunities(
   tenantId: string,
   ownerId: string,
 ): Promise<AccountWithOpportunities | null> {
-  const accountResult = await pool.query(
-    'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3',
-    [id, tenantId, ownerId],
-  );
+  const accountRow = await db
+    .selectFrom('accounts')
+    .selectAll()
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .where('owner_id', '=', ownerId)
+    .executeTakeFirst();
 
-  if (accountResult.rows.length === 0) return null;
+  if (!accountRow) return null;
 
-  const account = rowToAccount(accountResult.rows[0]);
+  const account = rowToAccount(accountRow);
 
-  const oppResult = await pool.query(
-    `SELECT id, title, stage, value, currency, expected_close_date, created_at, updated_at
-     FROM opportunities
-     WHERE account_id = $1 AND tenant_id = $2
-     ORDER BY created_at DESC`,
-    [id, tenantId],
-  );
+  const oppRows: OpportunityRow[] = await db
+    .selectFrom('opportunities')
+    .select([
+      'id',
+      'title',
+      'stage',
+      'value',
+      'currency',
+      'expected_close_date',
+      'created_at',
+      'updated_at',
+    ])
+    .where('account_id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .orderBy('created_at', 'desc')
+    .execute();
 
-  const opportunities = oppResult.rows.map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    title: row.title as string,
+  const opportunities = oppRows.map((row) => ({
+    id: row.id,
+    title: row.title,
     stage: row.stage as string,
     value: row.value != null ? Number(row.value) : undefined,
-    currency: (row.currency as string | null) ?? undefined,
-    expectedCloseDate: row.expected_close_date != null
-      ? new Date(row.expected_close_date as string)
-      : undefined,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    currency: row.currency ?? undefined,
+    expectedCloseDate: row.expected_close_date ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }));
 
   return { ...account, opportunities };
@@ -396,12 +477,15 @@ export async function updateAccount(
   params: UpdateAccountParams,
 ): Promise<Account> {
   // Check existence and ownership
-  const existing = await pool.query(
-    'SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3',
-    [id, tenantId, ownerId],
-  );
+  const existing = await db
+    .selectFrom('accounts')
+    .select('id')
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .where('owner_id', '=', ownerId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existing) {
     throwNotFoundError('Account not found');
   }
 
@@ -426,74 +510,37 @@ export async function updateAccount(
     if (websiteError) throwValidationError(websiteError);
   }
 
-  // Build dynamic update
-  const updates: string[] = [];
-  const values: unknown[] = [];
-  let paramIndex = 1;
+  // Build the partial update — only include fields the caller provided,
+  // preserving the original "UPDATE only-what-you-set" semantics.
+  const patch: Record<string, unknown> = {
+    updated_at: new Date(),
+  };
 
-  if ('name' in params) {
-    updates.push(`name = $${paramIndex++}`);
-    values.push(params.name!.trim());
-  }
-  if ('industry' in params) {
-    updates.push(`industry = $${paramIndex++}`);
-    values.push(params.industry?.trim() ?? null);
-  }
-  if ('website' in params) {
-    updates.push(`website = $${paramIndex++}`);
-    values.push(params.website?.trim() ?? null);
-  }
-  if ('phone' in params) {
-    updates.push(`phone = $${paramIndex++}`);
-    values.push(params.phone?.trim() ?? null);
-  }
-  if ('email' in params) {
-    updates.push(`email = $${paramIndex++}`);
-    values.push(params.email?.trim() ?? null);
-  }
-  if ('addressLine1' in params) {
-    updates.push(`address_line1 = $${paramIndex++}`);
-    values.push(params.addressLine1?.trim() ?? null);
-  }
-  if ('addressLine2' in params) {
-    updates.push(`address_line2 = $${paramIndex++}`);
-    values.push(params.addressLine2?.trim() ?? null);
-  }
-  if ('city' in params) {
-    updates.push(`city = $${paramIndex++}`);
-    values.push(params.city?.trim() ?? null);
-  }
-  if ('region' in params) {
-    updates.push(`region = $${paramIndex++}`);
-    values.push(params.region?.trim() ?? null);
-  }
-  if ('postalCode' in params) {
-    updates.push(`postal_code = $${paramIndex++}`);
-    values.push(params.postalCode?.trim() ?? null);
-  }
-  if ('country' in params) {
-    updates.push(`country = $${paramIndex++}`);
-    values.push(params.country?.trim() ?? null);
-  }
-  if ('notes' in params) {
-    updates.push(`notes = $${paramIndex++}`);
-    values.push(params.notes?.trim() ?? null);
-  }
+  if ('name' in params) patch.name = params.name!.trim();
+  if ('industry' in params) patch.industry = params.industry?.trim() ?? null;
+  if ('website' in params) patch.website = params.website?.trim() ?? null;
+  if ('phone' in params) patch.phone = params.phone?.trim() ?? null;
+  if ('email' in params) patch.email = params.email?.trim() ?? null;
+  if ('addressLine1' in params) patch.address_line1 = params.addressLine1?.trim() ?? null;
+  if ('addressLine2' in params) patch.address_line2 = params.addressLine2?.trim() ?? null;
+  if ('city' in params) patch.city = params.city?.trim() ?? null;
+  if ('region' in params) patch.region = params.region?.trim() ?? null;
+  if ('postalCode' in params) patch.postal_code = params.postalCode?.trim() ?? null;
+  if ('country' in params) patch.country = params.country?.trim() ?? null;
+  if ('notes' in params) patch.notes = params.notes?.trim() ?? null;
 
-  const now = new Date();
-  updates.push(`updated_at = $${paramIndex++}`);
-  values.push(now);
-
-  values.push(id, tenantId, ownerId);
-
-  const result = await pool.query(
-    `UPDATE accounts SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex++} AND owner_id = $${paramIndex} RETURNING *`,
-    values,
-  );
+  const row = await db
+    .updateTable('accounts')
+    .set(patch)
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .where('owner_id', '=', ownerId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ tenantId, accountId: id, ownerId }, 'Account updated');
 
-  return rowToAccount(result.rows[0]);
+  return rowToAccount(row);
 }
 
 /**
@@ -506,12 +553,14 @@ export async function deleteAccount(
   tenantId: string,
   ownerId: string,
 ): Promise<void> {
-  const result = await pool.query(
-    'DELETE FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3',
-    [id, tenantId, ownerId],
-  );
+  const result = await db
+    .deleteFrom('accounts')
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .where('owner_id', '=', ownerId)
+    .executeTakeFirst();
 
-  if (result.rowCount === 0) {
+  if (!result || result.numDeletedRows === 0n) {
     throwNotFoundError('Account not found');
   }
 

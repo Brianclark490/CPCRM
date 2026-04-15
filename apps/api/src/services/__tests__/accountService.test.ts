@@ -16,85 +16,178 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// Kysely's PostgresDialect acquires a client per query via `pool.connect()`,
+// so the mock routes both `pool.query` and `pool.connect().query` through the
+// same `runQuery` dispatcher. SQL identifier quotes are stripped so the
+// matchers are quote-agnostic.
 
-const { fakeRows, mockQuery } = vi.hoisted(() => {
+const { fakeRows, mockQuery, mockConnect } = vi.hoisted(() => {
   const fakeRows = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function runQuery(rawSql: string, params: unknown[] | undefined) {
+    const s = rawSql
+      .replace(/\s+/g, ' ')
+      .replace(/"/g, '')
+      .trim()
+      .toUpperCase();
 
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+    if (s.startsWith('SELECT SET_CONFIG')) {
+      return { rows: [] };
+    }
+
+    // INSERT INTO accounts (... 18 columns ...) VALUES ($1, ..., $18) RETURNING *
     if (s.startsWith('INSERT INTO ACCOUNTS')) {
-      const [id, tenant_id, name, industry, website, phone, email,
-        address_line1, address_line2, city, region, postal_code, country, notes,
-        owner_id, created_by, created_at, updated_at] = params as unknown[];
+      const [
+        id,
+        tenant_id,
+        name,
+        industry,
+        website,
+        phone,
+        email,
+        address_line1,
+        address_line2,
+        city,
+        region,
+        postal_code,
+        country,
+        notes,
+        owner_id,
+        created_by,
+        created_at,
+        updated_at,
+      ] = params as unknown[];
       const row: Record<string, unknown> = {
-        id, tenant_id, name, industry, website, phone, email,
-        address_line1, address_line2, city, region, postal_code, country, notes,
-        owner_id, created_by, created_at, updated_at,
+        id,
+        tenant_id,
+        name,
+        industry,
+        website,
+        phone,
+        email,
+        address_line1,
+        address_line2,
+        city,
+        region,
+        postal_code,
+        country,
+        notes,
+        owner_id,
+        created_by,
+        created_at,
+        updated_at,
       };
       fakeRows.set(id as string, row);
       return { rows: [row] };
     }
 
-    if (s.startsWith('SELECT COUNT(*)')) {
+    // listAccounts count path:
+    //   SELECT count(*) as total FROM accounts as a
+    //     WHERE a.tenant_id = $1 AND a.owner_id = $2
+    //     [AND (a.name ilike $3 OR a.email ilike $4)]
+    //
+    // Note: the data query also contains COUNT(*) (inside its scalar
+    // subquery), so we anchor on `SELECT COUNT(*)` at the start of the
+    // compiled SQL — not just `includes('COUNT(*)')` — to disambiguate.
+    if (s.startsWith('SELECT COUNT(*)') && s.includes('FROM ACCOUNTS')) {
       const [tenant_id, owner_id] = params as string[];
-      const matching = [...fakeRows.values()].filter(
+      let matching = [...fakeRows.values()].filter(
         (r) => r.tenant_id === tenant_id && r.owner_id === owner_id,
       );
-
-      // Handle search filter if present
-      if (params && params.length > 2) {
-        const searchTerm = (params[2] as string).replace(/%/g, '').toLowerCase();
-        const filtered = matching.filter(
+      if (params && params.length > 2 && typeof params[2] === 'string') {
+        const term = (params[2] as string).replace(/%/g, '').toLowerCase();
+        matching = matching.filter(
           (r) =>
-            (r.name as string).toLowerCase().includes(searchTerm) ||
-            ((r.email as string | null) ?? '').toLowerCase().includes(searchTerm),
+            (r.name as string).toLowerCase().includes(term) ||
+            ((r.email as string | null) ?? '').toLowerCase().includes(term),
         );
-        return { rows: [{ total: String(filtered.length) }] };
       }
-
       return { rows: [{ total: String(matching.length) }] };
     }
 
-    if (s.includes('FROM ACCOUNTS') && s.includes('LIMIT') && s.includes('OFFSET')) {
+    // listAccounts data path:
+    //   SELECT a.*, (select count(*) ... opportunities ...) as opportunity_count
+    //     FROM accounts as a
+    //     WHERE a.tenant_id = $1 AND a.owner_id = $2
+    //     [AND (a.name ilike $3 OR a.email ilike $4)]
+    //     ORDER BY a.created_at DESC LIMIT $N OFFSET $N+1
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM ACCOUNTS AS A') &&
+      s.includes('LIMIT') &&
+      s.includes('OFFSET')
+    ) {
       const [tenant_id, owner_id] = params as string[];
       let matching = [...fakeRows.values()].filter(
         (r) => r.tenant_id === tenant_id && r.owner_id === owner_id,
       );
 
-      // Handle search filter
-      if (params && params.length > 2 && typeof params[2] === 'string' && (params[2] as string).startsWith('%')) {
-        const searchTerm = (params[2] as string).replace(/%/g, '').toLowerCase();
+      // With search: params = [tenantId, ownerId, searchTerm, searchTerm, limit, offset]
+      // Without:     params = [tenantId, ownerId, limit, offset]
+      const hasSearch =
+        params &&
+        params.length > 4 &&
+        typeof params[2] === 'string' &&
+        (params[2] as string).includes('%');
+
+      if (hasSearch) {
+        const term = (params![2] as string).replace(/%/g, '').toLowerCase();
         matching = matching.filter(
           (r) =>
-            (r.name as string).toLowerCase().includes(searchTerm) ||
-            ((r.email as string | null) ?? '').toLowerCase().includes(searchTerm),
+            (r.name as string).toLowerCase().includes(term) ||
+            ((r.email as string | null) ?? '').toLowerCase().includes(term),
         );
-        const limit = params[3] as number;
-        const offset = params[4] as number;
-        return { rows: matching.slice(offset, offset + limit).map((r) => ({ ...r, opportunity_count: '0' })) };
       }
 
-      // No search — params: [tenant_id, owner_id, limit, offset]
-      const limit = params![2] as number;
-      const offset = params![3] as number;
-      return { rows: matching.slice(offset, offset + limit).map((r) => ({ ...r, opportunity_count: '0' })) };
+      const limit = (hasSearch ? params![4] : params![2]) as number;
+      const offset = (hasSearch ? params![5] : params![3]) as number;
+
+      return {
+        rows: matching
+          .slice(offset, offset + limit)
+          .map((r) => ({ ...r, opportunity_count: '0' })),
+      };
     }
 
-    if (s.startsWith('SELECT * FROM ACCOUNTS WHERE ID = $1 AND TENANT_ID = $2 AND OWNER_ID = $3')) {
+    // getAccountWithOpportunities account lookup:
+    //   SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2 AND owner_id = $3
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM ACCOUNTS') &&
+      !s.includes('FROM ACCOUNTS AS A') &&
+      s.includes('ID =') &&
+      s.includes('TENANT_ID =') &&
+      s.includes('OWNER_ID =')
+    ) {
       const [id, tenant_id, owner_id] = params as string[];
       const row = fakeRows.get(id);
-      if (row && row.tenant_id === tenant_id && row.owner_id === owner_id) return { rows: [row] };
+      if (row && row.tenant_id === tenant_id && row.owner_id === owner_id) {
+        // If the projection is only `id` (updateAccount existence check),
+        // the same row still passes the match — Kysely narrows the fields
+        // server-side so we can return the full row object.
+        return { rows: [row] };
+      }
       return { rows: [] };
     }
 
-    if (s.startsWith('SELECT ID, TITLE, STAGE')) {
-      // Opportunities lookup for getAccountWithOpportunities
+    // getAccountWithOpportunities opportunities lookup:
+    //   SELECT id, title, stage, value, currency, expected_close_date,
+    //          created_at, updated_at
+    //     FROM opportunities
+    //     WHERE account_id = $1 AND tenant_id = $2
+    //     ORDER BY created_at DESC
+    if (s.startsWith('SELECT') && s.includes('FROM OPPORTUNITIES')) {
       return { rows: [] };
     }
 
+    // updateAccount UPDATE ... RETURNING *
     if (s.startsWith('UPDATE ACCOUNTS')) {
-      // Find the account to update
+      // The WHERE clause binds [id, tenant_id, owner_id] at the tail, so
+      // the id is at params.length - 3.
       const idIdx = params!.length - 3;
       const id = params![idIdx] as string;
       const existing = fakeRows.get(id);
@@ -104,24 +197,53 @@ const { fakeRows, mockQuery } = vi.hoisted(() => {
       return { rows: [updated] };
     }
 
+    // deleteAccount: Kysely's PostgresDriver reads `rowCount` into
+    // `numAffectedRows` ONLY when `command` is 'INSERT' | 'UPDATE' |
+    // 'DELETE' | 'MERGE' on the pg result, so the mock must emit the
+    // command marker or `numDeletedRows` comes back as 0n.
     if (s.startsWith('DELETE FROM ACCOUNTS')) {
       const [id, tenant_id, owner_id] = params as string[];
       const row = fakeRows.get(id);
       if (row && row.tenant_id === tenant_id && row.owner_id === owner_id) {
         fakeRows.delete(id);
-        return { rowCount: 1 };
+        return { rows: [], rowCount: 1, command: 'DELETE' };
       }
-      return { rowCount: 0 };
+      return { rows: [], rowCount: 0, command: 'DELETE' };
     }
 
     return { rows: [] };
+  }
+
+  // Kysely's pg driver calls `client.query({ text, values })` with a single
+  // query-config object. The shim unwraps both the string- and object-form
+  // call shapes so the dispatcher sees consistent (sql, params) tuples.
+  function unwrap(
+    sql: unknown,
+    params: unknown[] | undefined,
+  ): { rawSql: string; rawParams: unknown[] | undefined } {
+    if (typeof sql === 'string') return { rawSql: sql, rawParams: params };
+    const obj = sql as { text: string; values?: unknown[] };
+    return { rawSql: obj.text, rawParams: obj.values ?? params };
+  }
+
+  const mockQuery = vi.fn(async (sql: unknown, params?: unknown[]) => {
+    const { rawSql, rawParams } = unwrap(sql, params);
+    return runQuery(rawSql, rawParams);
   });
 
-  return { fakeRows, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: unknown, params?: unknown[]) => {
+      const { rawSql, rawParams } = unwrap(sql, params);
+      return runQuery(rawSql, rawParams);
+    }),
+    release: vi.fn(),
+  }));
+
+  return { fakeRows, mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 // ─── Validation tests ─────────────────────────────────────────────────────────
@@ -420,7 +542,7 @@ describe('listAccounts', () => {
     });
 
     expect(result.data).toHaveLength(1);
-    expect(result.data[0].name).toBe('My Account');
+    expect(result.data[0]!.name).toBe('My Account');
   });
 });
 
