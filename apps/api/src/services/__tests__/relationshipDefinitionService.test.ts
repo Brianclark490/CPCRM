@@ -16,23 +16,41 @@ vi.mock('../../lib/logger.js', () => ({
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
 
-const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
+const { fakeObjects, fakeRelationships, mockQuery, mockConnect } = vi.hoisted(() => {
   const fakeObjects = new Map<string, Record<string, unknown>>();
   const fakeRelationships = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function runQuery(rawSql: string, params?: unknown[]) {
+    // Strip identifier quoting so matching is quote-agnostic.
+    const s = rawSql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
-    // SELECT id FROM object_definitions WHERE id = $1
-    if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE ID')) {
+    // Transaction control statements — no-ops in the fake.
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+
+    // RLS preamble
+    if (s.startsWith('SELECT SET_CONFIG')) {
+      return { rows: [] };
+    }
+
+    // SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2
+    if (
+      s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS') &&
+      s.includes('WHERE ID =')
+    ) {
       const id = params![0] as string;
       const row = fakeObjects.get(id);
       if (row) return { rows: [{ id: row.id }] };
       return { rows: [] };
     }
 
-    // SELECT id FROM relationship_definitions WHERE source_object_id = $1 AND api_name = $2
-    if (s.startsWith('SELECT ID FROM RELATIONSHIP_DEFINITIONS WHERE SOURCE_OBJECT_ID') && s.includes('API_NAME')) {
+    // SELECT id FROM relationship_definitions WHERE source_object_id AND api_name AND tenant_id
+    if (
+      s.startsWith('SELECT ID FROM RELATIONSHIP_DEFINITIONS') &&
+      s.includes('SOURCE_OBJECT_ID') &&
+      s.includes('API_NAME')
+    ) {
       const sourceObjectId = params![0] as string;
       const apiName = params![1] as string;
       const match = [...fakeRelationships.values()].find(
@@ -42,21 +60,63 @@ const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
       return { rows: [] };
     }
 
-    // INSERT INTO relationship_definitions
+    // INSERT INTO relationship_definitions — Kysely binds values in
+    // the column order declared in the service's `.values({...})`
+    // call. Column order: id, tenant_id, source_object_id,
+    // target_object_id, relationship_type, api_name, label,
+    // reverse_label, required, created_at (10 columns).
     if (s.startsWith('INSERT INTO RELATIONSHIP_DEFINITIONS')) {
-      const [id, _tenant_id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at] = params as unknown[];
+      const [
+        id,
+        tenant_id,
+        source_object_id,
+        target_object_id,
+        relationship_type,
+        api_name,
+        label,
+        reverse_label,
+        required,
+        created_at,
+      ] = params as unknown[];
       const row: Record<string, unknown> = {
-        id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at,
+        id,
+        tenant_id,
+        source_object_id,
+        target_object_id,
+        relationship_type,
+        api_name,
+        label,
+        reverse_label,
+        required,
+        created_at,
       };
       fakeRelationships.set(id as string, row);
       return { rows: [row] };
     }
 
-    // SELECT rd.*, src.label ... (list relationships with joins)
-    if (s.includes('FROM RELATIONSHIP_DEFINITIONS RD') && s.includes('JOIN OBJECT_DEFINITIONS SRC') && s.includes('JOIN OBJECT_DEFINITIONS TGT') && s.includes('SOURCE_OBJECT_ID = $1 OR RD.TARGET_OBJECT_ID = $1')) {
-      const objectId = params![0] as string;
+    // listRelationshipDefinitions — joined SELECT. Kysely emits
+    //   from "relationship_definitions" as "rd"
+    //   inner join "object_definitions" as "src" on "src"."id" = "rd"."source_object_id" and "src"."tenant_id" = $1
+    //   inner join "object_definitions" as "tgt" on ...
+    //   where ("rd"."source_object_id" = $N or "rd"."target_object_id" = $N+1) and "rd"."tenant_id" = $N+2
+    // After quote-strip + upper-case the FROM clause is
+    // "FROM RELATIONSHIP_DEFINITIONS AS RD".
+    if (
+      s.includes('FROM RELATIONSHIP_DEFINITIONS AS RD') &&
+      s.includes('INNER JOIN OBJECT_DEFINITIONS AS SRC') &&
+      s.includes('INNER JOIN OBJECT_DEFINITIONS AS TGT') &&
+      s.includes('SOURCE_OBJECT_ID') &&
+      s.includes('TARGET_OBJECT_ID') &&
+      !s.includes('WHERE RD.ID =')
+    ) {
+      // Param layout: [tenantId, tenantId, objectId, objectId, tenantId]
+      // The last bind is always the outer rd.tenant_id filter. The
+      // object id binds are the 3rd/4th (the OR clause in the WHERE).
+      const objectId = params![2] as string;
       const rows = [...fakeRelationships.values()]
-        .filter((r) => r.source_object_id === objectId || r.target_object_id === objectId)
+        .filter(
+          (r) => r.source_object_id === objectId || r.target_object_id === objectId,
+        )
         .map((r) => {
           const src = fakeObjects.get(r.source_object_id as string);
           const tgt = fakeObjects.get(r.target_object_id as string);
@@ -73,24 +133,33 @@ const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
       return { rows };
     }
 
-    // SELECT rd.*, src.is_system ... (delete check with system flag)
-    if (s.includes('FROM RELATIONSHIP_DEFINITIONS RD') && s.includes('JOIN OBJECT_DEFINITIONS SRC') && s.includes('JOIN OBJECT_DEFINITIONS TGT') && s.includes('WHERE RD.ID = $1')) {
-      const id = params![0] as string;
+    // deleteRelationshipDefinition lookup — joined SELECT with
+    //   where "rd"."id" = $N and "rd"."tenant_id" = $N+1
+    if (
+      s.includes('FROM RELATIONSHIP_DEFINITIONS AS RD') &&
+      s.includes('INNER JOIN OBJECT_DEFINITIONS AS SRC') &&
+      s.includes('INNER JOIN OBJECT_DEFINITIONS AS TGT') &&
+      s.includes('WHERE RD.ID =')
+    ) {
+      // Param layout: [tenantId, tenantId, id, tenantId]
+      const id = params![2] as string;
       const rel = fakeRelationships.get(id);
       if (!rel) return { rows: [] };
       const src = fakeObjects.get(rel.source_object_id as string);
       const tgt = fakeObjects.get(rel.target_object_id as string);
       return {
-        rows: [{
-          ...rel,
-          source_is_system: src?.is_system ?? false,
-          target_is_system: tgt?.is_system ?? false,
-        }],
+        rows: [
+          {
+            id: rel.id,
+            source_is_system: src?.is_system ?? false,
+            target_is_system: tgt?.is_system ?? false,
+          },
+        ],
       };
     }
 
-    // DELETE FROM relationship_definitions WHERE id = $1
-    if (s.startsWith('DELETE FROM RELATIONSHIP_DEFINITIONS WHERE ID')) {
+    // DELETE FROM relationship_definitions WHERE id = $1 AND tenant_id = $2
+    if (s.startsWith('DELETE FROM RELATIONSHIP_DEFINITIONS')) {
       const id = params![0] as string;
       const existed = fakeRelationships.has(id);
       fakeRelationships.delete(id);
@@ -98,13 +167,28 @@ const { fakeObjects, fakeRelationships, mockQuery } = vi.hoisted(() => {
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const rawSql =
+      typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return runQuery(rawSql, params);
   });
 
-  return { fakeObjects, fakeRelationships, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql =
+        typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return runQuery(rawSql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return { fakeObjects, fakeRelationships, mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 // ─── Test helpers ────────────────────────────────────────────────────────────

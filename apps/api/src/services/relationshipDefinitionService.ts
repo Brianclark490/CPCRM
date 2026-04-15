@@ -1,6 +1,11 @@
 import { randomUUID } from 'crypto';
+import type { Selectable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type {
+  ObjectDefinitions,
+  RelationshipDefinitions,
+} from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,29 +74,57 @@ function throwDeleteBlockedError(message: string): never {
 
 // ─── Row → domain model ─────────────────────────────────────────────────────
 
-function rowToRelationshipDefinition(row: Record<string, unknown>): RelationshipDefinition {
+/**
+ * Typing the row mapper against `Selectable<RelationshipDefinitions>`
+ * (rather than `Record<string, unknown>`) means a column rename or
+ * nullability change on the generated schema becomes a compile-time
+ * error at this service, rather than an `unknown` cast leaking an
+ * incorrect runtime shape into the domain model.
+ */
+type RelationshipDefinitionSelectable = Selectable<RelationshipDefinitions>;
+
+function rowToRelationshipDefinition(
+  row: RelationshipDefinitionSelectable,
+): RelationshipDefinition {
   return {
-    id: row.id as string,
-    sourceObjectId: row.source_object_id as string,
-    targetObjectId: row.target_object_id as string,
-    relationshipType: row.relationship_type as string,
-    apiName: row.api_name as string,
-    label: row.label as string,
-    reverseLabel: (row.reverse_label as string | null) ?? undefined,
-    required: row.required as boolean,
-    createdAt: new Date(row.created_at as string),
+    id: row.id,
+    sourceObjectId: row.source_object_id,
+    targetObjectId: row.target_object_id,
+    relationshipType: row.relationship_type,
+    apiName: row.api_name,
+    label: row.label,
+    reverseLabel: row.reverse_label ?? undefined,
+    required: row.required,
+    createdAt: row.created_at,
   };
 }
 
-function rowToRelationshipDefinitionWithObjects(row: Record<string, unknown>): RelationshipDefinitionWithObjects {
+/**
+ * The list query projects relationship_definitions columns plus six
+ * aliased object_definitions columns (three for the source, three for
+ * the target). We type that composite row explicitly so the mapper
+ * stays fully type-checked against the generated schema.
+ */
+type RelationshipDefinitionWithObjectsRow = RelationshipDefinitionSelectable & {
+  source_object_api_name: Selectable<ObjectDefinitions>['api_name'];
+  source_object_label: Selectable<ObjectDefinitions>['label'];
+  source_object_plural_label: Selectable<ObjectDefinitions>['plural_label'];
+  target_object_api_name: Selectable<ObjectDefinitions>['api_name'];
+  target_object_label: Selectable<ObjectDefinitions>['label'];
+  target_object_plural_label: Selectable<ObjectDefinitions>['plural_label'];
+};
+
+function rowToRelationshipDefinitionWithObjects(
+  row: RelationshipDefinitionWithObjectsRow,
+): RelationshipDefinitionWithObjects {
   return {
     ...rowToRelationshipDefinition(row),
-    sourceObjectApiName: row.source_object_api_name as string,
-    sourceObjectLabel: row.source_object_label as string,
-    sourceObjectPluralLabel: row.source_object_plural_label as string,
-    targetObjectApiName: row.target_object_api_name as string,
-    targetObjectLabel: row.target_object_label as string,
-    targetObjectPluralLabel: row.target_object_plural_label as string,
+    sourceObjectApiName: row.source_object_api_name,
+    sourceObjectLabel: row.source_object_label,
+    sourceObjectPluralLabel: row.source_object_plural_label,
+    targetObjectApiName: row.target_object_api_name,
+    targetObjectLabel: row.target_object_label,
+    targetObjectPluralLabel: row.target_object_plural_label,
   };
 }
 
@@ -171,28 +204,35 @@ export async function createRelationshipDefinition(
   }
 
   // Validate both objects exist within tenant
-  const sourceResult = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [params.sourceObjectId, tenantId],
-  );
-  if (sourceResult.rows.length === 0) {
+  const sourceRow = await db
+    .selectFrom('object_definitions')
+    .select('id')
+    .where('id', '=', params.sourceObjectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (!sourceRow) {
     throwNotFoundError('Source object definition not found');
   }
 
-  const targetResult = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [params.targetObjectId, tenantId],
-  );
-  if (targetResult.rows.length === 0) {
+  const targetRow = await db
+    .selectFrom('object_definitions')
+    .select('id')
+    .where('id', '=', params.targetObjectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (!targetRow) {
     throwNotFoundError('Target object definition not found');
   }
 
   // Check uniqueness of api_name on the source object within tenant
-  const existing = await pool.query(
-    'SELECT id FROM relationship_definitions WHERE source_object_id = $1 AND api_name = $2 AND tenant_id = $3',
-    [params.sourceObjectId, params.apiName.trim(), tenantId],
-  );
-  if (existing.rows.length > 0) {
+  const existing = await db
+    .selectFrom('relationship_definitions')
+    .select('id')
+    .where('source_object_id', '=', params.sourceObjectId)
+    .where('api_name', '=', params.apiName.trim())
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (existing) {
     throwConflictError(
       `A relationship with api_name "${params.apiName.trim()}" already exists on this source object`,
     );
@@ -201,31 +241,34 @@ export async function createRelationshipDefinition(
   const relationshipId = randomUUID();
   const now = new Date();
 
-  const result = await pool.query(
-    `INSERT INTO relationship_definitions
-       (id, tenant_id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     RETURNING *`,
-    [
-      relationshipId,
-      tenantId,
-      params.sourceObjectId,
-      params.targetObjectId,
-      params.relationshipType.trim(),
-      params.apiName.trim(),
-      params.label.trim(),
-      params.reverseLabel?.trim() ?? null,
-      params.required ?? false,
-      now,
-    ],
-  );
+  const inserted = await db
+    .insertInto('relationship_definitions')
+    .values({
+      id: relationshipId,
+      tenant_id: tenantId,
+      source_object_id: params.sourceObjectId,
+      target_object_id: params.targetObjectId,
+      relationship_type: params.relationshipType.trim(),
+      api_name: params.apiName.trim(),
+      label: params.label.trim(),
+      reverse_label: params.reverseLabel?.trim() ?? null,
+      required: params.required ?? false,
+      created_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info(
-    { relationshipId, sourceObjectId: params.sourceObjectId, targetObjectId: params.targetObjectId, apiName: params.apiName },
+    {
+      relationshipId,
+      sourceObjectId: params.sourceObjectId,
+      targetObjectId: params.targetObjectId,
+      apiName: params.apiName,
+    },
     'Relationship definition created',
   );
 
-  return rowToRelationshipDefinition(result.rows[0]);
+  return rowToRelationshipDefinition(inserted);
 }
 
 /**
@@ -239,33 +282,52 @@ export async function listRelationshipDefinitions(
   objectId: string,
 ): Promise<RelationshipDefinitionWithObjects[]> {
   // Validate object exists within tenant
-  const objectResult = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [objectId, tenantId],
-  );
-  if (objectResult.rows.length === 0) {
+  const objectRow = await db
+    .selectFrom('object_definitions')
+    .select('id')
+    .where('id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (!objectRow) {
     throwNotFoundError('Object definition not found');
   }
 
-  const result = await pool.query(
-    `SELECT rd.*,
-            src.api_name AS source_object_api_name,
-            src.label AS source_object_label,
-            src.plural_label AS source_object_plural_label,
-            tgt.api_name AS target_object_api_name,
-            tgt.label AS target_object_label,
-            tgt.plural_label AS target_object_plural_label
-     FROM relationship_definitions rd
-     JOIN object_definitions src ON src.id = rd.source_object_id
-     JOIN object_definitions tgt ON tgt.id = rd.target_object_id
-     WHERE (rd.source_object_id = $1 OR rd.target_object_id = $1) AND rd.tenant_id = $2
-     ORDER BY rd.created_at ASC`,
-    [objectId, tenantId],
-  );
+  // Join to both src and tgt object_definitions rows to surface label
+  // metadata alongside each relationship. Every joined table is also
+  // scoped by tenant_id as defence-in-depth against an RLS
+  // misconfiguration (ADR-006).
+  const rows = await db
+    .selectFrom('relationship_definitions as rd')
+    .innerJoin('object_definitions as src', (join) =>
+      join
+        .onRef('src.id', '=', 'rd.source_object_id')
+        .on('src.tenant_id', '=', tenantId),
+    )
+    .innerJoin('object_definitions as tgt', (join) =>
+      join
+        .onRef('tgt.id', '=', 'rd.target_object_id')
+        .on('tgt.tenant_id', '=', tenantId),
+    )
+    .selectAll('rd')
+    .select([
+      'src.api_name as source_object_api_name',
+      'src.label as source_object_label',
+      'src.plural_label as source_object_plural_label',
+      'tgt.api_name as target_object_api_name',
+      'tgt.label as target_object_label',
+      'tgt.plural_label as target_object_plural_label',
+    ])
+    .where((eb) =>
+      eb.or([
+        eb('rd.source_object_id', '=', objectId),
+        eb('rd.target_object_id', '=', objectId),
+      ]),
+    )
+    .where('rd.tenant_id', '=', tenantId)
+    .orderBy('rd.created_at', 'asc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) =>
-    rowToRelationshipDefinitionWithObjects(row),
-  );
+  return rows.map(rowToRelationshipDefinitionWithObjects);
 }
 
 /**
@@ -276,30 +338,48 @@ export async function listRelationshipDefinitions(
  * @throws {Error} NOT_FOUND — relationship does not exist
  * @throws {Error} DELETE_BLOCKED — system relationship
  */
-export async function deleteRelationshipDefinition(tenantId: string, id: string): Promise<void> {
-  const existing = await pool.query(
-    `SELECT rd.*,
-            src.is_system AS source_is_system,
-            tgt.is_system AS target_is_system
-     FROM relationship_definitions rd
-     JOIN object_definitions src ON src.id = rd.source_object_id
-     JOIN object_definitions tgt ON tgt.id = rd.target_object_id
-     WHERE rd.id = $1 AND rd.tenant_id = $2`,
-    [id, tenantId],
-  );
+export async function deleteRelationshipDefinition(
+  tenantId: string,
+  id: string,
+): Promise<void> {
+  const existingRow = await db
+    .selectFrom('relationship_definitions as rd')
+    .innerJoin('object_definitions as src', (join) =>
+      join
+        .onRef('src.id', '=', 'rd.source_object_id')
+        .on('src.tenant_id', '=', tenantId),
+    )
+    .innerJoin('object_definitions as tgt', (join) =>
+      join
+        .onRef('tgt.id', '=', 'rd.target_object_id')
+        .on('tgt.tenant_id', '=', tenantId),
+    )
+    .select([
+      'rd.id',
+      'src.is_system as source_is_system',
+      'tgt.is_system as target_is_system',
+    ])
+    .where('rd.id', '=', id)
+    .where('rd.tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existingRow) {
     throwNotFoundError('Relationship definition not found');
   }
 
-  const row = existing.rows[0] as Record<string, unknown>;
-
   // System relationships (both source and target are system objects) cannot be deleted
-  if (row.source_is_system === true && row.target_is_system === true) {
+  if (
+    existingRow.source_is_system === true &&
+    existingRow.target_is_system === true
+  ) {
     throwDeleteBlockedError('Cannot delete system relationships');
   }
 
-  await pool.query('DELETE FROM relationship_definitions WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  await db
+    .deleteFrom('relationship_definitions')
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
   logger.info({ relationshipId: id }, 'Relationship definition deleted');
 }
