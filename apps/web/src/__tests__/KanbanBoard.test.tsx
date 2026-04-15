@@ -318,7 +318,7 @@ describe('KanbanBoard', () => {
     // board into its error state. Render the board against a real-
     // shape response and assert the stages render — which can only
     // happen if unwrapList peeled off `data` successfully.
-    vi.stubGlobal('fetch', mockFetch());
+    mockFetch();
 
     renderBoard();
 
