@@ -1,6 +1,11 @@
 import { randomUUID } from 'crypto';
+import type { Selectable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type {
+  Organisations,
+  TenantMemberships,
+} from '../db/kysely.types.js';
 
 // ─── Local type aliases (mirror packages/types) ───────────────────────────────
 
@@ -69,6 +74,42 @@ function validateName(name: unknown): string | null {
   return null;
 }
 
+// ─── Row → domain model ─────────────────────────────────────────────────────
+
+/**
+ * Typing the row mappers against `Selectable<Organisations>` /
+ * `Selectable<TenantMemberships>` (rather than `Record<string, unknown>`)
+ * means a column rename or nullability change on the generated schema
+ * becomes a compile-time error at this service, rather than an `unknown`
+ * cast leaking an incorrect runtime shape into the domain model.
+ */
+function rowToOrganisation(
+  row: Selectable<Organisations>,
+): Organisation {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    name: row.name,
+    description: row.description ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function rowToMembership(
+  row: Selectable<TenantMemberships>,
+): TenantMembership {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    userId: row.user_id,
+    organisationId: row.organisation_id ?? undefined,
+    role: row.role as 'owner' | 'admin' | 'member',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 /**
  * Provisions a new organisation within a tenant.
  *
@@ -103,57 +144,38 @@ export async function provisionOrganisation(
   logger.info({ tenantId, organisationId, requestingUserId }, 'Provisioning new organisation');
 
   // Step 2 — persist organisation record
-  const orgResult = await pool.query(
-    `INSERT INTO organisations (id, tenant_id, name, description, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING *`,
-    [
-      organisationId,
-      tenantId,
-      name.trim(),
-      description?.trim() ?? null,
-      now,
-      now,
-    ],
-  );
+  const orgRow = await db
+    .insertInto('organisations')
+    .values({
+      id: organisationId,
+      tenant_id: tenantId,
+      name: name.trim(),
+      description: description?.trim() ?? null,
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
-  const orgRow = orgResult.rows[0];
-  const organisation: Organisation = {
-    id: orgRow.id as string,
-    tenantId: orgRow.tenant_id as string,
-    name: orgRow.name as string,
-    description: (orgRow.description as string | null) ?? undefined,
-    createdAt: new Date(orgRow.created_at as string),
-    updatedAt: new Date(orgRow.updated_at as string),
-  };
+  const organisation = rowToOrganisation(orgRow);
 
   // Step 3 — persist membership for the requesting user as owner
   const membershipId = randomUUID();
-  const memberResult = await pool.query(
-    `INSERT INTO tenant_memberships
-       (id, tenant_id, user_id, organisation_id, role, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, 'owner', $5, $6)
-     RETURNING *`,
-    [
-      membershipId,
-      tenantId,
-      requestingUserId,
-      organisationId,
-      now,
-      now,
-    ],
-  );
+  const memberRow = await db
+    .insertInto('tenant_memberships')
+    .values({
+      id: membershipId,
+      tenant_id: tenantId,
+      user_id: requestingUserId,
+      organisation_id: organisationId,
+      role: 'owner',
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
-  const memberRow = memberResult.rows[0];
-  const membership: TenantMembership = {
-    id: memberRow.id as string,
-    tenantId: memberRow.tenant_id as string,
-    userId: memberRow.user_id as string,
-    organisationId: (memberRow.organisation_id as string | null) ?? undefined,
-    role: memberRow.role as 'owner' | 'admin' | 'member',
-    createdAt: new Date(memberRow.created_at as string),
-    updatedAt: new Date(memberRow.updated_at as string),
-  };
+  const membership = rowToMembership(memberRow);
 
   logger.info(
     { tenantId, organisationId, membershipId: membership.id },

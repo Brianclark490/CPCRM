@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import { pool } from '../db/client.js';
+import { sql } from 'kysely';
+import { db } from '../db/kysely.js';
 import { logger } from '../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -33,30 +34,35 @@ export async function syncUserRecord(input: SyncUserInput): Promise<SyncUserResu
   const { tenantId, descopeUserId, email, displayName, role } = input;
 
   // Find the User object definition for this tenant
-  const objResult = await pool.query(
-    `SELECT id FROM object_definitions WHERE api_name = 'user' AND tenant_id = $1`,
-    [tenantId],
-  );
+  const objDef = await db
+    .selectFrom('object_definitions')
+    .select('id')
+    .where('api_name', '=', 'user')
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (objResult.rows.length === 0) {
+  if (!objDef) {
     logger.debug({ tenantId }, 'User object definition not found; skipping user sync');
     return { userRecordId: '', created: false };
   }
 
-  const objectId = objResult.rows[0].id as string;
+  const objectId = objDef.id;
 
-  // Check if a User record exists for this descope_user_id
-  const existingResult = await pool.query(
-    `SELECT id, field_values FROM records
-     WHERE object_id = $1 AND tenant_id = $2
-       AND field_values->>'descope_user_id' = $3`,
-    [objectId, tenantId, descopeUserId],
-  );
+  // Check if a User record exists for this descope_user_id.
+  //
+  // The JSONB key access `field_values->>'descope_user_id'` is written via
+  // `sql` so the column reference is SQL-level while `descopeUserId` is
+  // bound as a parameter (see ADR-006 Appendix A on JSONB path expressions).
+  const existing = await db
+    .selectFrom('records')
+    .select(['id', 'field_values'])
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .where(sql<string>`field_values->>'descope_user_id'`, '=', descopeUserId)
+    .executeTakeFirst();
 
-  if (existingResult.rows.length > 0) {
-    // User record exists — check if we need to update
-    const existing = existingResult.rows[0] as { id: string; field_values: Record<string, unknown> };
-    const existingFieldValues = existing.field_values;
+  if (existing) {
+    const existingFieldValues = (existing.field_values ?? {}) as Record<string, unknown>;
 
     const needsUpdate =
       (displayName !== undefined && existingFieldValues['display_name'] !== displayName) ||
@@ -67,14 +73,22 @@ export async function syncUserRecord(input: SyncUserInput): Promise<SyncUserResu
       if (displayName !== undefined) updatedFieldValues['display_name'] = displayName;
       if (role !== undefined) updatedFieldValues['role'] = role;
 
-      const name = displayName ?? (existingFieldValues['display_name'] as string) ?? email ?? descopeUserId;
+      const name =
+        displayName ??
+        (existingFieldValues['display_name'] as string) ??
+        email ??
+        descopeUserId;
 
-      await pool.query(
-        `UPDATE records
-         SET field_values = $1, name = $2, updated_at = NOW()
-         WHERE id = $3 AND tenant_id = $4`,
-        [JSON.stringify(updatedFieldValues), name, existing.id, tenantId],
-      );
+      await db
+        .updateTable('records')
+        .set({
+          field_values: JSON.stringify(updatedFieldValues),
+          name,
+          updated_at: new Date(),
+        })
+        .where('id', '=', existing.id)
+        .where('tenant_id', '=', tenantId)
+        .execute();
 
       logger.debug({ tenantId, descopeUserId }, 'Updated User record from Descope');
     }
@@ -96,11 +110,21 @@ export async function syncUserRecord(input: SyncUserInput): Promise<SyncUserResu
     is_active: true,
   };
 
-  await pool.query(
-    `INSERT INTO records (id, object_id, name, field_values, owner_id, tenant_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
-    [id, objectId, name, JSON.stringify(fieldValues), descopeUserId, tenantId],
-  );
+  const now = new Date();
+
+  await db
+    .insertInto('records')
+    .values({
+      id,
+      object_id: objectId,
+      name,
+      field_values: JSON.stringify(fieldValues),
+      owner_id: descopeUserId,
+      tenant_id: tenantId,
+      created_at: now,
+      updated_at: now,
+    })
+    .execute();
 
   logger.info({ tenantId, descopeUserId, userRecordId: id }, 'Created User record from Descope');
 
@@ -121,23 +145,31 @@ async function backfillOwnerRecordId(
   userRecordId: string,
 ): Promise<void> {
   try {
-    await pool.query(
-      `UPDATE records
-       SET owner_record_id = $1
-       WHERE tenant_id = $2
-         AND owner_id = $3
-         AND (owner_record_id IS NULL OR owner_record_id != $1)`,
-      [userRecordId, tenantId, descopeUserId],
-    );
+    await db
+      .updateTable('records')
+      .set({ owner_record_id: userRecordId })
+      .where('tenant_id', '=', tenantId)
+      .where('owner_id', '=', descopeUserId)
+      .where((eb) =>
+        eb.or([
+          eb('owner_record_id', 'is', null),
+          eb('owner_record_id', '!=', userRecordId),
+        ]),
+      )
+      .execute();
 
-    await pool.query(
-      `UPDATE records
-       SET updated_by_record_id = $1
-       WHERE tenant_id = $2
-         AND updated_by = $3
-         AND (updated_by_record_id IS NULL OR updated_by_record_id != $1)`,
-      [userRecordId, tenantId, descopeUserId],
-    );
+    await db
+      .updateTable('records')
+      .set({ updated_by_record_id: userRecordId })
+      .where('tenant_id', '=', tenantId)
+      .where('updated_by', '=', descopeUserId)
+      .where((eb) =>
+        eb.or([
+          eb('updated_by_record_id', 'is', null),
+          eb('updated_by_record_id', '!=', userRecordId),
+        ]),
+      )
+      .execute();
   } catch (err) {
     // Backfill is best-effort — don't fail the login
     logger.warn({ err, tenantId, descopeUserId }, 'Failed to backfill owner_record_id');
