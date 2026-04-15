@@ -6,41 +6,89 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// Kysely's PostgresDialect acquires a client per query via `pool.connect()`,
+// so the mock routes both `pool.query` (legacy) and `pool.connect().query`
+// (Kysely) through the same `runQuery` dispatcher.
 
-const { mockQuery } = vi.hoisted(() => {
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+const { mockQuery, mockConnect } = vi.hoisted(() => {
+  function runQuery(rawSql: string, params?: unknown[]) {
+    // Strip identifier quoting so matching is quote-agnostic.
+    const s = rawSql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
+    // Transaction control statements — no-ops in the fake.
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+
+    // RLS preamble from the Kysely pool proxy.
+    if (s.startsWith('SELECT SET_CONFIG')) {
+      return { rows: [] };
+    }
+
+    // INSERT INTO organisations — Kysely binds values in the column order
+    // declared in the service's `.values({...})` call:
+    //   id, tenant_id, name, description, created_at, updated_at.
     if (s.startsWith('INSERT INTO ORGANISATIONS')) {
-      const [id, tenant_id, name, description, created_at, updated_at] = params as unknown[];
+      const [id, tenant_id, name, description, created_at, updated_at] =
+        params as unknown[];
       return {
-        rows: [{
-          id, tenant_id, name,
-          description: description ?? null,
-          created_at, updated_at,
-        }],
+        rows: [
+          {
+            id,
+            tenant_id,
+            name,
+            description: description ?? null,
+            created_at,
+            updated_at,
+          },
+        ],
       };
     }
 
+    // INSERT INTO tenant_memberships — column order:
+    //   id, tenant_id, user_id, organisation_id, role, created_at, updated_at.
     if (s.startsWith('INSERT INTO TENANT_MEMBERSHIPS')) {
-      const [id, tenant_id, user_id, organisation_id, , created_at, updated_at] = params as unknown[];
+      const [id, tenant_id, user_id, organisation_id, role, created_at, updated_at] =
+        params as unknown[];
       return {
-        rows: [{
-          id, tenant_id, user_id, organisation_id,
-          role: 'owner',
-          created_at, updated_at,
-        }],
+        rows: [
+          {
+            id,
+            tenant_id,
+            user_id,
+            organisation_id,
+            role,
+            created_at,
+            updated_at,
+          },
+        ],
       };
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const rawSql =
+      typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return runQuery(rawSql, params);
   });
 
-  return { mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql =
+        typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return runQuery(rawSql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return { mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 describe('validateName', () => {

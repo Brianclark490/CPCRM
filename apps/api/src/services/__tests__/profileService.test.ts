@@ -11,14 +11,42 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// Kysely's PostgresDialect acquires a client per query via `pool.connect()`,
+// so we route both `pool.query` and `pool.connect().query` through the same
+// underlying `mockQuery`. Callers can keep using `mockResolvedValueOnce` on
+// `mockQuery` to queue up responses in query order — the RLS preamble
+// `SELECT set_config(...)` and transaction control statements are intercepted
+// in the client wrapper so they don't consume a queued response.
 
-const { mockQuery } = vi.hoisted(() => {
+const { mockQuery, mockConnect } = vi.hoisted(() => {
   const mockQuery = vi.fn();
-  return { mockQuery };
+
+  const isPassthrough = (rawSql: string) => {
+    const s = rawSql.replace(/\s+/g, ' ').trim().toUpperCase();
+    return (
+      s === 'BEGIN' ||
+      s === 'COMMIT' ||
+      s === 'ROLLBACK' ||
+      s.startsWith('SELECT SET_CONFIG')
+    );
+  };
+
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql =
+        typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      if (isPassthrough(rawSql)) return { rows: [] };
+      return mockQuery(rawSql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return { mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -31,8 +59,8 @@ function makeProfileRow(overrides: Record<string, unknown> = {}) {
     display_name: null,
     job_title: null,
     updated_by: 'user-123',
-    created_at: now.toISOString(),
-    updated_at: now.toISOString(),
+    created_at: now,
+    updated_at: now,
     ...overrides,
   };
 }

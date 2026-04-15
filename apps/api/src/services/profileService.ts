@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
+import type { Selectable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { UserProfiles } from '../db/kysely.types.js';
 
 export interface UserProfile {
   id: string;
@@ -31,15 +33,22 @@ function validateTextField(value: unknown, fieldLabel: string): string | null {
   return null;
 }
 
-function rowToProfile(row: Record<string, unknown>): UserProfile {
+/**
+ * Typing the row mapper against `Selectable<UserProfiles>` (rather than
+ * `Record<string, unknown>`) means a column rename or nullability change
+ * on the generated schema becomes a compile-time error at this service,
+ * rather than an `unknown` cast leaking an incorrect runtime shape into
+ * the domain model.
+ */
+function rowToProfile(row: Selectable<UserProfiles>): UserProfile {
   return {
-    id: row.id as string,
-    userId: row.user_id as string,
-    displayName: (row.display_name as string | null) ?? undefined,
-    jobTitle: (row.job_title as string | null) ?? undefined,
-    updatedBy: row.updated_by as string,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    id: row.id,
+    userId: row.user_id,
+    displayName: row.display_name ?? undefined,
+    jobTitle: row.job_title ?? undefined,
+    updatedBy: row.updated_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -49,15 +58,20 @@ function rowToProfile(row: Record<string, unknown>): UserProfile {
  *
  * The profile is automatically seeded with no optional fields on first creation.
  * This implements the "profile on first access" requirement.
+ *
+ * Note: `user_profiles` is a global table (no `tenant_id` column) because
+ * a single Descope user may belong to multiple tenants and shares one
+ * profile across all of them.
  */
 export async function getOrCreateProfile(userId: string): Promise<UserProfile> {
-  const existing = await pool.query(
-    'SELECT * FROM user_profiles WHERE user_id = $1',
-    [userId],
-  );
+  const existing = await db
+    .selectFrom('user_profiles')
+    .selectAll()
+    .where('user_id', '=', userId)
+    .executeTakeFirst();
 
-  if (existing.rows.length > 0) {
-    return rowToProfile(existing.rows[0] as Record<string, unknown>);
+  if (existing) {
+    return rowToProfile(existing);
   }
 
   const now = new Date();
@@ -65,27 +79,35 @@ export async function getOrCreateProfile(userId: string): Promise<UserProfile> {
 
   logger.info({ userId }, 'Creating user profile for first-time user');
 
-  const result = await pool.query(
-    `INSERT INTO user_profiles (id, user_id, display_name, job_title, updated_by, created_at, updated_at)
-     VALUES ($1, $2, NULL, NULL, $3, $4, $5)
-     RETURNING *`,
-    [id, userId, userId, now, now],
-  );
+  const inserted = await db
+    .insertInto('user_profiles')
+    .values({
+      id,
+      user_id: userId,
+      display_name: null,
+      job_title: null,
+      updated_by: userId,
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
-  return rowToProfile(result.rows[0] as Record<string, unknown>);
+  return rowToProfile(inserted);
 }
 
 /**
  * Returns the user profile for the given Descope user ID, or null if not found.
  */
 export async function getProfile(userId: string): Promise<UserProfile | null> {
-  const result = await pool.query(
-    'SELECT * FROM user_profiles WHERE user_id = $1',
-    [userId],
-  );
+  const row = await db
+    .selectFrom('user_profiles')
+    .selectAll()
+    .where('user_id', '=', userId)
+    .executeTakeFirst();
 
-  if (result.rows.length === 0) return null;
-  return rowToProfile(result.rows[0] as Record<string, unknown>);
+  if (!row) return null;
+  return rowToProfile(row);
 }
 
 /**
@@ -118,47 +140,48 @@ export async function updateProfile(
     }
   }
 
-  const existing = await pool.query(
-    'SELECT * FROM user_profiles WHERE user_id = $1',
-    [userId],
-  );
+  const existing = await db
+    .selectFrom('user_profiles')
+    .select('id')
+    .where('user_id', '=', userId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existing) {
     const e = new Error('Profile not found') as Error & { code: string };
     e.code = 'NOT_FOUND';
     throw e;
   }
 
-  const updates: string[] = [];
-  const values: unknown[] = [];
-  let paramIndex = 1;
+  // Build the partial update — only include fields the caller provided,
+  // preserving the original "UPDATE only-what-you-set" semantics.
+  const patch: {
+    display_name?: string | null;
+    job_title?: string | null;
+    updated_by: string;
+    updated_at: Date;
+  } = {
+    updated_by: updatedBy,
+    updated_at: new Date(),
+  };
 
   if ('displayName' in params) {
-    updates.push(`display_name = $${paramIndex++}`);
-    values.push(params.displayName?.trim() ?? null);
+    patch.display_name = params.displayName?.trim() ?? null;
   }
 
   if ('jobTitle' in params) {
-    updates.push(`job_title = $${paramIndex++}`);
-    values.push(params.jobTitle?.trim() ?? null);
+    patch.job_title = params.jobTitle?.trim() ?? null;
   }
 
-  updates.push(`updated_by = $${paramIndex++}`);
-  values.push(updatedBy);
-
-  updates.push(`updated_at = $${paramIndex++}`);
-  values.push(new Date());
-
-  values.push(userId);
-
-  const result = await pool.query(
-    `UPDATE user_profiles SET ${updates.join(', ')} WHERE user_id = $${paramIndex} RETURNING *`,
-    values,
-  );
+  const updated = await db
+    .updateTable('user_profiles')
+    .set(patch)
+    .where('user_id', '=', userId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ userId, updatedBy }, 'User profile updated');
 
-  return rowToProfile(result.rows[0] as Record<string, unknown>);
+  return rowToProfile(updated);
 }
 
 export { validateTextField };

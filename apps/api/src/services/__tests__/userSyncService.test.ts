@@ -1,11 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Kysely's PostgresDialect acquires a client per query via `pool.connect()`,
+// so we route both `pool.query` and `pool.connect().query` through the same
+// underlying `mockQuery`. Callers use `mockResolvedValueOnce` on `mockQuery`
+// to queue responses in query order.
 const mockQuery = vi.fn();
 
+const mockConnect = vi.fn(async () => ({
+  query: vi.fn(async (sql: unknown, params?: unknown[]) => {
+    const rawSql =
+      typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return mockQuery(rawSql, params);
+  }),
+  release: vi.fn(),
+}));
+
 vi.mock('../../db/client.js', () => ({
-  pool: {
-    query: (...args: unknown[]) => mockQuery(...args),
-  },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 vi.mock('../../lib/logger.js', () => ({
@@ -40,7 +51,7 @@ describe('syncUserRecord', () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ id: objectId }] }) // object_definitions SELECT
       .mockResolvedValueOnce({ rows: [] }) // records SELECT (no existing user)
-      .mockResolvedValueOnce({ rows: [{ id: 'new-record-id' }] }) // records INSERT
+      .mockResolvedValueOnce({ rows: [] }) // records INSERT
       .mockResolvedValueOnce({ rowCount: 0 }) // backfill owner_record_id
       .mockResolvedValueOnce({ rowCount: 0 }); // backfill updated_by_record_id
 
@@ -56,10 +67,13 @@ describe('syncUserRecord', () => {
     expect(result.userRecordId).toBeDefined();
     expect(result.userRecordId).not.toBe('');
 
-    // Verify the INSERT was called with correct field_values
+    // Verify the INSERT was called with correct field_values.
+    // Kysely binds values in the order declared in `.values({...})`:
+    //   id, object_id, name, field_values, owner_id, tenant_id, created_at, updated_at.
     const insertCall = mockQuery.mock.calls[2];
-    const insertSql = insertCall[0] as string;
-    expect(insertSql).toContain('INSERT INTO records');
+    const insertSql = (insertCall[0] as string).toLowerCase();
+    expect(insertSql).toContain('insert into');
+    expect(insertSql).toContain('records');
 
     const insertParams = insertCall[1] as unknown[];
     expect(insertParams[2]).toBe('Test User'); // name
@@ -104,10 +118,12 @@ describe('syncUserRecord', () => {
     expect(result.created).toBe(false);
     expect(result.userRecordId).toBe(existingId);
 
-    // Verify UPDATE was called
+    // Verify UPDATE was called — Kysely's `.set({ field_values, name, updated_at })`
+    // binds those three values first, so `updateParams[0]` is the field_values JSON.
     const updateCall = mockQuery.mock.calls[2];
-    const updateSql = updateCall[0] as string;
-    expect(updateSql).toContain('UPDATE records');
+    const updateSql = (updateCall[0] as string).toLowerCase();
+    expect(updateSql).toContain('update');
+    expect(updateSql).toContain('records');
 
     const updateParams = updateCall[1] as unknown[];
     const updatedFieldValues = JSON.parse(updateParams[0] as string) as Record<string, unknown>;
@@ -194,7 +210,7 @@ describe('syncUserRecord', () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ id: objectId }] }) // object_definitions SELECT
       .mockResolvedValueOnce({ rows: [] }) // records SELECT (no existing user)
-      .mockResolvedValueOnce({ rows: [{ id: 'new-record-id' }] }) // records INSERT
+      .mockResolvedValueOnce({ rows: [] }) // records INSERT
       .mockResolvedValueOnce({ rowCount: 0 }) // backfill owner_record_id
       .mockResolvedValueOnce({ rowCount: 0 }); // backfill updated_by_record_id
 
@@ -218,7 +234,7 @@ describe('syncUserRecord', () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ id: objectId }] }) // object_definitions SELECT
       .mockResolvedValueOnce({ rows: [] }) // records SELECT (no existing user)
-      .mockResolvedValueOnce({ rows: [{ id: 'new-record-id' }] }) // records INSERT
+      .mockResolvedValueOnce({ rows: [] }) // records INSERT
       .mockResolvedValueOnce({ rowCount: 2 }) // backfill owner_record_id
       .mockResolvedValueOnce({ rowCount: 1 }); // backfill updated_by_record_id
 
@@ -231,13 +247,13 @@ describe('syncUserRecord', () => {
 
     // Verify backfill UPDATE for owner_record_id
     const backfillOwnerCall = mockQuery.mock.calls[3];
-    const backfillOwnerSql = backfillOwnerCall[0] as string;
+    const backfillOwnerSql = (backfillOwnerCall[0] as string).toLowerCase();
     expect(backfillOwnerSql).toContain('owner_record_id');
     expect(backfillOwnerSql).toContain('owner_id');
 
     // Verify backfill UPDATE for updated_by_record_id
     const backfillUpdatedByCall = mockQuery.mock.calls[4];
-    const backfillUpdatedBySql = backfillUpdatedByCall[0] as string;
+    const backfillUpdatedBySql = (backfillUpdatedByCall[0] as string).toLowerCase();
     expect(backfillUpdatedBySql).toContain('updated_by_record_id');
     expect(backfillUpdatedBySql).toContain('updated_by');
   });
