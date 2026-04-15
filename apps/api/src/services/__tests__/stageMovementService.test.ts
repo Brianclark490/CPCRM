@@ -7,17 +7,40 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB state ──────────────────────────────────────────────────────────
+//
+// NOTE (Phase 3b Kysely migration, issue #445): the service is now on
+// Kysely. The mock below therefore matches Kysely-emitted SQL. Identifier
+// quoting is stripped by the normaliser, matching the pattern used by
+// pipelineService.test.ts. The 20+ test bodies further down are kept
+// semantically unchanged — only this mock router is updated.
+//
+// A dedicated Kysely SQL regression suite lives next door:
+//   apps/api/src/services/__tests__/stageMovementService.kysely-sql.test.ts
 
-const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnect } = vi.hoisted(() => {
+const {
+  fakeRecords,
+  fakeStages,
+  fakePipelines,
+  fakeGates,
+  mockQuery,
+  mockConnect,
+  stageHistoryInserts,
+} = vi.hoisted(() => {
   const fakeRecords = new Map<string, Record<string, unknown>>();
   const fakeStages = new Map<string, Record<string, unknown>>();
   const fakePipelines = new Map<string, Record<string, unknown>>();
   const fakeGates = new Map<string, Record<string, unknown>>();
+  // Counter of stage_history INSERTs seen across all query channels
+  // (pool.query + any checked-out client), so tests can assert that
+  // history was written regardless of which channel Kysely chose.
+  const stageHistoryInserts: { count: number } = { count: 0 };
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function runQuery(sql: string, params?: unknown[]) {
+    // Strip identifier quotes and normalise whitespace so pattern-matching
+    // is quote-agnostic (Kysely wraps identifiers in "…").
+    const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
-    // Transaction statements
+    // Transaction control
     if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
       return { rows: [] };
     }
@@ -31,8 +54,12 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Record lookup by id, object_id, tenant_id
-    if (s.startsWith('SELECT * FROM RECORDS WHERE ID') && s.includes('OBJECT_ID') && s.includes('TENANT_ID')) {
+    // Record lookup by id, object_id, tenant_id (moveRecordStage step 2)
+    if (
+      s.startsWith('SELECT * FROM RECORDS WHERE ID') &&
+      s.includes('OBJECT_ID') &&
+      s.includes('TENANT_ID')
+    ) {
       const id = params![0] as string;
       const objectId = params![1] as string;
       const record = fakeRecords.get(id);
@@ -42,8 +69,11 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Stage lookup by id and pipeline_id
-    if (s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE ID') && s.includes('PIPELINE_ID')) {
+    // Stage lookup by id and pipeline_id and tenant_id
+    if (
+      s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE ID') &&
+      s.includes('PIPELINE_ID')
+    ) {
       const stageId = params![0] as string;
       const pipelineId = params![1] as string;
       const stage = fakeStages.get(stageId);
@@ -53,7 +83,7 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Stage lookup by id only
+    // Stage lookup by id + tenant_id (target stage)
     if (s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE ID')) {
       const stageId = params![0] as string;
       const stage = fakeStages.get(stageId);
@@ -61,23 +91,40 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Stage gates query with field metadata
-    if (s.includes('FROM STAGE_GATES SG') && s.includes('JOIN FIELD_DEFINITIONS FD')) {
+    // Stage gates query with field metadata (JOIN field_definitions).
+    // Kysely emits the alias form: FROM STAGE_GATES AS SG INNER JOIN
+    // FIELD_DEFINITIONS AS FD ON FD.ID = SG.FIELD_ID WHERE SG.STAGE_ID = $1
+    // AND SG.TENANT_ID = $2.
+    if (
+      s.includes('FROM STAGE_GATES') &&
+      s.includes('JOIN FIELD_DEFINITIONS')
+    ) {
       const stageId = params![0] as string;
       const gates = [...fakeGates.values()].filter((g) => g.stage_id === stageId);
       return { rows: gates };
     }
 
-    // Insert stage_history
+    // Insert into stage_history
     if (s.startsWith('INSERT INTO STAGE_HISTORY')) {
+      stageHistoryInserts.count += 1;
       return { rows: [] };
     }
 
-    // Update records for move-stage (does NOT set pipeline_id)
-    if (s.startsWith('UPDATE RECORDS') && s.includes('CURRENT_STAGE_ID') && !s.includes('PIPELINE_ID')) {
+    // UPDATE records in moveRecordStage:
+    //   set current_stage_id, stage_entered_at, field_values, updated_at
+    //   where id, object_id, tenant_id returning *
+    // params: [targetStageId, stage_entered_at, fieldValuesJson, updated_at,
+    //          recordId, objectId, tenantId]
+    if (
+      s.startsWith('UPDATE RECORDS') &&
+      s.includes('CURRENT_STAGE_ID') &&
+      s.includes('FIELD_VALUES') &&
+      !s.includes('PIPELINE_ID') &&
+      s.includes('RETURNING')
+    ) {
       const targetStageId = params![0] as string;
-      const fieldValuesJson = params![1] as string;
-      const recordId = params![2] as string;
+      const fieldValuesJson = params![2] as string;
+      const recordId = params![4] as string;
       const record = fakeRecords.get(recordId);
       if (record) {
         const updated = {
@@ -93,8 +140,12 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Default pipeline lookup
-    if (s.includes('FROM PIPELINE_DEFINITIONS WHERE OBJECT_ID') && s.includes('IS_DEFAULT')) {
+    // Default pipeline lookup (is_default = true)
+    if (
+      s.includes('FROM PIPELINE_DEFINITIONS') &&
+      s.includes('OBJECT_ID') &&
+      s.includes('IS_DEFAULT')
+    ) {
       const objectId = params![0] as string;
       const pipeline = [...fakePipelines.values()].find(
         (p) => p.object_id === objectId && p.is_default === true,
@@ -103,8 +154,13 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // All stages for a pipeline (used by assignDefaultPipeline to match stage names)
-    if (s.includes('FROM STAGE_DEFINITIONS') && s.includes('PIPELINE_ID') && s.includes('ORDER BY SORT_ORDER ASC') && !s.includes("STAGE_TYPE = 'OPEN'") && !s.includes('LIMIT 1')) {
+    // All stages for a pipeline (used by assignDefaultPipeline). Projects
+    // specific columns and orders by sort_order ASC.
+    if (
+      s.includes('FROM STAGE_DEFINITIONS') &&
+      s.includes('PIPELINE_ID') &&
+      s.includes('ORDER BY SORT_ORDER ASC')
+    ) {
       const pipelineId = params![0] as string;
       const stages = [...fakeStages.values()]
         .filter((st) => st.pipeline_id === pipelineId)
@@ -112,18 +168,10 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: stages };
     }
 
-    // First open stage lookup
-    if (s.includes('FROM STAGE_DEFINITIONS') && s.includes("STAGE_TYPE = 'OPEN'") && s.includes('LIMIT 1')) {
-      const pipelineId = params![0] as string;
-      const openStages = [...fakeStages.values()]
-        .filter((st) => st.pipeline_id === pipelineId && st.stage_type === 'open')
-        .sort((a, b) => (a.sort_order as number) - (b.sort_order as number));
-      if (openStages.length > 0) return { rows: [openStages[0]] };
-      return { rows: [] };
-    }
-
     // Select pipeline columns for re-read after auto-assignment
-    if (s.startsWith('SELECT PIPELINE_ID, CURRENT_STAGE_ID, STAGE_ENTERED_AT FROM RECORDS WHERE ID')) {
+    if (
+      s.startsWith('SELECT PIPELINE_ID, CURRENT_STAGE_ID, STAGE_ENTERED_AT FROM RECORDS WHERE ID')
+    ) {
       const id = params![0] as string;
       const record = fakeRecords.get(id);
       if (record) return { rows: [record] };
@@ -138,12 +186,19 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Update records for pipeline assignment (with field_values)
-    if (s.startsWith('UPDATE RECORDS') && s.includes('PIPELINE_ID') && s.includes('FIELD_VALUES')) {
+    // UPDATE records in assignDefaultPipeline (with field_values):
+    //   set pipeline_id, current_stage_id, stage_entered_at, field_values
+    //   where id = $5
+    // params: [pipelineId, stageId, now, fieldValuesJson, recordId]
+    if (
+      s.startsWith('UPDATE RECORDS') &&
+      s.includes('PIPELINE_ID') &&
+      s.includes('FIELD_VALUES')
+    ) {
       const pipelineId = params![0] as string;
       const stageId = params![1] as string;
-      const fieldValuesJson = params![2] as string;
-      const recordId = params![3] as string;
+      const fieldValuesJson = params![3] as string;
+      const recordId = params![4] as string;
       const record = fakeRecords.get(recordId);
       if (record) {
         const updated = {
@@ -158,11 +213,13 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
       return { rows: [] };
     }
 
-    // Update records for pipeline assignment (without field_values)
+    // UPDATE records in assignDefaultPipeline (without field_values):
+    //   set pipeline_id, current_stage_id, stage_entered_at where id = $4
+    // params: [pipelineId, stageId, now, recordId]
     if (s.startsWith('UPDATE RECORDS') && s.includes('PIPELINE_ID')) {
       const pipelineId = params![0] as string;
       const stageId = params![1] as string;
-      const recordId = params![2] as string;
+      const recordId = params![3] as string;
       const record = fakeRecords.get(recordId);
       if (record) {
         const updated = {
@@ -177,16 +234,30 @@ const { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnec
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const rawSql = typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return runQuery(rawSql, params);
   });
 
-  const mockClient = {
-    query: mockQuery,
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql = typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return runQuery(rawSql, params);
+    }),
     release: vi.fn(),
+  }));
+
+  return {
+    fakeRecords,
+    fakeStages,
+    fakePipelines,
+    fakeGates,
+    mockQuery,
+    mockConnect,
+    stageHistoryInserts,
   };
-
-  const mockConnect = vi.fn(async () => mockClient);
-
-  return { fakeRecords, fakeStages, fakePipelines, fakeGates, mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
@@ -194,6 +265,7 @@ vi.mock('../../db/client.js', () => ({
 }));
 
 const { moveRecordStage, assignDefaultPipeline } = await import('../stageMovementService.js');
+const { db } = await import('../../db/kysely.js');
 
 // ─── Test data helpers ──────────────────────────────────────────────────────
 
@@ -279,6 +351,7 @@ describe('moveRecordStage', () => {
     fakeStages.clear();
     fakePipelines.clear();
     fakeGates.clear();
+    stageHistoryInserts.count = 0;
     mockQuery.mockClear();
     mockConnect.mockClear();
   });
@@ -566,13 +639,10 @@ describe('moveRecordStage', () => {
 
     await moveRecordStage(TENANT_ID, 'opportunity', 'rec-1', 'stage-qualification', 'user-123');
 
-    // Verify INSERT INTO stage_history was called
-    const historyCalls = mockQuery.mock.calls.filter((call: unknown[]) => {
-      const sql = (call[0] as string).replace(/\s+/g, ' ').trim().toUpperCase();
-      return sql.startsWith('INSERT INTO STAGE_HISTORY');
-    });
-
-    expect(historyCalls.length).toBeGreaterThanOrEqual(1);
+    // The mock router counts every INSERT INTO stage_history it sees,
+    // whether it comes through pool.query or a checked-out transaction
+    // client. moveRecordStage must emit exactly one such insert.
+    expect(stageHistoryInserts.count).toBeGreaterThanOrEqual(1);
   });
 
   it('evaluates multiple gates on the same stage', async () => {
@@ -650,8 +720,7 @@ describe('assignDefaultPipeline', () => {
   });
 
   it('returns false when no default pipeline exists', async () => {
-    const client = { query: mockQuery, release: vi.fn() } as unknown as import('pg').PoolClient;
-    const result = await assignDefaultPipeline(client, 'rec-1', 'obj-no-pipeline', 'user-123');
+    const result = await assignDefaultPipeline(db, 'rec-1', 'obj-no-pipeline', 'user-123');
     expect(result).toBe(false);
   });
 
@@ -667,8 +736,7 @@ describe('assignDefaultPipeline', () => {
       updated_at: new Date().toISOString(),
     });
 
-    const client = { query: mockQuery, release: vi.fn() } as unknown as import('pg').PoolClient;
-    const result = await assignDefaultPipeline(client, 'rec-new', 'obj-opportunity-id', 'user-123');
+    const result = await assignDefaultPipeline(db, 'rec-new', 'obj-opportunity-id', 'user-123');
 
     expect(result).toBe(true);
     const record = fakeRecords.get('rec-new')!;

@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import { sql } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
 import { db } from '../db/kysely.js';
 import type { Json } from '../db/kysely.types.js';
 import { assignDefaultPipeline } from './stageMovementService.js';
@@ -636,17 +635,14 @@ export async function createRecord(
   const recordId = randomUUID();
   const now = new Date();
 
-  // Use pool.connect() rather than db.transaction() so we can pass the
-  // checked-out pg.PoolClient to assignDefaultPipeline (which is still on
-  // raw pg).  The INSERT and refetch inside the transaction are compiled
-  // by Kysely and executed via the same client, giving us the same
-  // atomicity as a Kysely transaction.  Once stageMovementService is
-  // migrated to Kysely (Phase 3b), this can become a `db.transaction()`.
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const insertCompiled = db
+  // INSERT + pipeline assignment + refetch run inside a single Kysely
+  // transaction. The RLS proxy on `pool.connect()` (see db/client.ts)
+  // sets `app.current_tenant_id` on the checked-out connection before
+  // Kysely issues BEGIN, so RLS policies are active throughout. Every
+  // query also carries an explicit `tenant_id` filter as defence-in-depth
+  // (ADR-006).
+  const finalRow = await db.transaction().execute(async (trx) => {
+    await trx
       .insertInto('records')
       .values({
         id: recordId,
@@ -661,43 +657,29 @@ export async function createRecord(
         created_at: now,
         updated_at: now,
       })
-      .returningAll()
-      .compile();
+      .execute();
 
-    await client.query(insertCompiled.sql, [...insertCompiled.parameters]);
-
-    // Auto-assign default pipeline if one exists for this object
-    await assignDefaultPipeline(client, recordId, objectDef.id, ownerId, tenantId);
+    // Auto-assign default pipeline if one exists for this object.
+    // `assignDefaultPipeline` now accepts a Kysely executor (Phase 3b).
+    await assignDefaultPipeline(trx, recordId, objectDef.id, ownerId, tenantId);
 
     // Re-fetch the record to pick up pipeline columns. We scope the WHERE
     // clause by id + object_id + tenant_id as defence-in-depth — even
     // though this runs inside the same transaction as the INSERT, we
     // don't want the refetch to rely on RLS alone (ADR-006).
-    const refetchCompiled = db
+    return trx
       .selectFrom('records')
       .selectAll()
       .where('id', '=', recordId)
       .where('object_id', '=', objectDef.id)
       .where('tenant_id', '=', tenantId)
-      .compile();
+      .executeTakeFirstOrThrow();
+  });
 
-    const finalResult = await client.query(
-      refetchCompiled.sql,
-      [...refetchCompiled.parameters],
-    );
+  logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record created');
 
-    await client.query('COMMIT');
-
-    logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record created');
-
-    const record = rowToRecord(finalResult.rows[0] as Record<string, unknown>);
-    return resolveFieldLabels(record, fieldDefs);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  const record = rowToRecord(finalRow as unknown as Record<string, unknown>);
+  return resolveFieldLabels(record, fieldDefs);
 }
 
 /**
