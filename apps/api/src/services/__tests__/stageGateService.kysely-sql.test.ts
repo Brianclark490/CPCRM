@@ -310,6 +310,10 @@ describe('stageGateService Kysely SQL — generated SQL shape', () => {
     // Scoped to the stage + tenant
     expect(s).toContain('SG.STAGE_ID');
     expect(s).toContain('SG.TENANT_ID');
+    // Defence-in-depth: the JOIN must constrain fd.tenant_id so a
+    // corrupt gate row can't surface field metadata from another
+    // tenant even though the WHERE only scopes sg.
+    expect(s).toContain('FD.TENANT_ID = SG.TENANT_ID');
     // Deterministic ordering
     expect(s).toContain('ORDER BY SG.ID');
   });
@@ -330,6 +334,12 @@ describe('stageGateService Kysely SQL — generated SQL shape', () => {
     });
     // Exactly one resolveStageAndObject call — not repeated per validation step
     expect(joinQueries.length).toBe(1);
+
+    // Defence-in-depth: both tables' tenant_id must be constrained so
+    // a stage row cannot pull object_id from a sibling tenant's pipeline.
+    const s = normalise(joinQueries[0]!.sql);
+    expect(s).toContain('SD.TENANT_ID');
+    expect(s).toContain('PD.TENANT_ID');
   });
 
   it('createStageGate issues exactly one INSERT INTO stage_gates with 7 columns', async () => {

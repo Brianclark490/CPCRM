@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
+import type { Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/kysely.js';
+import type { StageGates } from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,10 +100,15 @@ async function resolveStageAndObject(
 ): Promise<StageWithObject> {
   const row = await db
     .selectFrom('stage_definitions as sd')
-    .innerJoin('pipeline_definitions as pd', 'pd.id', 'sd.pipeline_id')
+    .innerJoin('pipeline_definitions as pd', (join) =>
+      join
+        .onRef('pd.id', '=', 'sd.pipeline_id')
+        .onRef('pd.tenant_id', '=', 'sd.tenant_id'),
+    )
     .select(['sd.id as stage_id', 'sd.pipeline_id', 'pd.object_id'])
     .where('sd.id', '=', stageId)
     .where('sd.tenant_id', '=', tenantId)
+    .where('pd.tenant_id', '=', tenantId)
     .executeTakeFirst();
 
   if (!row) {
@@ -193,11 +200,21 @@ function validateGateTypeAgainstField(
 /**
  * Select a stage_gate joined to its field_definition, returning the row shape
  * expected by rowToStageGateResponse.
+ *
+ * The join enforces `fd.tenant_id = sg.tenant_id` so defence-in-depth
+ * (ADR-006) holds for both tables once the caller applies a
+ * `sg.tenant_id = :tenant` predicate — a stage gate cannot accidentally
+ * surface field metadata from another tenant even if a corrupt row
+ * references an out-of-tenant field_id.
  */
 function selectGateWithField() {
   return db
     .selectFrom('stage_gates as sg')
-    .innerJoin('field_definitions as fd', 'fd.id', 'sg.field_id')
+    .innerJoin('field_definitions as fd', (join) =>
+      join
+        .onRef('fd.id', '=', 'sg.field_id')
+        .onRef('fd.tenant_id', '=', 'sg.tenant_id'),
+    )
     .select([
       'sg.id',
       'sg.stage_id',
@@ -346,10 +363,13 @@ export async function updateStageGate(
     throwNotFoundError('Stage gate not found');
   }
 
-  // Determine effective gate_type and gate_value
-  const effectiveGateType = params.gateType ?? existingRow.gate_type;
+  // Determine effective gate_type and gate_value. A caller can clear
+  // gate_value by passing null explicitly; passing undefined (or omitting
+  // the key) means "keep the existing value".
+  const effectiveGateType =
+    params.gateType !== undefined ? params.gateType : existingRow.gate_type;
   const effectiveGateValue =
-    'gateValue' in params ? (params.gateValue ?? null) : existingRow.gate_value;
+    params.gateValue !== undefined ? params.gateValue : existingRow.gate_value;
 
   if (!ALLOWED_GATE_TYPES.has(effectiveGateType)) {
     throwValidationError(`gate_type must be one of: ${[...ALLOWED_GATE_TYPES].join(', ')}`);
@@ -363,11 +383,14 @@ export async function updateStageGate(
 
   validateGateTypeAgainstField(effectiveGateType, effectiveGateValue, field);
 
-  // Build dynamic update
-  const updates: Record<string, unknown> = {};
-  if ('gateType' in params) updates.gate_type = params.gateType;
-  if ('gateValue' in params) updates.gate_value = params.gateValue ?? null;
-  if ('errorMessage' in params) updates.error_message = params.errorMessage ?? null;
+  // Build a typed update object so Kysely enforces the column/value
+  // contract from the generated schema. Only defined values are
+  // included — passing `undefined` on the params object is treated as
+  // "leave unchanged", so we never emit `SET col = NULL` unintentionally.
+  const updates: Updateable<StageGates> = {};
+  if (params.gateType !== undefined) updates.gate_type = params.gateType;
+  if (params.gateValue !== undefined) updates.gate_value = params.gateValue;
+  if (params.errorMessage !== undefined) updates.error_message = params.errorMessage;
 
   if (Object.keys(updates).length > 0) {
     await db
