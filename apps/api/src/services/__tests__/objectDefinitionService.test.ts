@@ -26,11 +26,21 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fa
   const fakeLayouts = new Map<string, Record<string, unknown>>();
   const fakePermissions = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function runQuery(rawSql: string, params?: unknown[]) {
+    // Strip identifier quoting so matching is quote-agnostic.
+    const s = rawSql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
-    // Transaction control statements — no-ops in the fake
+    // Transaction control statements — no-ops in the fake. Kysely's
+    // Postgres driver uses `begin`, `commit`, `rollback` (lowercase in
+    // the raw SQL) for `db.transaction().execute(...)`.
     if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+
+    // `SELECT set_config('app.current_tenant_id', $1, false)` — emitted
+    // by the pool.connect() proxy for RLS context. Fake connection
+    // still routes through that proxy, so honour it.
+    if (s.startsWith("SELECT SET_CONFIG")) {
       return { rows: [] };
     }
 
@@ -44,140 +54,268 @@ const { fakeObjects, fakeFields, fakeRecords, fakeRelationships, fakeLayouts, fa
       return { rows: [{ max_sort_order: String(maxOrder) }] };
     }
 
-    // SELECT id check for uniqueness (tenant_id = $1 AND api_name = $2)
-    if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE TENANT_ID') && s.includes('API_NAME')) {
+    // SELECT id FROM object_definitions WHERE tenant_id = $1 AND api_name = $2
+    // (uniqueness check during createObjectDefinition)
+    if (
+      s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS') &&
+      s.includes('TENANT_ID') &&
+      s.includes('API_NAME')
+    ) {
+      const tenantId = params![0] as string;
       const apiName = params![1] as string;
-      const match = [...fakeObjects.values()].find((r) => r.api_name === apiName);
+      const match = [...fakeObjects.values()].find(
+        (r) => r.api_name === apiName && r.tenant_id === tenantId,
+      );
       if (match) return { rows: [{ id: match.id }] };
       return { rows: [] };
     }
 
-    // INSERT INTO object_definitions
+    // INSERT INTO object_definitions — Kysely binds values in the
+    // column order declared in the service's `.values({...})` call.
+    // Column order: id, tenant_id, api_name, label, plural_label,
+    // description, icon, is_system, sort_order, owner_id, created_at,
+    // updated_at (12 columns).
     if (s.startsWith('INSERT INTO OBJECT_DEFINITIONS')) {
-      const [id, _tenant_id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at] = params as unknown[];
+      const [
+        id,
+        tenant_id,
+        api_name,
+        label,
+        plural_label,
+        description,
+        icon,
+        is_system,
+        sort_order,
+        owner_id,
+        created_at,
+        updated_at,
+      ] = params as unknown[];
       const row: Record<string, unknown> = {
-        id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at,
+        id,
+        tenant_id,
+        api_name,
+        label,
+        plural_label,
+        description,
+        icon,
+        is_system,
+        sort_order,
+        owner_id,
+        name_field_id: null,
+        name_template: null,
+        created_at,
+        updated_at,
       };
       fakeObjects.set(id as string, row);
       return { rows: [row] };
     }
 
-    // INSERT INTO layout_definitions (batch insert for default layouts)
+    // INSERT INTO layout_definitions — batch insert of two rows.
+    // Column order per row: id, tenant_id, object_id, name, layout_type,
+    // is_default, created_at, updated_at (8 columns × 2 rows = 16 params).
     if (s.startsWith('INSERT INTO LAYOUT_DEFINITIONS')) {
-      if (params && params.length >= 14) {
-        const row1: Record<string, unknown> = {
-          id: params[0], object_id: params[1], name: params[2], layout_type: params[3],
-          is_default: params[4], created_at: params[5], updated_at: params[6],
+      const p = params as unknown[];
+      const perRow = 8;
+      for (let i = 0; i + perRow - 1 < p.length; i += perRow) {
+        const row: Record<string, unknown> = {
+          id: p[i],
+          tenant_id: p[i + 1],
+          object_id: p[i + 2],
+          name: p[i + 3],
+          layout_type: p[i + 4],
+          is_default: p[i + 5],
+          created_at: p[i + 6],
+          updated_at: p[i + 7],
         };
-        fakeLayouts.set(params[0] as string, row1);
-        const row2: Record<string, unknown> = {
-          id: params[7], object_id: params[8], name: params[9], layout_type: params[10],
-          is_default: params[11], created_at: params[12], updated_at: params[13],
-        };
-        fakeLayouts.set(params[7] as string, row2);
+        fakeLayouts.set(p[i] as string, row);
       }
       return { rows: [] };
     }
 
-    // INSERT INTO object_permissions (batch insert for default permissions)
+    // INSERT INTO object_permissions — batch insert of four rows.
+    // Column order per row: id, tenant_id, object_id, role, can_create,
+    // can_read, can_update, can_delete (8 columns).
     if (s.startsWith('INSERT INTO OBJECT_PERMISSIONS')) {
-      if (params) {
-        // Each permission row has 7 params: id, object_id, role, can_create, can_read, can_update, can_delete
-        for (let i = 0; i + 6 < params.length; i += 7) {
-          const row: Record<string, unknown> = {
-            id: params[i],
-            object_id: params[i + 1],
-            role: params[i + 2],
-            can_create: params[i + 3],
-            can_read: params[i + 4],
-            can_update: params[i + 5],
-            can_delete: params[i + 6],
-          };
-          fakePermissions.set(params[i] as string, row);
-        }
+      const p = params as unknown[];
+      const perRow = 8;
+      for (let i = 0; i + perRow - 1 < p.length; i += perRow) {
+        const row: Record<string, unknown> = {
+          id: p[i],
+          tenant_id: p[i + 1],
+          object_id: p[i + 2],
+          role: p[i + 3],
+          can_create: p[i + 4],
+          can_read: p[i + 5],
+          can_update: p[i + 6],
+          can_delete: p[i + 7],
+        };
+        fakePermissions.set(p[i] as string, row);
       }
       return { rows: [] };
     }
 
-    // SELECT * FROM object_definitions (list all)
-    if (s.includes('FROM OBJECT_DEFINITIONS OD') && s.includes('FIELD_COUNT') && s.includes('RECORD_COUNT')) {
-      const rows = [...fakeObjects.values()].map((r) => {
-        const fieldCount = [...fakeFields.values()].filter((f) => f.object_id === r.id).length;
-        const recordCount = [...fakeRecords.values()].filter((rec) => rec.object_id === r.id).length;
-        return { ...r, field_count: String(fieldCount), record_count: String(recordCount) };
-      });
+    // listObjectDefinitions — Kysely emits a query with correlated
+    // subqueries aliased as `field_count` and `record_count`.
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM OBJECT_DEFINITIONS AS OD') &&
+      s.includes('FIELD_COUNT') &&
+      s.includes('RECORD_COUNT')
+    ) {
+      const tenantId = params![params!.length - 1] as string;
+      const rows = [...fakeObjects.values()]
+        .filter((r) => r.tenant_id === tenantId)
+        .map((r) => {
+          const fieldCount = [...fakeFields.values()].filter(
+            (f) => f.object_id === r.id,
+          ).length;
+          const recordCount = [...fakeRecords.values()].filter(
+            (rec) => rec.object_id === r.id,
+          ).length;
+          return {
+            ...r,
+            field_count: String(fieldCount),
+            record_count: String(recordCount),
+          };
+        });
       return { rows };
     }
 
-    // SELECT * FROM object_definitions WHERE id = $1
-    if (s.startsWith('SELECT * FROM OBJECT_DEFINITIONS WHERE ID = $1') && !s.includes('UPDATE')) {
+    // SELECT * FROM object_definitions WHERE id = $1 AND tenant_id = $2
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM OBJECT_DEFINITIONS') &&
+      s.includes('WHERE ID =') &&
+      !s.includes('AS OD')
+    ) {
       const id = params![0] as string;
+      const tenantId = params![1] as string;
       const row = fakeObjects.get(id);
-      if (row) return { rows: [row] };
+      if (row && row.tenant_id === tenantId) return { rows: [row] };
       return { rows: [] };
     }
 
-    // SELECT * FROM field_definitions
-    if (s.startsWith('SELECT * FROM FIELD_DEFINITIONS WHERE OBJECT_ID')) {
+    // SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM FIELD_DEFINITIONS') &&
+      s.includes('OBJECT_ID')
+    ) {
       const objectId = params![0] as string;
-      const rows = [...fakeFields.values()].filter((f) => f.object_id === objectId);
-      return { rows };
-    }
-
-    // SELECT * FROM relationship_definitions
-    if (s.startsWith('SELECT * FROM RELATIONSHIP_DEFINITIONS')) {
-      const objectId = params![0] as string;
-      const rows = [...fakeRelationships.values()].filter(
-        (r) => r.source_object_id === objectId || r.target_object_id === objectId,
+      const tenantId = params![1] as string;
+      const rows = [...fakeFields.values()].filter(
+        (f) => f.object_id === objectId && f.tenant_id === tenantId,
       );
       return { rows };
     }
 
-    // SELECT * FROM layout_definitions WHERE object_id
-    if (s.startsWith('SELECT * FROM LAYOUT_DEFINITIONS WHERE OBJECT_ID')) {
-      const objectId = params![0] as string;
-      const rows = [...fakeLayouts.values()].filter((l) => l.object_id === objectId);
+    // SELECT * FROM relationship_definitions WHERE (source = $1 OR
+    // target = $2) AND tenant_id = $3
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM RELATIONSHIP_DEFINITIONS')
+    ) {
+      const sourceId = params![0] as string;
+      const targetId = params![1] as string;
+      const tenantId = params![2] as string;
+      const rows = [...fakeRelationships.values()].filter(
+        (r) =>
+          (r.source_object_id === sourceId || r.target_object_id === targetId) &&
+          r.tenant_id === tenantId,
+      );
       return { rows };
     }
 
-    // UPDATE object_definitions
+    // SELECT * FROM layout_definitions WHERE object_id = $1 AND tenant_id = $2
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM LAYOUT_DEFINITIONS') &&
+      s.includes('OBJECT_ID')
+    ) {
+      const objectId = params![0] as string;
+      const tenantId = params![1] as string;
+      const rows = [...fakeLayouts.values()].filter(
+        (l) => l.object_id === objectId && l.tenant_id === tenantId,
+      );
+      return { rows };
+    }
+
+    // UPDATE object_definitions SET ... WHERE id = $N AND tenant_id = $N+1
     if (s.startsWith('UPDATE OBJECT_DEFINITIONS')) {
-      // id is second-to-last, tenantId is last
-      const id = params![params!.length - 2] as string;
+      const p = params as unknown[];
+      const id = p[p.length - 2] as string;
+      const tenantId = p[p.length - 1] as string;
       const existing = fakeObjects.get(id);
-      if (!existing) return { rows: [] };
-      const updated = { ...existing, updated_at: new Date() };
+      if (!existing || existing.tenant_id !== tenantId) {
+        return { rows: [] };
+      }
+      const updated: Record<string, unknown> = { ...existing };
+      let idx = 0;
+      // Match SET clauses in declaration order:
+      // label, plural_label, description, icon, updated_at
+      if (s.includes('SET LABEL =') || s.includes(', LABEL =')) {
+        updated.label = p[idx++];
+      }
+      if (s.includes('PLURAL_LABEL =')) {
+        updated.plural_label = p[idx++];
+      }
+      if (s.includes('DESCRIPTION =')) {
+        updated.description = p[idx++];
+      }
+      if (s.includes('ICON =')) {
+        updated.icon = p[idx++];
+      }
+      if (s.includes('UPDATED_AT =')) {
+        updated.updated_at = p[idx++] as Date;
+      }
       fakeObjects.set(id, updated);
       return { rows: [updated] };
     }
 
-    // SELECT COUNT(*) AS count FROM records WHERE object_id
-    if (s.includes('SELECT COUNT(*) AS COUNT FROM RECORDS WHERE OBJECT_ID')) {
+    // SELECT count(*) AS count FROM records WHERE object_id = $1 AND tenant_id = $2
+    if (s.includes('FROM RECORDS') && s.includes('COUNT(*)')) {
       const objectId = params![0] as string;
-      const count = [...fakeRecords.values()].filter((r) => r.object_id === objectId).length;
+      const tenantId = params![1] as string;
+      const count = [...fakeRecords.values()].filter(
+        (r) => r.object_id === objectId && r.tenant_id === tenantId,
+      ).length;
       return { rows: [{ count: String(count) }] };
     }
 
-    // DELETE FROM object_definitions
+    // DELETE FROM object_definitions WHERE id = $1 AND tenant_id = $2
     if (s.startsWith('DELETE FROM OBJECT_DEFINITIONS')) {
       const id = params![0] as string;
-      const existed = fakeObjects.has(id);
-      fakeObjects.delete(id);
-      // Cascade: clean up related layouts and permissions
-      for (const [key, layout] of fakeLayouts.entries()) {
-        if (layout.object_id === id) fakeLayouts.delete(key);
-      }
-      for (const [key, perm] of fakePermissions.entries()) {
-        if (perm.object_id === id) fakePermissions.delete(key);
+      const tenantId = params![1] as string;
+      const existing = fakeObjects.get(id);
+      const existed = !!existing && existing.tenant_id === tenantId;
+      if (existed) {
+        fakeObjects.delete(id);
+        // Cascade: clean up related layouts and permissions
+        for (const [key, layout] of fakeLayouts.entries()) {
+          if (layout.object_id === id) fakeLayouts.delete(key);
+        }
+        for (const [key, perm] of fakePermissions.entries()) {
+          if (perm.object_id === id) fakePermissions.delete(key);
+        }
       }
       return { rowCount: existed ? 1 : 0 };
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const rawSql =
+      typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return runQuery(rawSql, params);
   });
 
   const mockConnect = vi.fn(async () => ({
-    query: mockQuery,
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql =
+        typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return runQuery(rawSql, params);
+    }),
     release: vi.fn(),
   }));
 
@@ -404,15 +542,35 @@ describe('createObjectDefinition', () => {
   it('wraps creation in a transaction', async () => {
     await createObjectDefinition(TENANT_ID, baseParams);
 
-    // Verify that pool.connect was called (transaction path)
+    // Verify that pool.connect was called — Kysely's
+    // `db.transaction().execute()` acquires a client via the pool
+    // and re-uses it for BEGIN, every query, and COMMIT. Kysely's
+    // PostgresDialect also uses a per-query connect() for the
+    // non-transactional preamble (uniqueness check + max sort_order),
+    // so we have to locate the transactional client specifically.
     expect(mockConnect).toHaveBeenCalled();
 
-    // Verify BEGIN and COMMIT were issued on the client
-    const calls = mockQuery.mock.calls.map(([sql]: [string, unknown[]?]) =>
-      sql.replace(/\s+/g, ' ').trim().toUpperCase(),
-    );
-    expect(calls).toContain('BEGIN');
-    expect(calls).toContain('COMMIT');
+    // Collect every (sql, params) call across every checked-out client,
+    // normalised to upper-case. A single client should contain BEGIN
+    // AND COMMIT — that's the transactional one.
+    const normalise = (sql: unknown) => {
+      const raw =
+        typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return raw.replace(/\s+/g, ' ').trim().toUpperCase();
+    };
+
+    let sawTransactionalClient = false;
+    for (const result of mockConnect.mock.results) {
+      const client = await result.value;
+      const calls = (client.query as ReturnType<typeof vi.fn>).mock.calls.map(
+        (args: unknown[]) => normalise(args[0]),
+      );
+      if (calls.includes('BEGIN') && calls.includes('COMMIT')) {
+        sawTransactionalClient = true;
+        break;
+      }
+    }
+    expect(sawTransactionalClient).toBe(true);
   });
 });
 
@@ -589,13 +747,17 @@ describe('deleteObjectDefinition', () => {
     const id = 'system-obj-id';
     fakeObjects.set(id, {
       id,
+      tenant_id: TENANT_ID,
       api_name: 'account',
       label: 'Account',
       plural_label: 'Accounts',
       description: null,
       icon: null,
       is_system: true,
+      sort_order: 1,
       owner_id: 'SYSTEM',
+      name_field_id: null,
+      name_template: null,
       created_at: new Date(),
       updated_at: new Date(),
     });
@@ -619,6 +781,7 @@ describe('deleteObjectDefinition', () => {
     // Simulate a record existing for this object
     fakeRecords.set('record-1', {
       id: 'record-1',
+      tenant_id: TENANT_ID,
       object_id: created.id,
       name: 'Test Record',
       field_values: {},

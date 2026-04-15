@@ -1,6 +1,13 @@
 import { randomUUID } from 'crypto';
+import { sql, type Selectable, type Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type {
+  FieldDefinitions,
+  LayoutDefinitions,
+  ObjectDefinitions,
+  RelationshipDefinitions,
+} from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,65 +144,78 @@ export function validatePluralLabel(pluralLabel: unknown): string | null {
 
 // ─── Row → domain model ──────────────────────────────────────────────────────
 
-function rowToObjectDefinition(row: Record<string, unknown>): ObjectDefinition {
+/**
+ * Typing every row mapper against `Selectable<…>` means a renamed column
+ * or changed nullability on the generated schema is a compile-time error
+ * at the service, rather than an `unknown`/`any` cast leaking an
+ * incorrect runtime shape into the domain model.
+ */
+type ObjectDefinitionSelectable = Selectable<ObjectDefinitions>;
+type FieldDefinitionSelectable = Selectable<FieldDefinitions>;
+type RelationshipDefinitionSelectable = Selectable<RelationshipDefinitions>;
+type LayoutDefinitionSelectable = Selectable<LayoutDefinitions>;
+
+function rowToObjectDefinition(row: ObjectDefinitionSelectable): ObjectDefinition {
   return {
-    id: row.id as string,
-    apiName: row.api_name as string,
-    label: row.label as string,
-    pluralLabel: row.plural_label as string,
-    description: (row.description as string | null) ?? undefined,
-    icon: (row.icon as string | null) ?? undefined,
-    isSystem: row.is_system as boolean,
-    nameFieldId: (row.name_field_id as string | null) ?? undefined,
-    nameTemplate: (row.name_template as string | null) ?? undefined,
-    sortOrder: (row.sort_order as number) ?? 0,
-    ownerId: row.owner_id as string,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    id: row.id,
+    apiName: row.api_name,
+    label: row.label,
+    pluralLabel: row.plural_label,
+    description: row.description ?? undefined,
+    icon: row.icon ?? undefined,
+    isSystem: row.is_system,
+    nameFieldId: row.name_field_id ?? undefined,
+    nameTemplate: row.name_template ?? undefined,
+    sortOrder: row.sort_order ?? 0,
+    ownerId: row.owner_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
-function rowToFieldDefinition(row: Record<string, unknown>): FieldDefinitionRow {
+function rowToFieldDefinition(row: FieldDefinitionSelectable): FieldDefinitionRow {
   return {
-    id: row.id as string,
-    objectId: row.object_id as string,
-    apiName: row.api_name as string,
-    label: row.label as string,
-    fieldType: row.field_type as string,
-    description: (row.description as string | null) ?? undefined,
-    required: row.required as boolean,
-    defaultValue: (row.default_value as string | null) ?? undefined,
-    options: (row.options as Record<string, unknown>) ?? {},
-    sortOrder: row.sort_order as number,
-    isSystem: row.is_system as boolean,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    id: row.id,
+    objectId: row.object_id,
+    apiName: row.api_name,
+    label: row.label,
+    fieldType: row.field_type,
+    description: row.description ?? undefined,
+    required: row.required,
+    defaultValue: row.default_value ?? undefined,
+    options: (row.options as Record<string, unknown> | null) ?? {},
+    sortOrder: row.sort_order,
+    isSystem: row.is_system,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
-function rowToRelationshipDefinition(row: Record<string, unknown>): RelationshipDefinitionRow {
+function rowToRelationshipDefinition(
+  row: RelationshipDefinitionSelectable,
+): RelationshipDefinitionRow {
   return {
-    id: row.id as string,
-    sourceObjectId: row.source_object_id as string,
-    targetObjectId: row.target_object_id as string,
-    relationshipType: row.relationship_type as string,
-    apiName: row.api_name as string,
-    label: row.label as string,
-    reverseLabel: (row.reverse_label as string | null) ?? undefined,
-    required: row.required as boolean,
-    createdAt: new Date(row.created_at as string),
+    id: row.id,
+    sourceObjectId: row.source_object_id,
+    targetObjectId: row.target_object_id,
+    relationshipType: row.relationship_type,
+    apiName: row.api_name,
+    label: row.label,
+    reverseLabel: row.reverse_label ?? undefined,
+    required: row.required,
+    createdAt: row.created_at,
   };
 }
 
-function rowToLayoutDefinition(row: Record<string, unknown>): LayoutDefinitionRow {
+function rowToLayoutDefinition(row: LayoutDefinitionSelectable): LayoutDefinitionRow {
   return {
-    id: row.id as string,
-    objectId: row.object_id as string,
-    name: row.name as string,
-    layoutType: row.layout_type as string,
-    isDefault: row.is_default as boolean,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    id: row.id,
+    objectId: row.object_id,
+    name: row.name,
+    layoutType: row.layout_type,
+    isDefault: row.is_default,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -247,8 +267,10 @@ const DEFAULT_PERMISSIONS: ReadonlyArray<{
 /**
  * Creates a new object definition with default layouts and default permissions.
  *
- * The entire operation (object, layouts, permissions) is wrapped in a
- * database transaction so it either fully succeeds or fully rolls back.
+ * The entire operation (object, layouts, permissions) runs inside a
+ * single Kysely transaction so it either fully succeeds or fully rolls
+ * back — and crucially, all three inserts run on the same connection,
+ * so the transaction BEGIN/COMMIT pair frames them correctly.
  *
  * @throws {Error} VALIDATION_ERROR — invalid input
  * @throws {Error} CONFLICT — api_name already exists
@@ -270,121 +292,140 @@ export async function createObjectDefinition(
   if (pluralLabelError) throwValidationError(pluralLabelError);
 
   // Check uniqueness within tenant
-  const existing = await pool.query(
-    'SELECT id FROM object_definitions WHERE tenant_id = $1 AND api_name = $2',
-    [tenantId, apiName.trim()],
-  );
-  if (existing.rows.length > 0) {
+  const existing = await db
+    .selectFrom('object_definitions')
+    .select('id')
+    .where('tenant_id', '=', tenantId)
+    .where('api_name', '=', apiName.trim())
+    .executeTakeFirst();
+  if (existing) {
     throwConflictError(`An object with api_name "${apiName.trim()}" already exists`);
   }
+
+  // Determine the next sort_order value within tenant
+  const maxRow = await db
+    .selectFrom('object_definitions')
+    .select(sql<string>`COALESCE(MAX(sort_order), 0)`.as('max_sort_order'))
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirstOrThrow();
+  const nextSortOrder = (parseInt(maxRow.max_sort_order, 10) || 0) + 1;
 
   const objectId = randomUUID();
   const now = new Date();
 
-  // Determine the next sort_order value within tenant
-  const maxResult = await pool.query(
-    'SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order FROM object_definitions WHERE tenant_id = $1',
-    [tenantId],
-  );
-  const nextSortOrder = (parseInt(maxResult.rows[0].max_sort_order as string, 10) || 0) + 1;
-
   logger.info({ tenantId, objectId, apiName, ownerId }, 'Creating new object definition');
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  const inserted = await db.transaction().execute(async (trx) => {
+    const createdObject = await trx
+      .insertInto('object_definitions')
+      .values({
+        id: objectId,
+        tenant_id: tenantId,
+        api_name: apiName.trim(),
+        label: label.trim(),
+        plural_label: pluralLabel.trim(),
+        description: description?.trim() ?? null,
+        icon: icon?.trim() ?? null,
+        is_system: false,
+        sort_order: nextSortOrder,
+        owner_id: ownerId,
+        created_at: now,
+        updated_at: now,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-    const result = await client.query(
-      `INSERT INTO object_definitions
-         (id, tenant_id, api_name, label, plural_label, description, icon, is_system, sort_order, owner_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING *`,
-      [
-        objectId,
-        tenantId,
-        apiName.trim(),
-        label.trim(),
-        pluralLabel.trim(),
-        description?.trim() ?? null,
-        icon?.trim() ?? null,
-        false,
-        nextSortOrder,
-        ownerId,
-        now,
-        now,
-      ],
-    );
+    // Auto-create default layouts (form + list). The raw-pg
+    // implementation omitted tenant_id here, which would have violated
+    // the NOT NULL constraint on a real database — Kysely's generated
+    // types catch that at compile time and force the tenant through.
+    await trx
+      .insertInto('layout_definitions')
+      .values([
+        {
+          id: randomUUID(),
+          tenant_id: tenantId,
+          object_id: objectId,
+          name: 'Default Form',
+          layout_type: 'form',
+          is_default: true,
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          id: randomUUID(),
+          tenant_id: tenantId,
+          object_id: objectId,
+          name: 'List View',
+          layout_type: 'list',
+          is_default: true,
+          created_at: now,
+          updated_at: now,
+        },
+      ])
+      .execute();
 
-    // Auto-create default layouts (form + list)
-    const formLayoutId = randomUUID();
-    const listLayoutId = randomUUID();
+    // Auto-create default permissions for all four roles. Same latent
+    // tenant_id fix as layout_definitions above — the original insert
+    // omitted the column.
+    await trx
+      .insertInto('object_permissions')
+      .values(
+        DEFAULT_PERMISSIONS.map((p) => ({
+          id: randomUUID(),
+          tenant_id: tenantId,
+          object_id: objectId,
+          role: p.role,
+          can_create: p.canCreate,
+          can_read: p.canRead,
+          can_update: p.canUpdate,
+          can_delete: p.canDelete,
+        })),
+      )
+      .execute();
 
-    await client.query(
-      `INSERT INTO layout_definitions (id, object_id, name, layout_type, is_default, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7), ($8, $9, $10, $11, $12, $13, $14)`,
-      [
-        formLayoutId, objectId, 'Default Form', 'form', true, now, now,
-        listLayoutId, objectId, 'List View', 'list', true, now, now,
-      ],
-    );
+    return createdObject;
+  });
 
-    // Auto-create default permissions for all four roles
-    const permValues: unknown[] = [];
-    const permPlaceholders: string[] = [];
-    for (let i = 0; i < DEFAULT_PERMISSIONS.length; i++) {
-      const p = DEFAULT_PERMISSIONS[i];
-      const offset = i * 7;
-      permPlaceholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`,
-      );
-      permValues.push(randomUUID(), objectId, p.role, p.canCreate, p.canRead, p.canUpdate, p.canDelete);
-    }
+  logger.info({ objectId, apiName }, 'Object definition created with default layouts and permissions');
 
-    await client.query(
-      `INSERT INTO object_permissions (id, object_id, role, can_create, can_read, can_update, can_delete)
-       VALUES ${permPlaceholders.join(', ')}`,
-      permValues,
-    );
-
-    await client.query('COMMIT');
-
-    logger.info({ objectId, apiName }, 'Object definition created with default layouts and permissions');
-
-    return rowToObjectDefinition(result.rows[0]);
-  } catch (err) {
-    const originalError = err;
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      logger.error(
-        { originalError, rollbackError },
-        'Failed to rollback transaction when creating object definition',
-      );
-    }
-    throw originalError;
-  } finally {
-    client.release();
-  }
+  return rowToObjectDefinition(inserted);
 }
 
 /**
  * Returns all object definitions with field count and record count.
  */
-export async function listObjectDefinitions(tenantId: string): Promise<ObjectDefinitionListItem[]> {
-  const result = await pool.query(
-    `SELECT od.*,
-            (SELECT COUNT(*) FROM field_definitions fd WHERE fd.object_id = od.id AND fd.tenant_id = $1) AS field_count,
-            (SELECT COUNT(*) FROM records r WHERE r.object_id = od.id AND r.tenant_id = $1) AS record_count
-     FROM object_definitions od
-     WHERE od.tenant_id = $1
-     ORDER BY od.sort_order ASC, od.created_at ASC`,
-    [tenantId],
-  );
+export async function listObjectDefinitions(
+  tenantId: string,
+): Promise<ObjectDefinitionListItem[]> {
+  const rows = await db
+    .selectFrom('object_definitions as od')
+    .selectAll('od')
+    .select([
+      (eb) =>
+        eb
+          .selectFrom('field_definitions as fd')
+          .select(sql<string>`COUNT(*)`.as('count'))
+          .whereRef('fd.object_id', '=', 'od.id')
+          .where('fd.tenant_id', '=', tenantId)
+          .as('field_count'),
+      (eb) =>
+        eb
+          .selectFrom('records as r')
+          .select(sql<string>`COUNT(*)`.as('count'))
+          .whereRef('r.object_id', '=', 'od.id')
+          .where('r.tenant_id', '=', tenantId)
+          .as('record_count'),
+    ])
+    .where('od.tenant_id', '=', tenantId)
+    .orderBy('od.sort_order', 'asc')
+    .orderBy('od.created_at', 'asc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => ({
+  return rows.map((row) => ({
     ...rowToObjectDefinition(row),
-    fieldCount: parseInt(row.field_count as string, 10) || 0,
-    recordCount: parseInt(row.record_count as string, 10) || 0,
+    fieldCount: parseInt(row.field_count ?? '0', 10) || 0,
+    recordCount: parseInt(row.record_count ?? '0', 10) || 0,
   }));
 }
 
@@ -396,36 +437,52 @@ export async function getObjectDefinitionById(
   tenantId: string,
   id: string,
 ): Promise<ObjectDefinitionDetail | null> {
-  const objectResult = await pool.query(
-    'SELECT * FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [id, tenantId],
-  );
+  const objectRow = await db
+    .selectFrom('object_definitions')
+    .selectAll()
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (objectResult.rows.length === 0) return null;
+  if (!objectRow) return null;
 
-  const objectDef = rowToObjectDefinition(objectResult.rows[0]);
+  const objectDef = rowToObjectDefinition(objectRow);
 
   // Fetch fields, relationships (source or target), and layouts in parallel
-  const [fieldsResult, relationshipsResult, layoutsResult] = await Promise.all([
-    pool.query(
-      'SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
-      [id, tenantId],
-    ),
-    pool.query(
-      'SELECT * FROM relationship_definitions WHERE (source_object_id = $1 OR target_object_id = $1) AND tenant_id = $2',
-      [id, tenantId],
-    ),
-    pool.query(
-      'SELECT * FROM layout_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY layout_type ASC, name ASC',
-      [id, tenantId],
-    ),
+  const [fieldRows, relationshipRows, layoutRows] = await Promise.all([
+    db
+      .selectFrom('field_definitions')
+      .selectAll()
+      .where('object_id', '=', id)
+      .where('tenant_id', '=', tenantId)
+      .orderBy('sort_order', 'asc')
+      .execute(),
+    db
+      .selectFrom('relationship_definitions')
+      .selectAll()
+      .where((eb) =>
+        eb.or([
+          eb('source_object_id', '=', id),
+          eb('target_object_id', '=', id),
+        ]),
+      )
+      .where('tenant_id', '=', tenantId)
+      .execute(),
+    db
+      .selectFrom('layout_definitions')
+      .selectAll()
+      .where('object_id', '=', id)
+      .where('tenant_id', '=', tenantId)
+      .orderBy('layout_type', 'asc')
+      .orderBy('name', 'asc')
+      .execute(),
   ]);
 
   return {
     ...objectDef,
-    fields: fieldsResult.rows.map(rowToFieldDefinition),
-    relationships: relationshipsResult.rows.map(rowToRelationshipDefinition),
-    layouts: layoutsResult.rows.map(rowToLayoutDefinition),
+    fields: fieldRows.map(rowToFieldDefinition),
+    relationships: relationshipRows.map(rowToRelationshipDefinition),
+    layouts: layoutRows.map(rowToLayoutDefinition),
   };
 }
 
@@ -441,12 +498,14 @@ export async function updateObjectDefinition(
   id: string,
   params: UpdateObjectDefinitionParams,
 ): Promise<ObjectDefinition> {
-  const existing = await pool.query(
-    'SELECT * FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [id, tenantId],
-  );
+  const existingRow = await db
+    .selectFrom('object_definitions')
+    .selectAll()
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existingRow) {
     throwNotFoundError('Object definition not found');
   }
 
@@ -461,48 +520,35 @@ export async function updateObjectDefinition(
     if (pluralLabelError) throwValidationError(pluralLabelError);
   }
 
-  // Build dynamic update
-  const updates: string[] = [];
-  const values: unknown[] = [];
-  let paramIndex = 1;
+  // Build a typed update object so Kysely enforces the column/value
+  // contract from the generated schema. Only defined values are
+  // included — `undefined` on the params object is treated as
+  // "leave unchanged".
+  const updates: Updateable<ObjectDefinitions> = {};
+  if (params.label !== undefined) updates.label = params.label.trim();
+  if (params.pluralLabel !== undefined) updates.plural_label = params.pluralLabel.trim();
+  if (params.description !== undefined)
+    updates.description = params.description?.trim() ?? null;
+  if (params.icon !== undefined) updates.icon = params.icon?.trim() ?? null;
 
-  if ('label' in params) {
-    updates.push(`label = $${paramIndex++}`);
-    values.push(params.label!.trim());
-  }
-  if ('pluralLabel' in params) {
-    updates.push(`plural_label = $${paramIndex++}`);
-    values.push(params.pluralLabel!.trim());
-  }
-  if ('description' in params) {
-    updates.push(`description = $${paramIndex++}`);
-    values.push(params.description?.trim() ?? null);
-  }
-  if ('icon' in params) {
-    updates.push(`icon = $${paramIndex++}`);
-    values.push(params.icon?.trim() ?? null);
-  }
-
-  if (updates.length === 0) {
+  if (Object.keys(updates).length === 0) {
     // Nothing to update — return the existing object
-    return rowToObjectDefinition(existing.rows[0]);
+    return rowToObjectDefinition(existingRow);
   }
 
-  const now = new Date();
-  updates.push(`updated_at = $${paramIndex++}`);
-  values.push(now);
+  updates.updated_at = new Date();
 
-  values.push(id);
-  values.push(tenantId);
-
-  const result = await pool.query(
-    `UPDATE object_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex} RETURNING *`,
-    values,
-  );
+  const updated = await db
+    .updateTable('object_definitions')
+    .set(updates)
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ objectId: id }, 'Object definition updated');
 
-  return rowToObjectDefinition(result.rows[0]);
+  return rowToObjectDefinition(updated);
 }
 
 /**
@@ -515,32 +561,38 @@ export async function updateObjectDefinition(
  * @throws {Error} DELETE_BLOCKED — object is a system object or has records
  */
 export async function deleteObjectDefinition(tenantId: string, id: string): Promise<void> {
-  const existing = await pool.query(
-    'SELECT * FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [id, tenantId],
-  );
+  const existingRow = await db
+    .selectFrom('object_definitions')
+    .selectAll()
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existingRow) {
     throwNotFoundError('Object definition not found');
   }
 
-  const row = existing.rows[0] as Record<string, unknown>;
-
-  if (row.is_system === true) {
+  if (existingRow.is_system === true) {
     throwDeleteBlockedError('Cannot delete system objects');
   }
 
   // Check if records exist for this object
-  const recordCount = await pool.query(
-    'SELECT COUNT(*) AS count FROM records WHERE object_id = $1 AND tenant_id = $2',
-    [id, tenantId],
-  );
-  const count = parseInt(recordCount.rows[0].count as string, 10);
+  const recordCountRow = await db
+    .selectFrom('records')
+    .select(sql<string>`COUNT(*)`.as('count'))
+    .where('object_id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirstOrThrow();
+  const count = parseInt(recordCountRow.count, 10);
   if (count > 0) {
     throwDeleteBlockedError('Delete all records first');
   }
 
-  await pool.query('DELETE FROM object_definitions WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  await db
+    .deleteFrom('object_definitions')
+    .where('id', '=', id)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
   logger.info({ objectId: id }, 'Object definition deleted');
 }
@@ -553,8 +605,15 @@ export async function deleteObjectDefinition(tenantId: string, id: string): Prom
  */
 const MAX_REORDER_IDS = 500;
 
-export async function reorderObjectDefinitions(tenantId: string, orderedIds: string[]): Promise<void> {
-  if (!Array.isArray(orderedIds) || orderedIds.length === 0 || orderedIds.length > MAX_REORDER_IDS) {
+export async function reorderObjectDefinitions(
+  tenantId: string,
+  orderedIds: string[],
+): Promise<void> {
+  if (
+    !Array.isArray(orderedIds) ||
+    orderedIds.length === 0 ||
+    orderedIds.length > MAX_REORDER_IDS
+  ) {
     throwValidationError(
       `orderedIds must be a non-empty array of object definition IDs (max ${MAX_REORDER_IDS})`,
     );
@@ -569,26 +628,19 @@ export async function reorderObjectDefinitions(tenantId: string, orderedIds: str
     }
   }
 
-  // Build a single UPDATE using a VALUES list for efficiency
-  const values: unknown[] = [];
-  const placeholders: string[] = [];
-  for (let i = 0; i < safeLength; i++) {
-    const paramId = i * 2 + 1;
-    const paramOrder = i * 2 + 2;
-    placeholders.push(`($${paramId}::uuid, $${paramOrder}::integer)`);
-    values.push(orderedIds[i], i + 1);
-  }
-
-  values.push(tenantId);
-  const tenantParamIdx = values.length;
-
-  await pool.query(
-    `UPDATE object_definitions AS od
-     SET sort_order = v.new_order, updated_at = NOW()
-     FROM (VALUES ${placeholders.join(', ')}) AS v(id, new_order)
-     WHERE od.id = v.id AND od.tenant_id = $${tenantParamIdx}`,
-    values,
-  );
+  // Run the batch inside a single transaction so the reorder is
+  // atomic: either every object's sort_order moves, or none do.
+  await db.transaction().execute(async (trx) => {
+    const now = new Date();
+    for (let i = 0; i < safeLength; i++) {
+      await trx
+        .updateTable('object_definitions')
+        .set({ sort_order: i + 1, updated_at: now })
+        .where('id', '=', orderedIds[i]!)
+        .where('tenant_id', '=', tenantId)
+        .execute();
+    }
+  });
 
   logger.info({ count: safeLength }, 'Object definitions reordered');
 }
