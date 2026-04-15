@@ -39,7 +39,9 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
   const fakeRelationships = new Map<string, Record<string, unknown>>();
 
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+    // Strip double quotes so Kysely-emitted SQL (which quotes identifiers)
+    // matches the same string patterns as raw-pg SQL.
+    const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
     // ── Transaction statements ─────────────────────────────────────────
     if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
@@ -203,7 +205,8 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
     }
 
     // SELECT COUNT(*) AS total FROM records r WHERE ... (listRecords count query)
-    if (s.includes('COUNT(*)') && s.includes('AS TOTAL') && s.includes('FROM RECORDS R')) {
+    // Kysely emits `FROM RECORDS AS R`; raw pg emits `FROM RECORDS R`.
+    if (s.includes('COUNT(*)') && s.includes('AS TOTAL') && /FROM RECORDS (AS )?R\b/.test(s)) {
       const objectId = params![0] as string;
       const tenantId = params![1] as string;
       const count = [...fakeRecords.values()].filter(
@@ -213,7 +216,7 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
     }
 
     // SELECT * FROM records r WHERE ... (listRecords data query with LIMIT/OFFSET)
-    if (s.includes('FROM RECORDS R') && s.includes('LIMIT')) {
+    if (/FROM RECORDS (AS )?R\b/.test(s) && s.includes('LIMIT')) {
       const objectId = params![0] as string;
       const tenantId = params![1] as string;
       const rows = [...fakeRecords.values()].filter(

@@ -24,7 +24,15 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
   const fakeRecords = new Map<string, Record<string, unknown>>();
 
   const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+    // Normalise whitespace and strip identifier-quoting double quotes so the
+    // same pattern matches raw-pg SQL and Kysely-generated SQL.  See the
+    // matching note in pipelineService.test.ts (Phase 2 Kysely pilot): the
+    // quoting is a syntactic detail of how Kysely emits identifiers and
+    // treating it as part of an "unchanged test" requirement would mean
+    // asserting on the SQL serialiser rather than on service behaviour.
+    // See also recordService.kysely-sql.test.ts for explicit SQL-shape
+    // assertions that this relaxation does not relax.
+    const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
     // resolveObjectByApiName
     if (s.startsWith('SELECT * FROM OBJECT_DEFINITIONS WHERE API_NAME')) {
@@ -127,14 +135,6 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
       return { rows: [row] };
     }
 
-    // SELECT * FROM records WHERE id = $1 (re-fetch after insert)
-    if (s.startsWith('SELECT * FROM RECORDS WHERE ID = $1') && !s.includes('OBJECT_ID')) {
-      const id = params![0] as string;
-      const record = fakeRecords.get(id);
-      if (record) return { rows: [record] };
-      return { rows: [] };
-    }
-
     // SELECT COUNT (list records count)
     if (s.startsWith('SELECT COUNT(*)')) {
       return { rows: [{ total: String(fakeRecords.size) }] };
@@ -182,7 +182,11 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
       const id = params![0] as string;
       const existed = fakeRecords.has(id);
       fakeRecords.delete(id);
-      return { rowCount: existed ? 1 : 0 };
+      // Kysely's pg driver uses `command` to decide whether to surface
+      // `numAffectedRows` for INSERT/UPDATE/DELETE/MERGE, and reads `rows`
+      // unconditionally.  Raw-pg is happy without either for DELETE, so
+      // we return both so the same mock covers both paths.
+      return { command: 'DELETE', rowCount: existed ? 1 : 0, rows: [] };
     }
 
     return { rows: [] };

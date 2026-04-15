@@ -1,6 +1,9 @@
 import { randomUUID } from 'crypto';
+import { sql } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { Json } from '../db/kysely.types.js';
 import { assignDefaultPipeline } from './stageMovementService.js';
 import { validateWithZod, type FieldValidationErrors } from './fieldValueSchema.js';
 
@@ -368,28 +371,33 @@ export async function resolveObjectByApiName(
   tenantId: string,
   apiName: string,
 ): Promise<ObjectDefinitionRow> {
-  const result = await pool.query(
-    'SELECT * FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
-    [apiName, tenantId],
-  );
+  const row = await db
+    .selectFrom('object_definitions')
+    .selectAll()
+    .where('api_name', '=', apiName)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (result.rows.length === 0) {
+  if (!row) {
     throwNotFoundError(`Object type '${apiName}' not found`);
   }
 
-  return rowToObjectDefinition(result.rows[0]);
+  return rowToObjectDefinition(row as unknown as Record<string, unknown>);
 }
 
 export async function getFieldDefinitions(
   tenantId: string,
   objectId: string,
 ): Promise<FieldDefinitionRow[]> {
-  const result = await pool.query(
-    'SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
-    [objectId, tenantId],
-  );
+  const rows = await db
+    .selectFrom('field_definitions')
+    .selectAll()
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .orderBy('sort_order', 'asc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => rowToFieldDef(row));
+  return rows.map((row) => rowToFieldDef(row as unknown as Record<string, unknown>));
 }
 
 // ─── Field Value Validation ──────────────────────────────────────────────────
@@ -628,32 +636,61 @@ export async function createRecord(
   const recordId = randomUUID();
   const now = new Date();
 
-  // Use a transaction so pipeline assignment is atomic with record creation
+  // Use pool.connect() rather than db.transaction() so we can pass the
+  // checked-out pg.PoolClient to assignDefaultPipeline (which is still on
+  // raw pg).  The INSERT and refetch inside the transaction are compiled
+  // by Kysely and executed via the same client, giving us the same
+  // atomicity as a Kysely transaction.  Once stageMovementService is
+  // migrated to Kysely (Phase 3b), this can become a `db.transaction()`.
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    await client.query(
-      `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, owner_name, updated_by, updated_by_name, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING *`,
-      [recordId, tenantId, objectDef.id, name, JSON.stringify(cleanedValues), ownerId, ownerName ?? null, ownerId, ownerName ?? null, now, now],
-    );
+    const insertCompiled = db
+      .insertInto('records')
+      .values({
+        id: recordId,
+        tenant_id: tenantId,
+        object_id: objectDef.id,
+        name,
+        field_values: JSON.stringify(cleanedValues) as unknown as Json,
+        owner_id: ownerId,
+        owner_name: ownerName ?? null,
+        updated_by: ownerId,
+        updated_by_name: ownerName ?? null,
+        created_at: now,
+        updated_at: now,
+      })
+      .returningAll()
+      .compile();
+
+    await client.query(insertCompiled.sql, [...insertCompiled.parameters]);
 
     // Auto-assign default pipeline if one exists for this object
     await assignDefaultPipeline(client, recordId, objectDef.id, ownerId, tenantId);
 
-    // Re-fetch the record to pick up pipeline columns
+    // Re-fetch the record to pick up pipeline columns. We scope the WHERE
+    // clause by id + object_id + tenant_id as defence-in-depth — even
+    // though this runs inside the same transaction as the INSERT, we
+    // don't want the refetch to rely on RLS alone (ADR-006).
+    const refetchCompiled = db
+      .selectFrom('records')
+      .selectAll()
+      .where('id', '=', recordId)
+      .where('object_id', '=', objectDef.id)
+      .where('tenant_id', '=', tenantId)
+      .compile();
+
     const finalResult = await client.query(
-      'SELECT * FROM records WHERE id = $1',
-      [recordId],
+      refetchCompiled.sql,
+      [...refetchCompiled.parameters],
     );
 
     await client.query('COMMIT');
 
     logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record created');
 
-    const record = rowToRecord(finalResult.rows[0]);
+    const record = rowToRecord(finalResult.rows[0] as Record<string, unknown>);
     return resolveFieldLabels(record, fieldDefs);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -684,67 +721,93 @@ export async function listRecords(params: {
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
-  const queryParams: unknown[] = [objectDef.id, tenantId];
-  let whereClause = 'WHERE r.object_id = $1 AND r.tenant_id = $2';
+  const trimmedSearch = search?.trim();
+  const hasSearch = trimmedSearch !== undefined && trimmedSearch.length > 0;
+  const searchTerm = hasSearch ? `%${escapeLikePattern(trimmedSearch)}%` : '';
+  // Only text-like columns participate in ILIKE search
+  const textFields = hasSearch
+    ? fieldDefs.filter(
+        (fd) =>
+          fd.fieldType === 'text' ||
+          fd.fieldType === 'email' ||
+          fd.fieldType === 'textarea',
+      )
+    : [];
+  const safeTextFields = textFields.filter((fd) => isSafeIdentifier(fd.apiName));
 
-  if (search && search.trim().length > 0) {
-    const searchTerm = `%${escapeLikePattern(search.trim())}%`;
-    queryParams.push(searchTerm);
-    const paramIdx = queryParams.length;
+  // ─── COUNT query — separate from the data query so we never chain count
+  // onto a `.selectAll()` (the Kysely spike hit exactly this bug).
+  let countQuery = db
+    .selectFrom('records as r')
+    .select((eb) => eb.fn.countAll<string>().as('total'))
+    .where('r.object_id', '=', objectDef.id)
+    .where('r.tenant_id', '=', tenantId);
 
-    // Search against name field and text/email fields via JSONB
-    const textFields = fieldDefs.filter(
-      (fd) => fd.fieldType === 'text' || fd.fieldType === 'email' || fd.fieldType === 'textarea',
-    );
-
-    const searchConditions = [`r.name ILIKE $${paramIdx}`];
-    for (const tf of textFields) {
-      if (isSafeIdentifier(tf.apiName)) {
-        // Use parameterised JSONB key access to avoid SQL string interpolation
-        queryParams.push(tf.apiName);
-        searchConditions.push(`r.field_values->>$${queryParams.length} ILIKE $${paramIdx}`);
-      }
-    }
-
-    whereClause += ` AND (${searchConditions.join(' OR ')})`;
+  if (hasSearch) {
+    countQuery = countQuery.where((eb) => {
+      const conds = [
+        eb('r.name', 'ilike', searchTerm),
+        ...safeTextFields.map((tf) =>
+          // Parameterised JSONB key access — `tf.apiName` is bound as a
+          // parameter, not interpolated into SQL. See ADR-006 Appendix A.
+          eb(sql<string>`r.field_values->>${tf.apiName}`, 'ilike', searchTerm),
+        ),
+      ];
+      return eb.or(conds);
+    });
   }
 
-  // Count
-  const countResult = await pool.query(
-    `SELECT COUNT(*) AS total FROM records r ${whereClause}`,
-    queryParams,
-  );
-  const total = parseInt(countResult.rows[0].total as string, 10);
+  const countRow = await countQuery.executeTakeFirstOrThrow();
+  const total = parseInt(countRow.total as unknown as string, 10);
 
-  // Sorting
-  let orderClause = 'ORDER BY r.created_at DESC';
-  if (sortBy) {
-    const direction = sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    if (sortBy === 'name') {
-      orderClause = `ORDER BY r.name ${direction}`;
-    } else if (sortBy === 'created_at') {
-      orderClause = `ORDER BY r.created_at ${direction}`;
-    } else if (sortBy === 'updated_at') {
-      orderClause = `ORDER BY r.updated_at ${direction}`;
+  // ─── Data query
+  let dataQuery = db
+    .selectFrom('records as r')
+    .selectAll('r')
+    .where('r.object_id', '=', objectDef.id)
+    .where('r.tenant_id', '=', tenantId);
+
+  if (hasSearch) {
+    dataQuery = dataQuery.where((eb) => {
+      const conds = [
+        eb('r.name', 'ilike', searchTerm),
+        ...safeTextFields.map((tf) =>
+          eb(sql<string>`r.field_values->>${tf.apiName}`, 'ilike', searchTerm),
+        ),
+      ];
+      return eb.or(conds);
+    });
+  }
+
+  // Sorting — defence-in-depth via isSafeIdentifier + parameter binding
+  const direction: 'asc' | 'desc' =
+    sortDir?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
+  if (sortBy === 'name') {
+    dataQuery = dataQuery.orderBy('r.name', direction);
+  } else if (sortBy === 'created_at') {
+    dataQuery = dataQuery.orderBy('r.created_at', direction);
+  } else if (sortBy === 'updated_at') {
+    dataQuery = dataQuery.orderBy('r.updated_at', direction);
+  } else if (sortBy) {
+    const fieldDef = fieldDefs.find((fd) => fd.apiName === sortBy);
+    if (fieldDef && isSafeIdentifier(fieldDef.apiName)) {
+      dataQuery = dataQuery.orderBy(
+        sql`r.field_values->>${fieldDef.apiName}` as never,
+        direction,
+      );
     } else {
-      // Sort by a JSONB field — use parameterised key access
-      const fieldDef = fieldDefs.find((fd) => fd.apiName === sortBy);
-      if (fieldDef && isSafeIdentifier(fieldDef.apiName)) {
-        queryParams.push(fieldDef.apiName);
-        orderClause = `ORDER BY r.field_values->>$${queryParams.length} ${direction}`;
-      }
+      dataQuery = dataQuery.orderBy('r.created_at', 'desc');
     }
+  } else {
+    dataQuery = dataQuery.orderBy('r.created_at', 'desc');
   }
 
-  queryParams.push(limit, offset);
+  dataQuery = dataQuery.limit(limit).offset(offset);
 
-  const dataResult = await pool.query(
-    `SELECT * FROM records r ${whereClause} ${orderClause} LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
-    queryParams,
-  );
+  const dataRows = await dataQuery.execute();
 
-  const data = dataResult.rows.map((row: Record<string, unknown>) => {
-    const record = rowToRecord(row);
+  const data = dataRows.map((row) => {
+    const record = rowToRecord(row as unknown as Record<string, unknown>);
     return resolveFieldLabels(record, fieldDefs);
   });
 
@@ -754,22 +817,38 @@ export async function listRecords(params: {
   if (data.length > 0) {
     const recordIds = data.map((r) => r.id);
 
-    const linkedResult = await pool.query(
-      `SELECT rr.source_record_id, acct.id AS account_id, acct.name AS account_name
-       FROM record_relationships rr
-       JOIN relationship_definitions rd ON rd.id = rr.relationship_id
-       JOIN object_definitions tgt_obj ON tgt_obj.id = rd.target_object_id
-       JOIN records acct ON acct.id = rr.target_record_id
-       WHERE rr.source_record_id = ANY($1)
-         AND rd.source_object_id = $2
-         AND tgt_obj.api_name = 'account'
-         AND rd.tenant_id = $3`,
-      [recordIds, objectDef.id, tenantId],
-    );
+    const linkedRows = await db
+      .selectFrom('record_relationships as rr')
+      .innerJoin(
+        'relationship_definitions as rd',
+        'rd.id',
+        'rr.relationship_id',
+      )
+      .innerJoin(
+        'object_definitions as tgt_obj',
+        'tgt_obj.id',
+        'rd.target_object_id',
+      )
+      .innerJoin('records as acct', 'acct.id', 'rr.target_record_id')
+      .select((eb) => [
+        'rr.source_record_id',
+        eb.ref('acct.id').as('account_id'),
+        eb.ref('acct.name').as('account_name'),
+      ])
+      .where(sql<boolean>`rr.source_record_id = any(${recordIds})`)
+      .where('rd.source_object_id', '=', objectDef.id)
+      .where('tgt_obj.api_name', '=', 'account')
+      // Defence-in-depth: scope every tenant-aware table, not just rd.
+      // Allows use of the (tenant_id, …) indexes on record_relationships
+      // and records.
+      .where('rd.tenant_id', '=', tenantId)
+      .where('rr.tenant_id', '=', tenantId)
+      .where('acct.tenant_id', '=', tenantId)
+      .execute();
 
     const linkedMap = new Map<string, LinkedParentRecord>();
-    for (const row of linkedResult.rows) {
-      const r = row as Record<string, unknown>;
+    for (const row of linkedRows) {
+      const r = row as unknown as Record<string, unknown>;
       const sourceId = r.source_record_id as string;
       // Keep the first match per source record
       if (!linkedMap.has(sourceId)) {
@@ -804,36 +883,59 @@ export async function getRecord(
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
-  const result = await pool.query(
-    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [recordId, objectDef.id, tenantId],
-  );
+  const row = await db
+    .selectFrom('records')
+    .selectAll()
+    .where('id', '=', recordId)
+    .where('object_id', '=', objectDef.id)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (result.rows.length === 0) {
+  if (!row) {
     throwNotFoundError('Record not found');
   }
 
-  const record = rowToRecord(result.rows[0]);
+  const record = rowToRecord(row as unknown as Record<string, unknown>);
   const withLabels = resolveFieldLabels(record, fieldDefs);
 
-  // Fetch relationships for this object
-  const relResult = await pool.query(
-    `SELECT rd.*, 
-            src_obj.label AS source_object_label,
-            src_obj.api_name AS source_object_api_name,
-            tgt_obj.label AS target_object_label,
-            tgt_obj.api_name AS target_object_api_name
-     FROM relationship_definitions rd
-     JOIN object_definitions src_obj ON src_obj.id = rd.source_object_id
-     JOIN object_definitions tgt_obj ON tgt_obj.id = rd.target_object_id
-     WHERE (rd.source_object_id = $1 OR rd.target_object_id = $1) AND rd.tenant_id = $2`,
-    [objectDef.id, tenantId],
-  );
+  // Fetch relationships that touch this object type
+  const relRows = await db
+    .selectFrom('relationship_definitions as rd')
+    .innerJoin(
+      'object_definitions as src_obj',
+      'src_obj.id',
+      'rd.source_object_id',
+    )
+    .innerJoin(
+      'object_definitions as tgt_obj',
+      'tgt_obj.id',
+      'rd.target_object_id',
+    )
+    .select((eb) => [
+      'rd.id',
+      'rd.source_object_id',
+      'rd.target_object_id',
+      'rd.label',
+      'rd.reverse_label',
+      'rd.relationship_type',
+      eb.ref('src_obj.label').as('source_object_label'),
+      eb.ref('src_obj.api_name').as('source_object_api_name'),
+      eb.ref('tgt_obj.label').as('target_object_label'),
+      eb.ref('tgt_obj.api_name').as('target_object_api_name'),
+    ])
+    .where((eb) =>
+      eb.or([
+        eb('rd.source_object_id', '=', objectDef.id),
+        eb('rd.target_object_id', '=', objectDef.id),
+      ]),
+    )
+    .where('rd.tenant_id', '=', tenantId)
+    .execute();
 
   const relationships: RecordDetail['relationships'] = [];
 
-  for (const relRow of relResult.rows) {
-    const rel = relRow as Record<string, unknown>;
+  for (const relRow of relRows) {
+    const rel = relRow as unknown as Record<string, unknown>;
     const relId = rel.id as string;
     const sourceObjectId = rel.source_object_id as string;
     const relLabel = rel.label as string;
@@ -845,36 +947,52 @@ export async function getRecord(
     // Determine direction: is this record the source or target?
     const isSource = sourceObjectId === objectDef.id;
 
-    let relatedRecords: Array<{ id: string; name: string; fieldValues: Record<string, unknown> }>;
+    let relatedRecords: Array<{
+      id: string;
+      name: string;
+      fieldValues: Record<string, unknown>;
+    }>;
 
     if (isSource) {
       // This record is the source — find target records
-      const rrResult = await pool.query(
-        `SELECT r.id, r.name, r.field_values
-         FROM record_relationships rr
-         JOIN records r ON r.id = rr.target_record_id
-         WHERE rr.relationship_id = $1 AND rr.source_record_id = $2`,
-        [relId, recordId],
-      );
-      relatedRecords = rrResult.rows.map((r: Record<string, unknown>) => ({
-        id: r.id as string,
-        name: r.name as string,
-        fieldValues: (r.field_values as Record<string, unknown>) ?? {},
-      }));
+      const rrRows = await db
+        .selectFrom('record_relationships as rr')
+        .innerJoin('records as r', 'r.id', 'rr.target_record_id')
+        .select(['r.id', 'r.name', 'r.field_values'])
+        .where('rr.relationship_id', '=', relId)
+        .where('rr.source_record_id', '=', recordId)
+        // Defence-in-depth: scope both tenant-aware tables.
+        .where('rr.tenant_id', '=', tenantId)
+        .where('r.tenant_id', '=', tenantId)
+        .execute();
+      relatedRecords = rrRows.map((r) => {
+        const rec = r as unknown as Record<string, unknown>;
+        return {
+          id: rec.id as string,
+          name: rec.name as string,
+          fieldValues: (rec.field_values as Record<string, unknown>) ?? {},
+        };
+      });
     } else {
       // This record is the target — find source records
-      const rrResult = await pool.query(
-        `SELECT r.id, r.name, r.field_values
-         FROM record_relationships rr
-         JOIN records r ON r.id = rr.source_record_id
-         WHERE rr.relationship_id = $1 AND rr.target_record_id = $2`,
-        [relId, recordId],
-      );
-      relatedRecords = rrResult.rows.map((r: Record<string, unknown>) => ({
-        id: r.id as string,
-        name: r.name as string,
-        fieldValues: (r.field_values as Record<string, unknown>) ?? {},
-      }));
+      const rrRows = await db
+        .selectFrom('record_relationships as rr')
+        .innerJoin('records as r', 'r.id', 'rr.source_record_id')
+        .select(['r.id', 'r.name', 'r.field_values'])
+        .where('rr.relationship_id', '=', relId)
+        .where('rr.target_record_id', '=', recordId)
+        // Defence-in-depth: scope both tenant-aware tables.
+        .where('rr.tenant_id', '=', tenantId)
+        .where('r.tenant_id', '=', tenantId)
+        .execute();
+      relatedRecords = rrRows.map((r) => {
+        const rec = r as unknown as Record<string, unknown>;
+        return {
+          id: rec.id as string,
+          name: rec.name as string,
+          fieldValues: (rec.field_values as Record<string, unknown>) ?? {},
+        };
+      });
     }
 
     relationships.push({
@@ -906,12 +1024,15 @@ export async function updateRecord(
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
 
   // Verify the record exists within this tenant
-  const existing = await pool.query(
-    'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [recordId, objectDef.id, tenantId],
-  );
+  const existingRow = await db
+    .selectFrom('records')
+    .selectAll()
+    .where('id', '=', recordId)
+    .where('object_id', '=', objectDef.id)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existingRow) {
     throwNotFoundError('Record not found');
   }
 
@@ -922,7 +1043,9 @@ export async function updateRecord(
   const cleanedValues = validateFieldValues(safeFieldValues, fieldDefs, true);
 
   // Merge with existing field_values
-  const existingRecord = rowToRecord(existing.rows[0]);
+  const existingRecord = rowToRecord(
+    existingRow as unknown as Record<string, unknown>,
+  );
   const mergedValues = { ...existingRecord.fieldValues, ...cleanedValues };
 
   // Determine the new record name
@@ -930,44 +1053,69 @@ export async function updateRecord(
 
   const now = new Date();
 
-  // If the stage field changed and the record has a pipeline, sync current_stage_id
-  const stageFieldChanged = 'stage' in cleanedValues && cleanedValues.stage !== existingRecord.fieldValues.stage;
-  let stageUpdateClause = '';
-  const updateParams: unknown[] = [name, JSON.stringify(mergedValues), now, ownerId, updatedByName ?? null];
+  // If the stage field changed and the record has a pipeline, look up the
+  // matching stage_definitions.id so we can sync current_stage_id + stage_entered_at.
+  let matchedStageId: string | null = null;
+  const stageFieldChanged =
+    'stage' in cleanedValues &&
+    cleanedValues.stage !== existingRecord.fieldValues.stage;
 
-  if (stageFieldChanged && existingRecord.pipelineId && typeof cleanedValues.stage === 'string') {
+  if (
+    stageFieldChanged &&
+    existingRecord.pipelineId &&
+    typeof cleanedValues.stage === 'string'
+  ) {
     const stageValue = cleanedValues.stage.trim().toLowerCase();
-    const stageResult = await pool.query(
-      `SELECT id FROM stage_definitions
-       WHERE pipeline_id = $1 AND tenant_id = $2
-         AND (LOWER(name) = $3 OR LOWER(api_name) = $3)
-       LIMIT 1`,
-      [existingRecord.pipelineId, tenantId, stageValue],
-    );
+    const stageRow = await db
+      .selectFrom('stage_definitions')
+      .select('id')
+      .where('pipeline_id', '=', existingRecord.pipelineId)
+      .where('tenant_id', '=', tenantId)
+      .where((eb) =>
+        eb.or([
+          eb(sql<string>`lower(name)`, '=', stageValue),
+          eb(sql<string>`lower(api_name)`, '=', stageValue),
+        ]),
+      )
+      .limit(1)
+      .executeTakeFirst();
 
-    if (stageResult.rows.length > 0) {
-      const matchedStageId = (stageResult.rows[0] as Record<string, unknown>).id as string;
-      stageUpdateClause = `, current_stage_id = $${updateParams.length + 1}, stage_entered_at = $${updateParams.length + 2}`;
-      updateParams.push(matchedStageId, now);
+    if (stageRow) {
+      matchedStageId = (stageRow as unknown as { id: string }).id;
     }
   }
 
-  updateParams.push(recordId, objectDef.id, tenantId);
-  const idxRecord = updateParams.length - 2;
-  const idxObject = updateParams.length - 1;
-  const idxTenant = updateParams.length;
+  // Build the dynamic SET object.  Kysely emits the columns in insertion
+  // order — we keep `name, field_values, updated_at, updated_by,
+  // updated_by_name` first so the compiled parameter positions stay
+  // stable and readable.
+  const set: Record<string, unknown> = {
+    name,
+    field_values: JSON.stringify(mergedValues) as unknown as Json,
+    updated_at: now,
+    updated_by: ownerId,
+    updated_by_name: updatedByName ?? null,
+  };
+  if (matchedStageId) {
+    set.current_stage_id = matchedStageId;
+    set.stage_entered_at = now;
+  }
 
-  const result = await pool.query(
-    `UPDATE records
-     SET name = $1, field_values = $2, updated_at = $3, updated_by = $4, updated_by_name = $5${stageUpdateClause}
-     WHERE id = $${idxRecord} AND object_id = $${idxObject} AND tenant_id = $${idxTenant}
-     RETURNING *`,
-    updateParams,
+  const updated = await db
+    .updateTable('records')
+    .set(set)
+    .where('id', '=', recordId)
+    .where('object_id', '=', objectDef.id)
+    .where('tenant_id', '=', tenantId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  logger.info(
+    { recordId, objectId: objectDef.id, apiName, ownerId },
+    'Record updated',
   );
 
-  logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record updated');
-
-  const record = rowToRecord(result.rows[0]);
+  const record = rowToRecord(updated as unknown as Record<string, unknown>);
   return resolveFieldLabels(record, fieldDefs);
 }
 
@@ -984,16 +1132,22 @@ export async function deleteRecord(
 
   // record_relationships have ON DELETE CASCADE from records, so deleting
   // the record will automatically clean up relationships
-  const result = await pool.query(
-    'DELETE FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [recordId, objectDef.id, tenantId],
-  );
+  const results = await db
+    .deleteFrom('records')
+    .where('id', '=', recordId)
+    .where('object_id', '=', objectDef.id)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
-  if (result.rowCount === 0) {
+  const numDeleted = Number(results[0]?.numDeletedRows ?? 0n);
+  if (numDeleted === 0) {
     throwNotFoundError('Record not found');
   }
 
-  logger.info({ recordId, objectId: objectDef.id, apiName, ownerId }, 'Record deleted');
+  logger.info(
+    { recordId, objectId: objectDef.id, apiName, ownerId },
+    'Record deleted',
+  );
 }
 
 // ─── Internal Helpers ────────────────────────────────────────────────────────
