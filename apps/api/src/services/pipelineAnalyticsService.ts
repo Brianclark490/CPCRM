@@ -1,5 +1,6 @@
+import { sql } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,17 +92,18 @@ async function resolvePipeline(
   tenantId: string,
   pipelineId: string,
 ): Promise<{ id: string; name: string; objectId: string }> {
-  const result = await pool.query(
-    'SELECT id, name, object_id FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2',
-    [pipelineId, tenantId],
-  );
+  const row = await db
+    .selectFrom('pipeline_definitions')
+    .select(['id', 'name', 'object_id'])
+    .where('id', '=', pipelineId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (result.rows.length === 0) {
+  if (!row) {
     throwNotFoundError('Pipeline not found');
   }
 
-  const row = result.rows[0] as Record<string, unknown>;
-  return { id: row.id as string, name: row.name as string, objectId: row.object_id as string };
+  return { id: row.id, name: row.name, objectId: row.object_id };
 }
 
 /**
@@ -162,12 +164,22 @@ export async function getPipelineSummary(
   const pipeline = await resolvePipeline(tenantId, pipelineId);
 
   // Fetch all stages for this pipeline (include api_name for field_values.stage resolution)
-  const stagesResult = await pool.query(
-    'SELECT id, name, api_name, stage_type, default_probability, expected_days FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
-    [pipelineId, tenantId],
-  );
+  const stageRows = await db
+    .selectFrom('stage_definitions')
+    .select([
+      'id',
+      'name',
+      'api_name',
+      'stage_type',
+      'default_probability',
+      'expected_days',
+    ])
+    .where('pipeline_id', '=', pipelineId)
+    .where('tenant_id', '=', tenantId)
+    .orderBy('sort_order', 'asc')
+    .execute();
 
-  const stages = stagesResult.rows as Array<Record<string, unknown>>;
+  const stages = stageRows as unknown as Array<Record<string, unknown>>;
 
   // Build stage lookup maps for resolving field_values.stage (same logic as kanban board)
   const stageById = new Map<string, Record<string, unknown>>();
@@ -184,15 +196,22 @@ export async function getPipelineSummary(
   // assigned a pipeline_id (created before auto-assignment was working).
   // Scoped to tenant — not owner — so analytics match the kanban board
   // which shows all tenant records.
-  const recordsResult = await pool.query(
-    `SELECT r.id, r.field_values, r.current_stage_id, r.stage_entered_at
-     FROM records r
-     WHERE r.tenant_id = $1
-       AND (r.pipeline_id = $2 OR (r.object_id = $3 AND r.pipeline_id IS NULL))`,
-    [tenantId, pipelineId, pipeline.objectId],
-  );
+  const recordRows = await db
+    .selectFrom('records')
+    .select(['id', 'field_values', 'current_stage_id', 'stage_entered_at'])
+    .where('tenant_id', '=', tenantId)
+    .where((eb) =>
+      eb.or([
+        eb('pipeline_id', '=', pipelineId),
+        eb.and([
+          eb('object_id', '=', pipeline.objectId),
+          eb('pipeline_id', 'is', null),
+        ]),
+      ]),
+    )
+    .execute();
 
-  const records = recordsResult.rows as Array<Record<string, unknown>>;
+  const records = recordRows as unknown as Array<Record<string, unknown>>;
 
   // Calculate per-stage aggregates in application code (mirrors kanban board logic)
   const stageAggregates = new Map<
@@ -273,45 +292,37 @@ export async function getPipelineSummary(
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const wonThisMonthResult = await pool.query(
-    `SELECT
-       COUNT(DISTINCT sh.record_id)::int AS won_count,
-       COALESCE(SUM(
-         COALESCE(
-           (r.field_values->>'value')::numeric,
-           (r.field_values->>'amount')::numeric,
-           (r.field_values->>'deal_value')::numeric,
-           0
-         )
-       ), 0) AS won_value
-     FROM stage_history sh
-     JOIN stage_definitions sd ON sd.id = sh.to_stage_id
-     JOIN records r ON r.id = sh.record_id
-     WHERE sh.pipeline_id = $1
-       AND r.tenant_id = $2
-       AND sd.stage_type = 'won'
-       AND sh.changed_at >= $3`,
-    [pipelineId, tenantId, monthStart],
-  );
+  const wonRow = await db
+    .selectFrom('stage_history as sh')
+    .innerJoin('stage_definitions as sd', 'sd.id', 'sh.to_stage_id')
+    .innerJoin('records as r', 'r.id', 'sh.record_id')
+    .where('sh.pipeline_id', '=', pipelineId)
+    .where('r.tenant_id', '=', tenantId)
+    .where('sd.stage_type', '=', 'won')
+    .where('sh.changed_at', '>=', monthStart)
+    .select([
+      sql<number>`COUNT(DISTINCT sh.record_id)::int`.as('won_count'),
+      sql<string>`COALESCE(SUM(COALESCE((r.field_values->>'value')::numeric, (r.field_values->>'amount')::numeric, (r.field_values->>'deal_value')::numeric, 0)), 0)`.as(
+        'won_value',
+      ),
+    ])
+    .executeTakeFirstOrThrow();
 
-  const wonRow = wonThisMonthResult.rows[0] as Record<string, unknown>;
-  const wonThisMonth = (wonRow.won_count as number) ?? 0;
+  const wonThisMonth = Number(wonRow.won_count) || 0;
   const wonValueThisMonth = Number(wonRow.won_value) || 0;
 
-  const lostThisMonthResult = await pool.query(
-    `SELECT COUNT(DISTINCT sh.record_id)::int AS lost_count
-     FROM stage_history sh
-     JOIN stage_definitions sd ON sd.id = sh.to_stage_id
-     JOIN records r ON r.id = sh.record_id
-     WHERE sh.pipeline_id = $1
-       AND r.tenant_id = $2
-       AND sd.stage_type = 'lost'
-       AND sh.changed_at >= $3`,
-    [pipelineId, tenantId, monthStart],
-  );
+  const lostRow = await db
+    .selectFrom('stage_history as sh')
+    .innerJoin('stage_definitions as sd', 'sd.id', 'sh.to_stage_id')
+    .innerJoin('records as r', 'r.id', 'sh.record_id')
+    .where('sh.pipeline_id', '=', pipelineId)
+    .where('r.tenant_id', '=', tenantId)
+    .where('sd.stage_type', '=', 'lost')
+    .where('sh.changed_at', '>=', monthStart)
+    .select(sql<number>`COUNT(DISTINCT sh.record_id)::int`.as('lost_count'))
+    .executeTakeFirstOrThrow();
 
-  const lostRow = lostThisMonthResult.rows[0] as Record<string, unknown>;
-  const lostThisMonth = (lostRow.lost_count as number) ?? 0;
+  const lostThisMonth = Number(lostRow.lost_count) || 0;
 
   logger.info({ pipelineId, ownerId }, 'Pipeline summary generated');
 
@@ -353,62 +364,57 @@ export async function getPipelineVelocity(
   void pipeline; // used for validation only
 
   // Fetch stages
-  const stagesResult = await pool.query(
-    'SELECT id, name, stage_type, expected_days FROM stage_definitions WHERE pipeline_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
-    [pipelineId, tenantId],
-  );
-  const stages = stagesResult.rows as Array<Record<string, unknown>>;
+  const stageRows = await db
+    .selectFrom('stage_definitions')
+    .select(['id', 'name', 'stage_type', 'expected_days'])
+    .where('pipeline_id', '=', pipelineId)
+    .where('tenant_id', '=', tenantId)
+    .orderBy('sort_order', 'asc')
+    .execute();
+
+  const stages = stageRows as unknown as Array<Record<string, unknown>>;
 
   const days = periodToDays(period);
-
-  // Compute cutoff date as a parameter (null means no date filter)
-  const cutoffDate = days !== null
-    ? new Date(Date.now() - days * 86400 * 1000)
-    : null;
-
-  // Build parameterised date filter clause
-  const dateFilterClause = cutoffDate !== null ? 'AND sh.changed_at >= $3' : '';
-  const baseParams: unknown[] = cutoffDate !== null
-    ? [pipelineId, tenantId, cutoffDate]
-    : [pipelineId, tenantId];
+  const cutoffDate =
+    days !== null ? new Date(Date.now() - days * 86400 * 1000) : null;
 
   // Entered: count of records that transitioned INTO each stage
-  const enteredResult = await pool.query(
-    `SELECT
-       sh.to_stage_id AS stage_id,
-       COUNT(*)::int AS entered
-     FROM stage_history sh
-     JOIN records r ON r.id = sh.record_id
-     WHERE sh.pipeline_id = $1
-       AND r.tenant_id = $2
-       ${dateFilterClause}
-     GROUP BY sh.to_stage_id`,
-    baseParams,
-  );
+  const enteredRows = await db
+    .selectFrom('stage_history as sh')
+    .innerJoin('records as r', 'r.id', 'sh.record_id')
+    .where('sh.pipeline_id', '=', pipelineId)
+    .where('r.tenant_id', '=', tenantId)
+    .$if(cutoffDate !== null, (qb) => qb.where('sh.changed_at', '>=', cutoffDate!))
+    .select([
+      'sh.to_stage_id as stage_id',
+      sql<number>`COUNT(*)::int`.as('entered'),
+    ])
+    .groupBy('sh.to_stage_id')
+    .execute();
 
   const enteredByStage = new Map<string, number>();
-  for (const row of enteredResult.rows as Array<Record<string, unknown>>) {
+  for (const row of enteredRows as unknown as Array<Record<string, unknown>>) {
     enteredByStage.set(row.stage_id as string, row.entered as number);
   }
 
   // Exited: count of records that transitioned FROM each stage + avg days
-  const exitedResult = await pool.query(
-    `SELECT
-       sh.from_stage_id AS stage_id,
-       COUNT(*)::int AS exited,
-       COALESCE(AVG(sh.days_in_previous_stage), 0) AS avg_days
-     FROM stage_history sh
-     JOIN records r ON r.id = sh.record_id
-     WHERE sh.pipeline_id = $1
-       AND r.tenant_id = $2
-       AND sh.from_stage_id IS NOT NULL
-       ${dateFilterClause}
-     GROUP BY sh.from_stage_id`,
-    baseParams,
-  );
+  const exitedRows = await db
+    .selectFrom('stage_history as sh')
+    .innerJoin('records as r', 'r.id', 'sh.record_id')
+    .where('sh.pipeline_id', '=', pipelineId)
+    .where('r.tenant_id', '=', tenantId)
+    .where('sh.from_stage_id', 'is not', null)
+    .$if(cutoffDate !== null, (qb) => qb.where('sh.changed_at', '>=', cutoffDate!))
+    .select([
+      'sh.from_stage_id as stage_id',
+      sql<number>`COUNT(*)::int`.as('exited'),
+      sql<string>`COALESCE(AVG(sh.days_in_previous_stage), 0)`.as('avg_days'),
+    ])
+    .groupBy('sh.from_stage_id')
+    .execute();
 
   const exitedByStage = new Map<string, { exited: number; avgDays: number }>();
-  for (const row of exitedResult.rows as Array<Record<string, unknown>>) {
+  for (const row of exitedRows as unknown as Array<Record<string, unknown>>) {
     exitedByStage.set(row.stage_id as string, {
       exited: row.exited as number,
       avgDays: Math.round(Number(row.avg_days)),
@@ -457,31 +463,35 @@ export async function getPipelineVelocity(
   }
 
   // Avg days to close: average total duration from first stage entry to won stage
-  const wonDateFilterClause = cutoffDate !== null ? 'AND sh_won.changed_at >= $3' : '';
+  const subquery = db
+    .selectFrom('stage_history as sh_won')
+    .innerJoin('stage_definitions as sd_won', 'sd_won.id', 'sh_won.to_stage_id')
+    .innerJoin('records as r', 'r.id', 'sh_won.record_id')
+    .innerJoin('stage_history as sh_first', (join) =>
+      join
+        .onRef('sh_first.record_id', '=', 'sh_won.record_id')
+        .onRef('sh_first.pipeline_id', '=', 'sh_won.pipeline_id'),
+    )
+    .where('sh_won.pipeline_id', '=', pipelineId)
+    .where('r.tenant_id', '=', tenantId)
+    .where('sd_won.stage_type', '=', 'won')
+    .$if(cutoffDate !== null, (qb) =>
+      qb.where('sh_won.changed_at', '>=', cutoffDate!),
+    )
+    .select([
+      'sh_won.record_id',
+      sql<number>`EXTRACT(EPOCH FROM (sh_won.changed_at - MIN(sh_first.changed_at))) / 86400`.as(
+        'duration_days',
+      ),
+    ])
+    .groupBy(['sh_won.record_id', 'sh_won.changed_at']);
 
-  const avgDaysToCloseResult = await pool.query(
-    `SELECT COALESCE(AVG(duration_days), 0) AS avg_days
-     FROM (
-       SELECT
-         sh_won.record_id,
-         EXTRACT(EPOCH FROM (sh_won.changed_at - MIN(sh_first.changed_at))) / 86400 AS duration_days
-       FROM stage_history sh_won
-       JOIN stage_definitions sd_won ON sd_won.id = sh_won.to_stage_id
-       JOIN records r ON r.id = sh_won.record_id
-       JOIN stage_history sh_first ON sh_first.record_id = sh_won.record_id
-         AND sh_first.pipeline_id = sh_won.pipeline_id
-       WHERE sh_won.pipeline_id = $1
-         AND r.tenant_id = $2
-         AND sd_won.stage_type = 'won'
-         ${wonDateFilterClause}
-       GROUP BY sh_won.record_id, sh_won.changed_at
-     ) sub`,
-    baseParams,
-  );
+  const avgRow = await db
+    .selectFrom(subquery.as('sub'))
+    .select(sql<number>`COALESCE(AVG(duration_days), 0)`.as('avg_days'))
+    .executeTakeFirstOrThrow();
 
-  const avgDaysToClose = Math.round(
-    Number((avgDaysToCloseResult.rows[0] as Record<string, unknown>).avg_days) || 0,
-  );
+  const avgDaysToClose = Math.round(avgRow.avg_days || 0);
 
   logger.info({ pipelineId, ownerId, period }, 'Pipeline velocity generated');
 
@@ -508,34 +518,47 @@ export async function getOverdueRecords(
 ): Promise<OverdueRecord[]> {
   const pipeline = await resolvePipeline(tenantId, pipelineId);
 
-  const result = await pool.query(
-    `SELECT
-       r.id,
-       r.name,
-       COALESCE(
-         (r.field_values->>'value')::numeric,
-         (r.field_values->>'amount')::numeric,
-         (r.field_values->>'deal_value')::numeric
-       ) AS value,
-       EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 AS days_in_stage,
-       sd.expected_days,
-       sd.name AS stage_name,
-       r.owner_id
-     FROM records r
-     JOIN stage_definitions sd ON sd.id = r.current_stage_id
-     WHERE (r.pipeline_id = $1 OR (r.object_id = $3 AND r.pipeline_id IS NULL))
-       AND r.tenant_id = $2
-       AND r.current_stage_id IS NOT NULL
-       AND sd.expected_days IS NOT NULL
-       AND r.stage_entered_at IS NOT NULL
-       AND EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 > sd.expected_days
-     ORDER BY (EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 - sd.expected_days) DESC`,
-    [pipelineId, tenantId, pipeline.objectId],
-  );
+  const rows = await db
+    .selectFrom('records as r')
+    .innerJoin('stage_definitions as sd', 'sd.id', 'r.current_stage_id')
+    .where('r.tenant_id', '=', tenantId)
+    .where('r.current_stage_id', 'is not', null)
+    .where('sd.expected_days', 'is not', null)
+    .where('r.stage_entered_at', 'is not', null)
+    .where((eb) =>
+      eb.or([
+        eb('r.pipeline_id', '=', pipelineId),
+        eb.and([
+          eb('r.object_id', '=', pipeline.objectId),
+          eb('r.pipeline_id', 'is', null),
+        ]),
+      ]),
+    )
+    .where(
+      sql<boolean>`EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 > sd.expected_days`,
+    )
+    .select([
+      'r.id',
+      'r.name',
+      sql<string | null>`COALESCE((r.field_values->>'value')::numeric, (r.field_values->>'amount')::numeric, (r.field_values->>'deal_value')::numeric)`.as(
+        'value',
+      ),
+      sql<number>`EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400`.as(
+        'days_in_stage',
+      ),
+      'sd.expected_days',
+      'sd.name as stage_name',
+      'r.owner_id',
+    ])
+    .orderBy(
+      sql`(EXTRACT(EPOCH FROM (NOW() - r.stage_entered_at)) / 86400 - sd.expected_days)`,
+      'desc',
+    )
+    .execute();
 
-  logger.info({ pipelineId, ownerId, count: result.rows.length }, 'Overdue records fetched');
+  logger.info({ pipelineId, ownerId, count: rows.length }, 'Overdue records fetched');
 
-  return (result.rows as Array<Record<string, unknown>>).map((row) => ({
+  return (rows as unknown as Array<Record<string, unknown>>).map((row) => ({
     id: row.id as string,
     name: row.name as string,
     value: row.value !== null && row.value !== undefined ? Number(row.value) : null,

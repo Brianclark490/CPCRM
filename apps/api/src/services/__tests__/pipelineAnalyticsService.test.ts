@@ -7,6 +7,15 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// NOTE (Phase 3b Kysely migration, issue #445): the service is now on
+// Kysely. The mock below therefore matches Kysely-emitted SQL. Identifier
+// quoting is stripped by the normaliser, matching the pattern used by
+// stageMovementService.test.ts. The test bodies further down are kept
+// semantically unchanged — only the mock router is updated.
+//
+// A dedicated Kysely SQL regression suite lives next door:
+//   apps/api/src/services/__tests__/pipelineAnalyticsService.kysely-sql.test.ts
 
 const {
   fakePipelines,
@@ -14,16 +23,19 @@ const {
   fakeRecords,
   fakeStageHistory,
   mockQuery,
+  mockConnect,
 } = vi.hoisted(() => {
   const fakePipelines = new Map<string, Record<string, unknown>>();
   const fakeStages = new Map<string, Record<string, unknown>>();
   const fakeRecords = new Map<string, Record<string, unknown>>();
   const fakeStageHistory = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function runQuery(sql: string, params?: unknown[]) {
+    // Strip identifier quotes and normalise whitespace so pattern-matching
+    // is quote-agnostic (Kysely wraps identifiers in "…").
+    const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
-    // SELECT id, name, object_id FROM pipeline_definitions WHERE id = $1
+    // SELECT id, name, object_id FROM pipeline_definitions WHERE id = $1 AND tenant_id = $2
     if (s.startsWith('SELECT ID, NAME, OBJECT_ID FROM PIPELINE_DEFINITIONS WHERE ID')) {
       const id = params![0] as string;
       const row = fakePipelines.get(id);
@@ -48,8 +60,7 @@ const {
       return { rows };
     }
 
-    // SELECT id, name, expected_days FROM stage_definitions WHERE pipeline_id
-    // OR: SELECT id, name, stage_type, expected_days FROM stage_definitions WHERE pipeline_id
+    // SELECT id, name, stage_type, expected_days FROM stage_definitions WHERE pipeline_id (velocity variant)
     if (s.includes('EXPECTED_DAYS') && s.includes('STAGE_DEFINITIONS WHERE PIPELINE_ID') && !s.includes('DEFAULT_PROBABILITY')) {
       const pipelineId = params![0] as string;
       const rows = [...fakeStages.values()]
@@ -59,9 +70,16 @@ const {
       return { rows };
     }
 
-    // Fetch all records for summary (new query pattern — fetches individual records)
-    // Exclude overdue/joined queries by checking for absence of STAGE_DEFINITIONS join
-    if (s.includes('R.FIELD_VALUES') && s.includes('R.CURRENT_STAGE_ID') && s.includes('R.STAGE_ENTERED_AT') && s.includes('R.OBJECT_ID') && !s.includes('JOIN STAGE_DEFINITIONS')) {
+    // Records for summary: SELECT id, field_values, current_stage_id, stage_entered_at
+    //   FROM records WHERE tenant_id = $1 AND (pipeline_id = $2 OR (object_id = $3 AND pipeline_id IS NULL))
+    // Params order: [tenantId, pipelineId, objectId]
+    if (
+      s.includes('FROM RECORDS') &&
+      s.includes('FIELD_VALUES') &&
+      s.includes('CURRENT_STAGE_ID') &&
+      s.includes('STAGE_ENTERED_AT') &&
+      !s.includes('JOIN STAGE_DEFINITIONS')
+    ) {
       const pipelineId = params![1] as string;
       const objectId = params![2] as string;
       const matching = [...fakeRecords.values()].filter(
@@ -77,10 +95,11 @@ const {
       return { rows };
     }
 
-    // Won this month (COUNT DISTINCT + SUM)
+    // Won this month (COUNT DISTINCT + SUM) — emits alias COUNT(DISTINCT sh.record_id)::int AS won_count
+    // Params order: [pipelineId, tenantId, 'won', monthStart]
     if (s.includes('WON_COUNT') && s.includes('WON_VALUE')) {
       const pipelineId = params![0] as string;
-      const monthStart = params![2] as Date;
+      const monthStart = params![3] as Date;
       const wonStageIds = [...fakeStages.values()]
         .filter((st) => st.stage_type === 'won')
         .map((st) => st.id as string);
@@ -105,10 +124,10 @@ const {
       return { rows: [{ won_count: wonCount, won_value: wonValue }] };
     }
 
-    // Lost this month
+    // Lost this month — Params order: [pipelineId, tenantId, 'lost', monthStart]
     if (s.includes('LOST_COUNT')) {
       const pipelineId = params![0] as string;
-      const monthStart = params![2] as Date;
+      const monthStart = params![3] as Date;
       const lostStageIds = [...fakeStages.values()]
         .filter((st) => st.stage_type === 'lost')
         .map((st) => st.id as string);
@@ -130,7 +149,7 @@ const {
       return { rows: [{ lost_count: lostCount }] };
     }
 
-    // Entered count (to_stage_id)
+    // Entered count (to_stage_id) — Kysely emits: sh.to_stage_id as stage_id
     if (s.includes('TO_STAGE_ID AS STAGE_ID') && s.includes('ENTERED') && s.includes('GROUP BY')) {
       const pipelineId = params![0] as string;
       const history = [...fakeStageHistory.values()].filter((h) => {
@@ -173,14 +192,14 @@ const {
       return { rows };
     }
 
-    // Avg days to close
+    // Avg days to close — returned by the wrapping SELECT over the subquery alias
     if (s.includes('AVG_DAYS') && s.includes('DURATION_DAYS')) {
       return { rows: [{ avg_days: 0 }] };
     }
 
-    // Overdue records (for getOverdueRecords)
-    if (s.includes('DAYS_IN_STAGE') && s.includes('STAGE_NAME') && s.includes('RECORDS R')) {
-      const pipelineId = params![0] as string;
+    // Overdue records — Params order: [tenantId, pipelineId, objectId]
+    if (s.includes('DAYS_IN_STAGE') && s.includes('STAGE_NAME') && s.includes('FROM RECORDS')) {
+      const pipelineId = params![1] as string;
       const objectId = params![2] as string;
       const results: Array<Record<string, unknown>> = [];
       for (const r of fakeRecords.values()) {
@@ -217,13 +236,26 @@ const {
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const rawSql = typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return runQuery(rawSql, params);
   });
 
-  return { fakePipelines, fakeStages, fakeRecords, fakeStageHistory, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql = typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return runQuery(rawSql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return { fakePipelines, fakeStages, fakeRecords, fakeStageHistory, mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 const {
