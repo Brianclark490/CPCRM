@@ -488,10 +488,10 @@ export async function getPipelineVelocity(
 
   const avgRow = await db
     .selectFrom(subquery.as('sub'))
-    .select(sql<string>`COALESCE(AVG(duration_days), 0)`.as('avg_days'))
+    .select(sql<number>`COALESCE(AVG(duration_days), 0)`.as('avg_days'))
     .executeTakeFirstOrThrow();
 
-  const avgDaysToClose = Math.round(Number(avgRow.avg_days) || 0);
+  const avgDaysToClose = Math.round(avgRow.avg_days || 0);
 
   logger.info({ pipelineId, ownerId, period }, 'Pipeline velocity generated');
 
