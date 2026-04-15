@@ -302,6 +302,217 @@ describe('StageFieldRenderer', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders the canonical error message as a string on 400 (regression: React error #31)', async () => {
+    setupFetch({
+      moveResponse: {
+        ok: false,
+        status: 400,
+        body: {
+          // Canonical shape produced by `normalizeErrorResponses` middleware:
+          // `error` is an object with `code` / `message`, not a string.
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Target stage does not belong to the same pipeline',
+            requestId: 'req-abc',
+          },
+        },
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <StageFieldRenderer
+        objectApiName="opportunity"
+        objectId="obj-opp"
+        recordId="rec-1"
+        currentStageId="stage-1"
+        value="Prospecting"
+        editing={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), 'stage-2');
+
+    // The message string (not the {code, message, requestId} object) must
+    // be rendered into the DOM. If the component tried to render the error
+    // object as a child, React would throw error #31 before reaching this
+    // assertion.
+    await waitFor(() => {
+      expect(
+        screen.getByText('Target stage does not belong to the same pipeline'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('extracts gate failures from canonical error.details.failures (422)', async () => {
+    setupFetch({
+      moveResponse: {
+        ok: false,
+        status: 422,
+        body: {
+          // Canonical shape after `normalizeErrorResponses` moves top-level
+          // extras like `failures` into `error.details`.
+          error: {
+            code: 'GATE_VALIDATION_FAILED',
+            message: 'Cannot move to Qualification — missing required fields',
+            details: {
+              failures: [
+                {
+                  field: 'value',
+                  label: 'Value',
+                  gate: 'required',
+                  message: 'Deal value is required to enter Qualification',
+                  fieldType: 'currency',
+                  currentValue: null,
+                  options: {},
+                },
+              ],
+            },
+            requestId: 'req-xyz',
+          },
+        },
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <StageFieldRenderer
+        objectApiName="opportunity"
+        objectId="obj-opp"
+        recordId="rec-1"
+        currentStageId="stage-1"
+        value="Prospecting"
+        editing={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), 'stage-2');
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Complete these fields to move to Qualification/),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText('Deal value is required to enter Qualification'),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps gate modal open and surfaces error when fill-and-move PUT fails (regression)', async () => {
+    // This test guards against a regression where a non-gate failure in
+    // `handleFillAndMove` (e.g. the record PUT failing) would close the gate
+    // modal and discard the values the user had already entered, forcing them
+    // to re-trigger the stage move and re-type everything.
+    let putCalls = 0;
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === 'string' && url === '/api/v1/admin/pipelines') {
+        return Promise.resolve({ ok: true, json: async () => MOCK_PIPELINES } as Response);
+      }
+      if (typeof url === 'string' && url.match(/\/api\/v1\/admin\/pipelines\//)) {
+        return Promise.resolve({ ok: true, json: async () => MOCK_PIPELINE_DETAIL } as Response);
+      }
+      // Initial move-stage attempt — blocked by gate validation
+      if (typeof url === 'string' && url.includes('/move-stage') && init?.method === 'POST') {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          json: async () => ({
+            error: {
+              code: 'GATE_VALIDATION_FAILED',
+              message: 'Missing required fields',
+              details: {
+                failures: [
+                  {
+                    field: 'value',
+                    label: 'Value',
+                    gate: 'required',
+                    message: 'Deal value is required to enter Qualification',
+                    fieldType: 'currency',
+                    currentValue: null,
+                    options: {},
+                  },
+                ],
+              },
+              requestId: 'req-1',
+            },
+          }),
+        } as Response);
+      }
+      // The fill-and-move PUT — fails with a non-gate error (e.g. validation)
+      if (typeof url === 'string' && url.match(/\/records\/rec-1$/) && init?.method === 'PUT') {
+        putCalls += 1;
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => ({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Value must be a positive number',
+              requestId: 'req-2',
+            },
+          }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+
+    render(
+      <StageFieldRenderer
+        objectApiName="opportunity"
+        objectId="obj-opp"
+        recordId="rec-1"
+        currentStageId="stage-1"
+        value="Prospecting"
+        editing={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    // Trigger the move and wait for the gate modal to appear
+    await user.selectOptions(screen.getByRole('combobox'), 'stage-2');
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Complete these fields to move to Qualification/),
+      ).toBeInTheDocument();
+    });
+
+    // User fills in the required field and clicks "Save and move"
+    const valueInput = screen.getByLabelText('Value');
+    await user.type(valueInput, '1000');
+    await user.click(screen.getByRole('button', { name: /Save and move/i }));
+
+    // The PUT should have been attempted
+    await waitFor(() => {
+      expect(putCalls).toBe(1);
+    });
+
+    // Regression assertion: the modal must STILL be open so the user can
+    // correct and retry without losing their entered value…
+    expect(
+      screen.getByText(/Complete these fields to move to Qualification/),
+    ).toBeInTheDocument();
+    // …and the server error message must be visible inside the modal.
+    expect(
+      screen.getByText('Value must be a positive number'),
+    ).toBeInTheDocument();
+  });
+
   // ── Disabled state ─────────────────────────────────────────
 
   it('disables the dropdown when disabled prop is true', async () => {

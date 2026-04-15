@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient, unwrapList } from '../lib/apiClient.js';
+import { ApiError, useApiClient, unwrapList } from '../lib/apiClient.js';
 import { GateFailureModal } from './GateFailureModal.js';
 import type { GateFailure } from './GateFailureModal.js';
 import styles from './StageFieldRenderer.module.css';
@@ -24,12 +24,6 @@ interface PipelineDefinition {
   stages: StageDefinition[];
 }
 
-interface GateFailureResponse {
-  error: string;
-  code: string;
-  failures: GateFailure[];
-}
-
 interface MoveStageResponse {
   id: string;
   pipelineId: string;
@@ -40,8 +34,15 @@ interface MoveStageResponse {
 export interface StageFieldRendererProps {
   /** Object api_name (e.g. 'opportunity') */
   objectApiName: string;
-  /** Object definition ID — used to match the pipeline */
+  /** Object definition ID — used to match the pipeline when no pipelineId is provided */
   objectId: string;
+  /**
+   * Pipeline ID the record actually lives in. When provided, stages are
+   * loaded from this pipeline directly so the dropdown never offers stages
+   * from a sibling pipeline. Falls back to the first pipeline matching
+   * `objectId` when omitted (e.g. on create forms).
+   */
+  pipelineId?: string | null;
   /** Record ID — null on create forms */
   recordId: string | null;
   /** Current stage ID from the record — null on create or if not yet assigned */
@@ -59,6 +60,27 @@ export interface StageFieldRendererProps {
     currentStageId: string;
     fieldValues: Record<string, unknown>;
   }) => void;
+}
+
+/**
+ * Extract gate validation failures from an {@link ApiError} body. Handles
+ * both the canonical shape (`body.error.details.failures`, produced by the
+ * `normalizeErrorResponses` middleware) and the legacy top-level `failures`
+ * shape that some tests still mock.
+ */
+function extractGateFailures(body: unknown): GateFailure[] {
+  if (!body || typeof body !== 'object') return [];
+  const record = body as Record<string, unknown>;
+  const err = record.error;
+  if (err && typeof err === 'object') {
+    const details = (err as Record<string, unknown>).details;
+    if (details && typeof details === 'object') {
+      const failures = (details as Record<string, unknown>).failures;
+      if (Array.isArray(failures)) return failures as GateFailure[];
+    }
+  }
+  if (Array.isArray(record.failures)) return record.failures as GateFailure[];
+  return [];
 }
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
@@ -95,6 +117,7 @@ function colourToBg(colour: string): string {
 export function StageFieldRenderer({
   objectApiName,
   objectId,
+  pipelineId,
   recordId,
   currentStageId,
   value,
@@ -118,6 +141,7 @@ export function StageFieldRenderer({
     failures: GateFailure[];
   } | null>(null);
   const [gateLoading, setGateLoading] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
 
   // ── Fetch pipeline stages ──────────────────────────────────
 
@@ -126,32 +150,32 @@ export function StageFieldRenderer({
 
     let cancelled = false;
 
+    const resolvePipelineId = async (): Promise<string | null> => {
+      // Prefer the caller-provided pipelineId so we never guess and end up
+      // loading a sibling pipeline for the same object.
+      if (pipelineId) return pipelineId;
+
+      // Fall back to the first pipeline matching this object (create forms).
+      const response = await api.request('/api/v1/admin/pipelines');
+      if (!response.ok) return null;
+      const pipelines = unwrapList<
+        PipelineDefinition & { objectId?: string; object_id?: string }
+      >(await response.json());
+      const match = pipelines.find(
+        (p) => (p.objectId ?? p.object_id) === objectId,
+      );
+      return match?.id ?? null;
+    };
+
     const loadStages = async () => {
       setLoadingStages(true);
 
       try {
-        const response = await api.request('/api/v1/admin/pipelines');
+        const resolvedId = await resolvePipelineId();
+        if (cancelled || !resolvedId) return;
 
-        if (cancelled || !response.ok) {
-          if (!cancelled) setLoadingStages(false);
-          return;
-        }
-
-        const pipelines = unwrapList<
-          PipelineDefinition & { objectId?: string; object_id?: string }
-        >(await response.json());
-        const match = pipelines.find(
-          (p) => (p.objectId ?? p.object_id) === objectId,
-        );
-
-        if (!match || cancelled) {
-          if (!cancelled) setLoadingStages(false);
-          return;
-        }
-
-        // Fetch pipeline detail for stages
         const detailResponse = await api.request(
-          `/api/v1/admin/pipelines/${match.id}`,
+          `/api/v1/admin/pipelines/${resolvedId}`,
         );
 
         if (cancelled) return;
@@ -174,7 +198,7 @@ export function StageFieldRenderer({
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, api, objectId]);
+  }, [sessionToken, api, objectId, pipelineId]);
 
   // ── Move stage (for existing records) ──────────────────────
 
@@ -186,38 +210,28 @@ export function StageFieldRenderer({
       setMoveError(null);
 
       try {
-        const response = await api.request(
+        const result = await api.post<MoveStageResponse>(
           `/api/v1/objects/${objectApiName}/records/${recordId}/move-stage`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ target_stage_id: targetStageId }),
-          },
+          { body: { target_stage_id: targetStageId } },
         );
-
-        if (response.ok) {
-          const result = (await response.json()) as MoveStageResponse;
-          onStageChanged?.({
-            currentStageId: result.currentStageId,
-            fieldValues: result.fieldValues,
-          });
-        } else if (response.status === 422) {
-          // Gate validation failed — show gate failure modal
-          const data = (await response.json()) as GateFailureResponse;
+        onStageChanged?.({
+          currentStageId: result.currentStageId,
+          fieldValues: result.fieldValues,
+        });
+      } catch (err) {
+        if (err instanceof ApiError && err.code === 'GATE_VALIDATION_FAILED') {
           const targetStage = stages.find((s) => s.id === targetStageId);
           setGateModal({
             targetStageId,
             stageName: targetStage?.name ?? 'Unknown',
-            failures: data.failures,
+            failures: extractGateFailures(err.body),
           });
+          setGateError(null);
+        } else if (err instanceof ApiError) {
+          setMoveError(err.message);
         } else {
-          const data = (await response.json()) as { error?: string };
-          setMoveError(data.error ?? 'Failed to move stage');
+          setMoveError('Failed to connect to the server');
         }
-      } catch {
-        setMoveError('Failed to connect to the server');
       } finally {
         setMoving(false);
       }
@@ -232,55 +246,44 @@ export function StageFieldRenderer({
       if (!sessionToken || !recordId || !gateModal) return;
 
       setGateLoading(true);
+      // Clear any previous server-side error so the user sees a fresh state
+      // while this attempt is in-flight.
+      setGateError(null);
 
       try {
         // First update the record with the filled field values
-        const updateResponse = await api.request(
+        await api.put(
           `/api/v1/objects/${objectApiName}/records/${recordId}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ fieldValues }),
-          },
+          { body: { fieldValues } },
         );
-
-        if (!updateResponse.ok) {
-          return;
-        }
 
         // Now retry the stage move
-        const moveResponse = await api.request(
+        const result = await api.post<MoveStageResponse>(
           `/api/v1/objects/${objectApiName}/records/${recordId}/move-stage`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ target_stage_id: gateModal.targetStageId }),
-          },
+          { body: { target_stage_id: gateModal.targetStageId } },
         );
 
-        if (moveResponse.ok) {
-          const result = (await moveResponse.json()) as MoveStageResponse;
-          setGateModal(null);
-          onStageChanged?.({
-            currentStageId: result.currentStageId,
-            fieldValues: result.fieldValues,
-          });
-        } else if (moveResponse.status === 422) {
+        setGateModal(null);
+        setGateError(null);
+        onStageChanged?.({
+          currentStageId: result.currentStageId,
+          fieldValues: result.fieldValues,
+        });
+      } catch (err) {
+        if (err instanceof ApiError && err.code === 'GATE_VALIDATION_FAILED') {
           // Still failing — update the modal with new failures
-          const data = (await moveResponse.json()) as GateFailureResponse;
-          setGateModal((prev) =>
-            prev ? { ...prev, failures: data.failures } : null,
-          );
+          const failures = extractGateFailures(err.body);
+          setGateModal((prev) => (prev ? { ...prev, failures } : null));
+          setGateError(null);
+        } else if (err instanceof ApiError) {
+          // Non-gate failure (validation, network, auth, etc.) — keep the
+          // modal open so the user can correct their input without losing
+          // the values they have already entered, and surface the server
+          // message inside the modal.
+          setGateError(err.message);
         } else {
-          setGateModal(null);
-          setMoveError('Failed to move stage after updating fields');
+          setGateError('Failed to connect to the server');
         }
-      } catch {
-        setMoveError('Failed to connect to the server');
       } finally {
         setGateLoading(false);
       }
@@ -387,8 +390,12 @@ export function StageFieldRenderer({
           stageName={gateModal.stageName}
           failures={gateModal.failures}
           onFillAndMove={(fv) => void handleFillAndMove(fv)}
-          onCancel={() => setGateModal(null)}
+          onCancel={() => {
+            setGateModal(null);
+            setGateError(null);
+          }}
           loading={gateLoading}
+          error={gateError}
         />
       )}
     </>
