@@ -1,5 +1,7 @@
-import { randomUUID } from 'crypto';
+import type { Selectable, Updateable } from 'kysely';
 import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { Tenants } from '../db/kysely.types.js';
 import { getDescopeManagementClient } from '../lib/descopeManagementClient.js';
 import { logger } from '../lib/logger.js';
 import { seedWithClient } from './seedDefaultObjects.js';
@@ -34,16 +36,17 @@ export interface ProvisionTenantResult {
   };
 }
 
-export interface TenantRow {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
+/**
+ * Row shape returned to API callers.
+ *
+ * Typed against `Selectable<Tenants>` (with `settings` widened to an
+ * object for the public contract) so a column rename or nullability
+ * change on the generated schema becomes a compile-time error here.
+ */
+export type TenantRow = Omit<Selectable<Tenants>, 'settings' | 'plan'> & {
   plan: string;
   settings: Record<string, unknown>;
-  created_at: Date;
-  updated_at: Date;
-}
+};
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -70,6 +73,42 @@ export function validateSlug(slug: unknown): string | null {
   return null;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Normalises a Kysely/pg `tenants` row into the public TenantRow contract.
+ *
+ * `settings` comes back as either a JSON string (raw pg transactional path)
+ * or a pre-parsed object (pg's default JSONB parser via Kysely). We coerce
+ * both shapes into `Record<string, unknown>` so the API surface is stable.
+ */
+function coerceTenantRow(row: Selectable<Tenants>): TenantRow {
+  const rawSettings = row.settings;
+  let settings: Record<string, unknown>;
+  if (rawSettings == null) {
+    settings = {};
+  } else if (typeof rawSettings === 'string') {
+    try {
+      settings = JSON.parse(rawSettings) as Record<string, unknown>;
+    } catch {
+      settings = {};
+    }
+  } else {
+    settings = rawSettings as Record<string, unknown>;
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    status: row.status,
+    plan: row.plan ?? 'free',
+    settings,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 /**
@@ -88,6 +127,16 @@ export function validateSlug(slug: unknown): string | null {
  *   attempts to delete the Descope tenant before re-throwing.
  * - The DB insert + seed run inside a single transaction, so a seed failure
  *   automatically rolls back the tenant row.
+ *
+ * Transaction implementation note:
+ * - `seedWithClient` takes a raw pg `PoolClient` (it originates from the
+ *   1109-line `seedDefaultObjects.ts` which is out of scope for this
+ *   migration), so the BEGIN/COMMIT envelope is still managed via the raw
+ *   client — Kysely doesn't own that transaction. The tenant INSERT inside
+ *   the transaction is still built via Kysely and `.compile()`d so the
+ *   column list and value shapes stay under Kysely's compile-time safety
+ *   net; the compiled SQL + params are then handed to the raw client
+ *   (which holds the transaction) to keep INSERT and seed atomic.
  *
  * @throws {Error} with `code: 'VALIDATION_ERROR'` for invalid input.
  * @throws {Error} with `code: 'DUPLICATE_SLUG'` if the slug is already taken.
@@ -119,11 +168,12 @@ export async function provisionTenant(
   }
 
   // Check slug uniqueness before touching external systems
-  const existing = await pool.query(
-    'SELECT id FROM tenants WHERE slug = $1',
-    [slug],
-  );
-  if ((existing.rowCount ?? 0) > 0) {
+  const existing = await db
+    .selectFrom('tenants')
+    .select('id')
+    .where('slug', '=', slug)
+    .executeTakeFirst();
+  if (existing) {
     throw Object.assign(new Error(`Slug "${slug}" is already in use`), { code: 'DUPLICATE_SLUG' });
   }
 
@@ -151,13 +201,31 @@ export async function provisionTenant(
       dateFormat: 'DD/MM/YYYY',
       timezone: 'Europe/London',
     };
+
+    // Build the INSERT with Kysely so the column list, value shapes and
+    // RETURNING projection are all type-checked against the generated
+    // Tenants schema, then execute the compiled query on the raw client
+    // (which owns the BEGIN/COMMIT envelope shared with seedWithClient).
+    const insertTenant = db
+      .insertInto('tenants')
+      .values({
+        id: tenantId,
+        name: name.trim(),
+        slug,
+        status: 'active',
+        plan,
+        settings: JSON.stringify(defaultSettings),
+        created_at: now,
+        updated_at: now,
+      })
+      .returningAll()
+      .compile();
+
     const tenantResult = await client.query(
-      `INSERT INTO tenants (id, name, slug, status, plan, settings, created_at, updated_at)
-       VALUES ($1, $2, $3, 'active', $4, $5::jsonb, $6, $7)
-       RETURNING *`,
-      [tenantId, name.trim(), slug, plan, JSON.stringify(defaultSettings), now, now],
+      insertTenant.sql,
+      [...insertTenant.parameters],
     );
-    const tenantRow = tenantResult.rows[0] as TenantRow;
+    const tenantRow = coerceTenantRow(tenantResult.rows[0] as Selectable<Tenants>);
 
     logger.info({ tenantId }, 'Tenant record inserted, seeding default CRM data');
     seedResult = await seedWithClient(client, tenantId, tenantId);
@@ -227,33 +295,48 @@ export async function provisionTenant(
 // ─── List / get / update / delete helpers ─────────────────────────────────────
 
 /**
- * Lists all tenants with optional pagination.
- * Includes an approximate user count for each tenant.
+ * Lists all tenants with pagination.
+ *
+ * Includes a per-tenant membership count emitted as a correlated scalar
+ * subquery (rather than the previous LEFT JOIN with GROUP BY) — mirrors
+ * the pattern used by accountService for consistency and keeps the count
+ * scoped directly by `tenant_id = t.id` without needing a derived table.
  */
 export async function listTenants(
   limit: number,
   offset: number,
 ): Promise<{ tenants: (TenantRow & { userCount: number })[]; total: number }> {
-  const countResult = await pool.query('SELECT COUNT(*) AS total FROM tenants');
-  const total = parseInt((countResult.rows[0] as { total: string }).total, 10);
+  // Lightweight COUNT(*) — avoids dedupe'ing the wide joined projection.
+  const countRow = await db
+    .selectFrom('tenants')
+    .select((eb) => eb.fn.countAll<string>().as('total'))
+    .executeTakeFirstOrThrow();
+  const total = parseInt(countRow.total, 10);
 
-  const result = await pool.query(
-    `SELECT t.*, COALESCE(m.user_count, 0) AS user_count
-     FROM tenants t
-     LEFT JOIN (
-       SELECT tenant_id, COUNT(*) AS user_count
-       FROM tenant_memberships
-       GROUP BY tenant_id
-     ) m ON m.tenant_id = t.id
-     ORDER BY t.created_at DESC
-     LIMIT $1 OFFSET $2`,
-    [limit, offset],
-  );
+  const rows = await db
+    .selectFrom('tenants as t')
+    .selectAll('t')
+    .select((eb) =>
+      eb
+        .selectFrom('tenant_memberships as m')
+        .select(eb.fn.countAll<string>().as('count'))
+        .whereRef('m.tenant_id', '=', 't.id')
+        .as('user_count'),
+    )
+    .orderBy('t.created_at', 'desc')
+    .limit(limit)
+    .offset(offset)
+    .execute();
 
   return {
-    tenants: (result.rows as Array<TenantRow & { user_count: string }>).map((row) => ({
-      ...row,
-      userCount: parseInt(row.user_count, 10),
+    tenants: rows.map((row) => ({
+      ...coerceTenantRow(row),
+      userCount:
+        row.user_count == null
+          ? 0
+          : typeof row.user_count === 'number'
+            ? row.user_count
+            : parseInt(row.user_count, 10) || 0,
     })),
     total,
   };
@@ -262,20 +345,26 @@ export async function listTenants(
 /**
  * Returns a single tenant by ID with an approximate user count.
  */
-export async function getTenantById(id: string): Promise<(TenantRow & { userCount: number }) | null> {
-  const result = await pool.query('SELECT * FROM tenants WHERE id = $1', [id]);
-  if (result.rows.length === 0) return null;
+export async function getTenantById(
+  id: string,
+): Promise<(TenantRow & { userCount: number }) | null> {
+  const tenant = await db
+    .selectFrom('tenants')
+    .selectAll()
+    .where('id', '=', id)
+    .executeTakeFirst();
+  if (!tenant) return null;
 
-  const tenant = result.rows[0] as TenantRow;
+  const countRow = await db
+    .selectFrom('tenant_memberships')
+    .select((eb) => eb.fn.countAll<string>().as('count'))
+    .where('tenant_id', '=', id)
+    .executeTakeFirstOrThrow();
 
-  // Count memberships for this tenant
-  const countResult = await pool.query(
-    'SELECT COUNT(*) AS count FROM tenant_memberships WHERE tenant_id = $1',
-    [id],
-  );
-  const userCount = parseInt((countResult.rows[0] as { count: string }).count, 10);
-
-  return { ...tenant, userCount };
+  return {
+    ...coerceTenantRow(tenant),
+    userCount: parseInt(countRow.count, 10),
+  };
 }
 
 export interface UpdateTenantInput {
@@ -286,6 +375,10 @@ export interface UpdateTenantInput {
 
 /**
  * Updates mutable fields on a tenant record.
+ *
+ * The patch object is typed against `Updateable<Tenants>` so a column
+ * rename or nullability change on the generated schema surfaces as a
+ * compile-time error here, not a silent runtime SQL mismatch.
  */
 export async function updateTenant(
   id: string,
@@ -301,38 +394,31 @@ export async function updateTenant(
     );
   }
 
-  const setClauses: string[] = [];
-  const values: unknown[] = [];
-  let idx = 1;
+  const patch: Updateable<Tenants> = {};
 
   if (name !== undefined) {
-    if (!name.trim()) throw Object.assign(new Error('Tenant name cannot be empty'), { code: 'VALIDATION_ERROR' });
-    setClauses.push(`name = $${idx++}`);
-    values.push(name.trim());
+    if (!name.trim()) {
+      throw Object.assign(new Error('Tenant name cannot be empty'), { code: 'VALIDATION_ERROR' });
+    }
+    patch.name = name.trim();
   }
-  if (status !== undefined) {
-    setClauses.push(`status = $${idx++}`);
-    values.push(status);
-  }
-  if (plan !== undefined) {
-    setClauses.push(`plan = $${idx++}`);
-    values.push(plan);
-  }
+  if (status !== undefined) patch.status = status;
+  if (plan !== undefined) patch.plan = plan;
 
-  if (setClauses.length === 0) {
+  if (Object.keys(patch).length === 0) {
     throw Object.assign(new Error('No fields to update'), { code: 'VALIDATION_ERROR' });
   }
 
-  setClauses.push(`updated_at = $${idx++}`);
-  values.push(new Date());
-  values.push(id);
+  patch.updated_at = new Date();
 
-  const result = await pool.query(
-    `UPDATE tenants SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *`,
-    values,
-  );
+  const row = await db
+    .updateTable('tenants')
+    .set(patch)
+    .where('id', '=', id)
+    .returningAll()
+    .executeTakeFirst();
 
-  return result.rows.length > 0 ? (result.rows[0] as TenantRow) : null;
+  return row ? coerceTenantRow(row) : null;
 }
 
 /**
@@ -340,12 +426,14 @@ export async function updateTenant(
  * Removes the tenant from Descope if cascade is true.
  */
 export async function deleteTenant(id: string, cascade = false): Promise<boolean> {
-  const result = await pool.query(
-    `UPDATE tenants SET status = 'suspended', updated_at = $1 WHERE id = $2 RETURNING id`,
-    [new Date(), id],
-  );
+  const row = await db
+    .updateTable('tenants')
+    .set({ status: 'suspended', updated_at: new Date() })
+    .where('id', '=', id)
+    .returning('id')
+    .executeTakeFirst();
 
-  if (result.rows.length === 0) return false;
+  if (!row) return false;
 
   if (cascade) {
     const descopeClient = getDescopeManagementClient();
