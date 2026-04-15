@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { sql, type Updateable } from 'kysely';
+import { sql, type Selectable, type Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/kysely.js';
 import type { FieldDefinitions } from '../db/kysely.types.js';
@@ -89,21 +89,30 @@ function throwConflictError(message: string): never {
 
 // ─── Row → domain model ─────────────────────────────────────────────────────
 
-function rowToFieldDefinition(row: Record<string, unknown>): FieldDefinition {
+/**
+ * Row shape returned by `selectAll()` / `returningAll()` against
+ * `field_definitions`. Typing the mapper against `Selectable<FieldDefinitions>`
+ * means schema drift (a renamed column, a changed nullability) is a
+ * compile-time error at the call sites, rather than an `unknown` cast
+ * leaking an incorrect runtime shape into the domain model.
+ */
+type FieldDefinitionRow = Selectable<FieldDefinitions>;
+
+function rowToFieldDefinition(row: FieldDefinitionRow): FieldDefinition {
   return {
-    id: row.id as string,
-    objectId: row.object_id as string,
-    apiName: row.api_name as string,
-    label: row.label as string,
-    fieldType: row.field_type as string,
-    description: (row.description as string | null) ?? undefined,
-    required: row.required as boolean,
-    defaultValue: (row.default_value as string | null) ?? undefined,
-    options: (row.options as Record<string, unknown>) ?? {},
-    sortOrder: row.sort_order as number,
-    isSystem: row.is_system as boolean,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    id: row.id,
+    objectId: row.object_id,
+    apiName: row.api_name,
+    label: row.label,
+    fieldType: row.field_type,
+    description: row.description ?? undefined,
+    required: row.required,
+    defaultValue: row.default_value ?? undefined,
+    options: (row.options as Record<string, unknown> | null) ?? {},
+    sortOrder: row.sort_order,
+    isSystem: row.is_system,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -387,7 +396,7 @@ export async function createFieldDefinition(
 
   logger.info({ fieldId, objectId, apiName: params.apiName }, 'Field definition created');
 
-  return rowToFieldDefinition(inserted as unknown as Record<string, unknown>);
+  return rowToFieldDefinition(inserted);
 }
 
 /**
@@ -409,7 +418,7 @@ export async function listFieldDefinitions(
     .orderBy('sort_order', 'asc')
     .execute();
 
-  return rows.map((row) => rowToFieldDefinition(row as unknown as Record<string, unknown>));
+  return rows.map((row) => rowToFieldDefinition(row));
 }
 
 /**
@@ -441,11 +450,8 @@ export async function updateFieldDefinition(
     throwNotFoundError('Field definition not found');
   }
 
-  const row = existingRow as unknown as Record<string, unknown>;
-  const isSystem = row.is_system as boolean;
-
   // System fields: cannot change field_type
-  if (isSystem && params.fieldType !== undefined) {
+  if (existingRow.is_system && params.fieldType !== undefined) {
     throwValidationError('Cannot change field_type on system fields');
   }
 
@@ -461,7 +467,7 @@ export async function updateFieldDefinition(
   }
 
   // Determine the effective field type for options validation
-  const effectiveFieldType = params.fieldType?.trim() ?? (row.field_type as string);
+  const effectiveFieldType = params.fieldType?.trim() ?? existingRow.field_type;
 
   if (params.options !== undefined) {
     const optionsError = validateFieldOptions(effectiveFieldType, params.options);
@@ -480,7 +486,7 @@ export async function updateFieldDefinition(
   if (params.options !== undefined) updates.options = JSON.stringify(params.options);
 
   if (Object.keys(updates).length === 0) {
-    return rowToFieldDefinition(row);
+    return rowToFieldDefinition(existingRow);
   }
 
   updates.updated_at = new Date();
@@ -496,11 +502,11 @@ export async function updateFieldDefinition(
 
   logger.info({ fieldId, objectId }, 'Field definition updated');
 
-  const updated = rowToFieldDefinition(updatedRow as unknown as Record<string, unknown>);
+  const updated = rowToFieldDefinition(updatedRow);
 
   // Warn if field_type changed and records exist
   let warning: string | undefined;
-  if (params.fieldType !== undefined && params.fieldType.trim() !== (row.field_type as string)) {
+  if (params.fieldType !== undefined && params.fieldType.trim() !== existingRow.field_type) {
     const recordCountRow = await db
       .selectFrom('records')
       .select(sql<string>`COUNT(*)`.as('count'))
@@ -509,7 +515,7 @@ export async function updateFieldDefinition(
       .executeTakeFirstOrThrow();
     const count = parseInt(recordCountRow.count, 10);
     if (count > 0) {
-      warning = `field_type changed from "${row.field_type}" to "${params.fieldType.trim()}"; ${count} existing record(s) may contain data that does not match the new type`;
+      warning = `field_type changed from "${existingRow.field_type}" to "${params.fieldType.trim()}"; ${count} existing record(s) may contain data that does not match the new type`;
     }
   }
 
@@ -547,7 +553,7 @@ export async function deleteFieldDefinition(
     throwNotFoundError('Field definition not found');
   }
 
-  if ((existingRow as unknown as Record<string, unknown>).is_system === true) {
+  if (existingRow.is_system === true) {
     throwDeleteBlockedError('Cannot delete system fields');
   }
 
@@ -627,5 +633,5 @@ export async function reorderFieldDefinitions(
     .orderBy('sort_order', 'asc')
     .execute();
 
-  return rows.map((row) => rowToFieldDefinition(row as unknown as Record<string, unknown>));
+  return rows.map((row) => rowToFieldDefinition(row));
 }
