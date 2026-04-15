@@ -3,21 +3,67 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const TENANT_ID = 'test-tenant-001';
 
 vi.mock('../../lib/logger.js', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// Kysely drives the service now, so the mock must be quote-agnostic
+// (Kysely emits quoted identifiers) and must route through
+// `pool.connect()` in addition to `pool.query()` — PostgresDialect
+// acquires a client per query via connect().
 
-const { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery } = vi.hoisted(() => {
+const {
+  fakeRecordRelationships,
+  fakeRecords,
+  fakeRelationshipDefs,
+  mockQuery,
+  mockConnect,
+} = vi.hoisted(() => {
   const fakeRecordRelationships = new Map<string, Record<string, unknown>>();
   const fakeRecords = new Map<string, Record<string, unknown>>();
   const fakeRelationshipDefs = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function normalise(sql: string): string {
+    return sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
+  }
+
+  async function handleQuery(rawSql: string, params: unknown[] | undefined) {
+    const s = normalise(rawSql);
+
+    // Transaction control + RLS preamble — no-ops for the mock.
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+    if (s.startsWith('SELECT SET_CONFIG')) {
+      return { rows: [] };
+    }
+
+    // getRelatedRecords count + data queries over the UNION subquery
+    // aliased `related`. These match before the generic
+    // record_relationships matchers below so that the nested
+    // `FROM record_relationships as rr` inside the subquery doesn't
+    // get mis-routed to the duplicate / parent / unlink handlers.
+    if (s.includes('COUNT(*)') && s.includes('AS RELATED')) {
+      return { rows: [{ total: '0' }] };
+    }
+    if (
+      s.includes('FROM RELATED') ||
+      (s.includes('AS RELATED') && s.includes('LIMIT'))
+    ) {
+      return { rows: [] };
+    }
 
     // SELECT id, object_id FROM records WHERE id = $1 AND tenant_id = $2
-    if (s.startsWith('SELECT ID, OBJECT_ID FROM RECORDS')) {
+    if (
+      s.startsWith('SELECT ID, OBJECT_ID FROM RECORDS') ||
+      (s.startsWith('SELECT') &&
+        s.includes('FROM RECORDS') &&
+        s.includes('OBJECT_ID') &&
+        s.includes('WHERE ID =') &&
+        !s.includes('AS R') &&
+        !s.includes('RECORD_RELATIONSHIPS'))
+    ) {
       const id = params![0] as string;
       const record = fakeRecords.get(id);
       if (record) {
@@ -27,7 +73,10 @@ const { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery } 
     }
 
     // SELECT id FROM records WHERE id = $1 AND tenant_id = $2
-    if (s.startsWith('SELECT ID FROM RECORDS')) {
+    if (
+      s.startsWith('SELECT ID FROM RECORDS') &&
+      !s.includes('OBJECT_ID')
+    ) {
       const id = params![0] as string;
       const record = fakeRecords.get(id);
       if (record) {
@@ -36,29 +85,47 @@ const { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery } 
       return { rows: [] };
     }
 
-    // SELECT * FROM relationship_definitions WHERE id = $1
-    if (s.startsWith('SELECT * FROM RELATIONSHIP_DEFINITIONS')) {
+    // SELECT * FROM relationship_definitions WHERE id = $1 AND tenant_id = $2
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM RELATIONSHIP_DEFINITIONS') &&
+      s.includes('WHERE ID =')
+    ) {
       const id = params![0] as string;
       const rel = fakeRelationshipDefs.get(id);
       if (rel) return { rows: [rel] };
       return { rows: [] };
     }
 
-    // SELECT id FROM record_relationships WHERE relationship_id AND source_record_id AND target_record_id (duplicate check)
-    if (s.includes('FROM RECORD_RELATIONSHIPS') && s.includes('SOURCE_RECORD_ID = $2') && s.includes('TARGET_RECORD_ID = $3')) {
+    // Duplicate check — relationship_id AND source_record_id AND target_record_id AND tenant_id
+    if (
+      s.includes('FROM RECORD_RELATIONSHIPS') &&
+      s.includes('RELATIONSHIP_ID =') &&
+      s.includes('SOURCE_RECORD_ID =') &&
+      s.includes('TARGET_RECORD_ID =')
+    ) {
       const relId = params![0] as string;
       const sourceId = params![1] as string;
       const targetId = params![2] as string;
       for (const rr of fakeRecordRelationships.values()) {
-        if (rr.relationship_id === relId && rr.source_record_id === sourceId && rr.target_record_id === targetId) {
+        if (
+          rr.relationship_id === relId &&
+          rr.source_record_id === sourceId &&
+          rr.target_record_id === targetId
+        ) {
           return { rows: [rr] };
         }
       }
       return { rows: [] };
     }
 
-    // SELECT id FROM record_relationships WHERE relationship_id AND source_record_id (parent check)
-    if (s.includes('FROM RECORD_RELATIONSHIPS') && s.includes('RELATIONSHIP_ID = $1') && s.includes('SOURCE_RECORD_ID = $2') && !s.includes('TARGET_RECORD_ID')) {
+    // Parent check — relationship_id AND source_record_id (no target)
+    if (
+      s.includes('FROM RECORD_RELATIONSHIPS') &&
+      s.includes('RELATIONSHIP_ID =') &&
+      s.includes('SOURCE_RECORD_ID =') &&
+      !s.includes('TARGET_RECORD_ID')
+    ) {
       const relId = params![0] as string;
       const sourceId = params![1] as string;
       const matches = [];
@@ -71,35 +138,64 @@ const { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery } 
     }
 
     // INSERT INTO record_relationships
+    // Columns: id, tenant_id, relationship_id, source_record_id, target_record_id, created_at
     if (s.startsWith('INSERT INTO RECORD_RELATIONSHIPS')) {
-      const [id, _tenant_id, relationship_id, source_record_id, target_record_id, created_at] = params as unknown[];
+      const [
+        id,
+        _tenantId,
+        relationship_id,
+        source_record_id,
+        target_record_id,
+        created_at,
+      ] = params as unknown[];
       const row: Record<string, unknown> = {
-        id, relationship_id, source_record_id, target_record_id, created_at,
+        id,
+        tenant_id: _tenantId,
+        relationship_id,
+        source_record_id,
+        target_record_id,
+        created_at,
       };
       fakeRecordRelationships.set(id as string, row);
       return { rows: [row] };
     }
 
-    // SELECT id FROM record_relationships WHERE id AND (source OR target)
-    if (s.includes('FROM RECORD_RELATIONSHIPS') && s.includes('ID = $1') && s.includes('SOURCE_RECORD_ID = $2 OR TARGET_RECORD_ID = $2')) {
+    // unlinkRecords lookup: SELECT id FROM record_relationships
+    // WHERE id = $1 AND tenant_id = $2 AND (source_record_id = $3 OR target_record_id = $3)
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM RECORD_RELATIONSHIPS') &&
+      s.includes('ID =') &&
+      s.includes('SOURCE_RECORD_ID =') &&
+      s.includes('TARGET_RECORD_ID =')
+    ) {
       const id = params![0] as string;
-      const recordId = params![1] as string;
+      // params: [id, tenantId, sourceRecordId, sourceRecordId] — Kysely
+      // binds the OR branch twice.
+      const recordId = params![2] as string;
       const rr = fakeRecordRelationships.get(id);
-      if (rr && (rr.source_record_id === recordId || rr.target_record_id === recordId)) {
+      if (
+        rr &&
+        (rr.source_record_id === recordId || rr.target_record_id === recordId)
+      ) {
         return { rows: [rr] };
       }
       return { rows: [] };
     }
 
-    // DELETE FROM record_relationships WHERE id = $1
+    // DELETE FROM record_relationships WHERE id = $1 AND tenant_id = $2
     if (s.startsWith('DELETE FROM RECORD_RELATIONSHIPS')) {
       const id = params![0] as string;
       fakeRecordRelationships.delete(id);
       return { rowCount: 1 };
     }
 
-    // SELECT id FROM object_definitions WHERE api_name = $1
-    if (s.includes('FROM OBJECT_DEFINITIONS WHERE API_NAME')) {
+    // SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM OBJECT_DEFINITIONS') &&
+      s.includes('API_NAME =')
+    ) {
       const apiName = params![0] as string;
       if (apiName === 'account') {
         return { rows: [{ id: 'obj-account-id' }] };
@@ -110,24 +206,35 @@ const { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery } 
       return { rows: [] };
     }
 
-    // COUNT for related records
-    if (s.includes('COUNT(*)') && s.includes('RELATED')) {
-      return { rows: [{ total: '0' }] };
-    }
-
-    // SELECT related records
-    if (s.includes('RELATED') && s.includes('LIMIT')) {
-      return { rows: [] };
-    }
-
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const rawSql =
+      typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return handleQuery(rawSql, params);
   });
 
-  return { fakeRecordRelationships, fakeRecords, fakeRelationshipDefs, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql =
+        typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return handleQuery(rawSql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return {
+    fakeRecordRelationships,
+    fakeRecords,
+    fakeRelationshipDefs,
+    mockQuery,
+    mockConnect,
+  };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 const { linkRecords, unlinkRecords, getRelatedRecords } = await import(
@@ -142,6 +249,7 @@ describe('linkRecords', () => {
     fakeRecords.clear();
     fakeRelationshipDefs.clear();
     mockQuery.mockClear();
+    mockConnect.mockClear();
   });
 
   function seedData() {
@@ -303,6 +411,7 @@ describe('unlinkRecords', () => {
     fakeRecordRelationships.clear();
     fakeRecords.clear();
     mockQuery.mockClear();
+    mockConnect.mockClear();
   });
 
   it('removes a record link', async () => {
@@ -351,6 +460,7 @@ describe('getRelatedRecords', () => {
   beforeEach(() => {
     fakeRecords.clear();
     mockQuery.mockClear();
+    mockConnect.mockClear();
   });
 
   it('throws NOT_FOUND when record does not exist', async () => {
