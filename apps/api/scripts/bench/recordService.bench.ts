@@ -98,19 +98,18 @@ async function setupFixture(): Promise<Fixture> {
 
   // Field definitions: one text (full_name), one email, one textarea (notes).
   // All three are JSONB-searchable per the ILIKE predicate in listRecords.
-  const fieldRows: Array<[string, string, string, string, string, number]> = [
-    ['full_name', 'Full Name', 'text', 'text', ownerId, 1],
-    ['email', 'Email', 'email', 'email', ownerId, 2],
-    ['notes', 'Notes', 'textarea', 'textarea', ownerId, 3],
+  const fieldRows: Array<[string, string, string, number]> = [
+    ['full_name', 'Full Name', 'text', 1],
+    ['email', 'Email', 'email', 2],
+    ['notes', 'Notes', 'textarea', 3],
   ];
-  for (const [apiNm, label, fieldType, _ignored, ownerIdCol, sortOrder] of fieldRows) {
-    void _ignored;
+  for (const [apiNm, label, fieldType, sortOrder] of fieldRows) {
     await pool.query(
       `INSERT INTO field_definitions
-         (id, tenant_id, object_id, api_name, label, field_type, required, options, sort_order, owner_id)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, '{}'::jsonb, $6, $7)
+         (id, tenant_id, object_id, api_name, label, field_type, required, options, sort_order)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, '{}'::jsonb, $6)
        ON CONFLICT DO NOTHING`,
-      [tenantId, objectId, apiNm, label, fieldType, sortOrder, ownerIdCol],
+      [tenantId, objectId, apiNm, label, fieldType, sortOrder],
     );
   }
 
