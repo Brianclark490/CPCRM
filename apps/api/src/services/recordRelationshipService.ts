@@ -332,6 +332,47 @@ export async function getRelatedRecords(
   // Both halves explicitly scope by tenant_id on both the join table
   // and the records table as defence-in-depth (ADR-006). The raw-pg
   // implementation historically omitted these filters.
+  //
+  // The count and data paths use *separate* subquery projections so the
+  // COUNT(*) path doesn't have to UNION-deduplicate wide rows that
+  // include JSONB `field_values`. The count subquery projects only
+  // `r.id`; the data subquery projects the five columns the response
+  // body needs.
+
+  // Count the distinct related records across both directions — id-only
+  // projection keeps the UNION dedup lightweight on tenants with many
+  // relationships or large `field_values`.
+  const outgoingIds = db
+    .selectFrom('record_relationships as rr')
+    .innerJoin('records as r', (join) =>
+      join
+        .onRef('r.id', '=', 'rr.target_record_id')
+        .on('r.tenant_id', '=', tenantId),
+    )
+    .select('r.id')
+    .where('rr.source_record_id', '=', recordId)
+    .where('rr.tenant_id', '=', tenantId)
+    .where('r.object_id', '=', targetObjectId);
+
+  const incomingIds = db
+    .selectFrom('record_relationships as rr')
+    .innerJoin('records as r', (join) =>
+      join
+        .onRef('r.id', '=', 'rr.source_record_id')
+        .on('r.tenant_id', '=', tenantId),
+    )
+    .select('r.id')
+    .where('rr.target_record_id', '=', recordId)
+    .where('rr.tenant_id', '=', tenantId)
+    .where('r.object_id', '=', targetObjectId);
+
+  const countRow = await db
+    .selectFrom(() => outgoingIds.union(incomingIds).as('related'))
+    .select((eb) => eb.fn.countAll<string>().as('total'))
+    .executeTakeFirstOrThrow();
+  const total = parseInt(countRow.total, 10);
+
+  // Page through the distinct related records with the full projection.
   const outgoing = db
     .selectFrom('record_relationships as rr')
     .innerJoin('records as r', (join) =>
@@ -356,14 +397,6 @@ export async function getRelatedRecords(
     .where('rr.tenant_id', '=', tenantId)
     .where('r.object_id', '=', targetObjectId);
 
-  // Count the distinct related records across both directions.
-  const countRow = await db
-    .selectFrom(() => outgoing.union(incoming).as('related'))
-    .select((eb) => eb.fn.countAll<string>().as('total'))
-    .executeTakeFirstOrThrow();
-  const total = parseInt(countRow.total, 10);
-
-  // Page through the distinct related records.
   const dataRows = await db
     .selectFrom(() => outgoing.union(incoming).as('related'))
     .selectAll()

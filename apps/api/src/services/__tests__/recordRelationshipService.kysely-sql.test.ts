@@ -357,7 +357,7 @@ describe('recordRelationshipService Kysely SQL — tenant_id defence-in-depth', 
         s.includes('UNION')
       );
     });
-    // Both the count query and the data query wrap the same UNION.
+    // Both the count query and the data query wrap their own UNION.
     expect(unionQueries.length).toBeGreaterThanOrEqual(2);
 
     for (const q of unionQueries) {
@@ -374,6 +374,41 @@ describe('recordRelationshipService Kysely SQL — tenant_id defence-in-depth', 
       const tenantBindCount = q.params.filter((p) => p === TENANT_ID).length;
       expect(tenantBindCount).toBeGreaterThanOrEqual(4);
     }
+  });
+
+  it('getRelatedRecords count query projects only r.id to keep UNION dedup lightweight', async () => {
+    // Regression test for Codex review
+    // https://github.com/Brianclark490/CPCRM/pull/460#discussion_r3089285469
+    //
+    // The count path used to reuse the full-projection UNION, forcing
+    // Postgres to dedupe wide rows including JSONB `field_values`
+    // before counting. We now run an id-only UNION for the count,
+    // leaving the wide projection only for the data/paged query.
+    await getRelatedRecords(
+      TENANT_ID,
+      SOURCE_RECORD_ID,
+      'account',
+      'user-123',
+      20,
+      0,
+    );
+
+    const countQueries = dataQueries().filter((q) => {
+      const s = normalise(q.sql);
+      return s.includes('COUNT(*)') && s.includes('AS RELATED');
+    });
+    expect(countQueries.length).toBe(1);
+
+    const countSql = normalise(countQueries[0]!.sql);
+    // Count subquery projects only r.id — no wide columns.
+    expect(countSql).toContain('UNION');
+    expect(countSql).not.toContain('R.NAME');
+    expect(countSql).not.toContain('R.FIELD_VALUES');
+    expect(countSql).not.toContain('R.CREATED_AT');
+    expect(countSql).not.toContain('R.UPDATED_AT');
+    // Two `r.id` projections — one per UNION branch.
+    const idProjections = countSql.match(/SELECT R\.ID/g) ?? [];
+    expect(idProjections.length).toBeGreaterThanOrEqual(2);
   });
 });
 
