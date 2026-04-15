@@ -40,6 +40,7 @@ function ViewField({
           <StageFieldRenderer
             objectApiName={objectApiName}
             objectId={record.objectId}
+            pipelineId={record.pipelineId ?? null}
             recordId={record.id}
             currentStageId={record.currentStageId ?? null}
             value={value}
@@ -97,6 +98,7 @@ function EditField({
         <StageFieldRenderer
           objectApiName={objectApiName}
           objectId={record.objectId}
+          pipelineId={record.pipelineId ?? null}
           recordId={record.id}
           currentStageId={record.currentStageId ?? null}
           value={value}

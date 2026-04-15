@@ -302,6 +302,112 @@ describe('StageFieldRenderer', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders the canonical error message as a string on 400 (regression: React error #31)', async () => {
+    setupFetch({
+      moveResponse: {
+        ok: false,
+        status: 400,
+        body: {
+          // Canonical shape produced by `normalizeErrorResponses` middleware:
+          // `error` is an object with `code` / `message`, not a string.
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Target stage does not belong to the same pipeline',
+            requestId: 'req-abc',
+          },
+        },
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <StageFieldRenderer
+        objectApiName="opportunity"
+        objectId="obj-opp"
+        recordId="rec-1"
+        currentStageId="stage-1"
+        value="Prospecting"
+        editing={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), 'stage-2');
+
+    // The message string (not the {code, message, requestId} object) must
+    // be rendered into the DOM. If the component tried to render the error
+    // object as a child, React would throw error #31 before reaching this
+    // assertion.
+    await waitFor(() => {
+      expect(
+        screen.getByText('Target stage does not belong to the same pipeline'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('extracts gate failures from canonical error.details.failures (422)', async () => {
+    setupFetch({
+      moveResponse: {
+        ok: false,
+        status: 422,
+        body: {
+          // Canonical shape after `normalizeErrorResponses` moves top-level
+          // extras like `failures` into `error.details`.
+          error: {
+            code: 'GATE_VALIDATION_FAILED',
+            message: 'Cannot move to Qualification — missing required fields',
+            details: {
+              failures: [
+                {
+                  field: 'value',
+                  label: 'Value',
+                  gate: 'required',
+                  message: 'Deal value is required to enter Qualification',
+                  fieldType: 'currency',
+                  currentValue: null,
+                  options: {},
+                },
+              ],
+            },
+            requestId: 'req-xyz',
+          },
+        },
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <StageFieldRenderer
+        objectApiName="opportunity"
+        objectId="obj-opp"
+        recordId="rec-1"
+        currentStageId="stage-1"
+        value="Prospecting"
+        editing={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), 'stage-2');
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Complete these fields to move to Qualification/),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText('Deal value is required to enter Qualification'),
+    ).toBeInTheDocument();
+  });
+
   // ── Disabled state ─────────────────────────────────────────
 
   it('disables the dropdown when disabled prop is true', async () => {
