@@ -141,6 +141,7 @@ export function StageFieldRenderer({
     failures: GateFailure[];
   } | null>(null);
   const [gateLoading, setGateLoading] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
 
   // ── Fetch pipeline stages ──────────────────────────────────
 
@@ -225,6 +226,7 @@ export function StageFieldRenderer({
             stageName: targetStage?.name ?? 'Unknown',
             failures: extractGateFailures(err.body),
           });
+          setGateError(null);
         } else if (err instanceof ApiError) {
           setMoveError(err.message);
         } else {
@@ -244,6 +246,9 @@ export function StageFieldRenderer({
       if (!sessionToken || !recordId || !gateModal) return;
 
       setGateLoading(true);
+      // Clear any previous server-side error so the user sees a fresh state
+      // while this attempt is in-flight.
+      setGateError(null);
 
       try {
         // First update the record with the filled field values
@@ -259,6 +264,7 @@ export function StageFieldRenderer({
         );
 
         setGateModal(null);
+        setGateError(null);
         onStageChanged?.({
           currentStageId: result.currentStageId,
           fieldValues: result.fieldValues,
@@ -268,11 +274,15 @@ export function StageFieldRenderer({
           // Still failing — update the modal with new failures
           const failures = extractGateFailures(err.body);
           setGateModal((prev) => (prev ? { ...prev, failures } : null));
+          setGateError(null);
         } else if (err instanceof ApiError) {
-          setGateModal(null);
-          setMoveError(err.message);
+          // Non-gate failure (validation, network, auth, etc.) — keep the
+          // modal open so the user can correct their input without losing
+          // the values they have already entered, and surface the server
+          // message inside the modal.
+          setGateError(err.message);
         } else {
-          setMoveError('Failed to connect to the server');
+          setGateError('Failed to connect to the server');
         }
       } finally {
         setGateLoading(false);
@@ -380,8 +390,12 @@ export function StageFieldRenderer({
           stageName={gateModal.stageName}
           failures={gateModal.failures}
           onFillAndMove={(fv) => void handleFillAndMove(fv)}
-          onCancel={() => setGateModal(null)}
+          onCancel={() => {
+            setGateModal(null);
+            setGateError(null);
+          }}
           loading={gateLoading}
+          error={gateError}
         />
       )}
     </>

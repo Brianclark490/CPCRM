@@ -25,6 +25,12 @@ interface GateFailureModalProps {
   onFillAndMove: (fieldValues: Record<string, unknown>) => void;
   onCancel: () => void;
   loading?: boolean;
+  /**
+   * Surface a server-side error inside the modal (e.g. when the fill-and-move
+   * update fails for a non-gate reason). Shown above the field list so users
+   * can correct and retry without losing the values they have already entered.
+   */
+  error?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -45,6 +51,7 @@ export function GateFailureModal({
   onFillAndMove,
   onCancel,
   loading = false,
+  error = null,
 }: GateFailureModalProps) {
   const [values, setValues] = useState<Record<string, unknown>>(() => buildInitialValues(failures));
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
@@ -144,6 +151,12 @@ export function GateFailureModal({
         <h2 className={styles.title}>
           Complete these fields to move to {stageName}
         </h2>
+
+        {error && (
+          <p className={styles.serverError} role="alert">
+            {error}
+          </p>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className={styles.fieldList}>
