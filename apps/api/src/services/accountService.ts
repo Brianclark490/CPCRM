@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { Selectable } from 'kysely';
+import type { Selectable, Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/kysely.js';
 import type { Accounts, Opportunities } from '../db/kysely.types.js';
@@ -455,7 +455,16 @@ export async function getAccountWithOpportunities(
     stage: row.stage as string,
     value: row.value != null ? Number(row.value) : undefined,
     currency: row.currency ?? undefined,
-    expectedCloseDate: row.expected_close_date ?? undefined,
+    // Postgres DATE columns are returned as strings by `pg` without a
+    // custom type parser (OID 1082 has no default in node-postgres), so
+    // we normalise to `Date` here to preserve the documented
+    // `expectedCloseDate: Date` contract on AccountWithOpportunities.
+    // TIMESTAMP columns (created_at/updated_at) are handled by pg's
+    // default parser and arrive as Date objects already.
+    expectedCloseDate:
+      row.expected_close_date != null
+        ? new Date(row.expected_close_date as unknown as string)
+        : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -512,11 +521,20 @@ export async function updateAccount(
 
   // Build the partial update — only include fields the caller provided,
   // preserving the original "UPDATE only-what-you-set" semantics.
-  const patch: Record<string, unknown> = {
+  //
+  // Typed against `Updateable<Accounts>` so Kysely still enforces
+  // column names and value shapes at compile time (a column rename
+  // on the generated schema becomes an error here, not a silent
+  // runtime SQL mismatch).
+  //
+  // `name` is non-nullable so we guard on `!== undefined` — the
+  // `'key' in params` pattern is reserved for nullable columns where
+  // `null` (explicit clear) vs missing (leave alone) is meaningful.
+  const patch: Updateable<Accounts> = {
     updated_at: new Date(),
   };
 
-  if ('name' in params) patch.name = params.name!.trim();
+  if (params.name !== undefined) patch.name = params.name.trim();
   if ('industry' in params) patch.industry = params.industry?.trim() ?? null;
   if ('website' in params) patch.website = params.website?.trim() ?? null;
   if ('phone' in params) patch.phone = params.phone?.trim() ?? null;
