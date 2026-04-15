@@ -157,13 +157,6 @@ const { capturedQueries, mockQuery, mockConnect, seedObject, seedRecord, resetCa
         return { rows: [row] };
       }
 
-      // SELECT * FROM records WHERE id = $1 (refetch after insert)
-      if (s === 'SELECT * FROM RECORDS WHERE ID = $1') {
-        const id = params![0] as string;
-        const row = fakeRecords.get(id);
-        return row ? { rows: [row] } : { rows: [] };
-      }
-
       // UPDATE records
       if (s.startsWith('UPDATE RECORDS SET')) {
         // The last 3 params are (id, object_id, tenant_id) by query order.
@@ -374,19 +367,12 @@ describe('recordService Kysely SQL — tenant_id defence-in-depth', () => {
     expect(queries.length).toBeGreaterThan(0);
     for (const q of queries) {
       const s = normalise(q.sql);
-      // The post-insert refetch selects by id only (inside the tx) which is
-      // safe because it runs on the same checked-out connection and the
-      // id was just returned from the INSERT — the INSERT itself carries
-      // tenant_id.  Every other data query must carry tenant_id.
-      if (s === 'SELECT * FROM RECORDS WHERE ID = $1') continue;
+      // No exemptions — every data query, including the post-insert
+      // refetch, must carry tenant_id as defence-in-depth (ADR-006).
       expect(
-        s.includes('TENANT_ID') || s.includes('$'),
+        s.includes('TENANT_ID'),
         `Query missing TENANT_ID:\n  ${q.sql}`,
       ).toBe(true);
-      if (s.startsWith('INSERT INTO RECORDS')) {
-        // tenant_id must be present as a column in the INSERT.
-        expect(s).toContain('TENANT_ID');
-      }
     }
   });
 
@@ -620,9 +606,13 @@ describe('recordService Kysely SQL — createRecord transaction wiring', () => {
     }
 
     // The INSERT and the refetch must both be inside the transaction.
+    // The refetch now scopes by id + object_id + tenant_id.
     const insertIdx = sqls.findIndex((s) => s.startsWith('INSERT INTO RECORDS'));
     const refetchIdx = sqls.findIndex(
-      (s) => s === 'SELECT * FROM RECORDS WHERE ID = $1',
+      (s) =>
+        s.startsWith('SELECT * FROM RECORDS WHERE ID') &&
+        s.includes('OBJECT_ID') &&
+        s.includes('TENANT_ID'),
     );
     expect(insertIdx).toBeGreaterThan(beginIdx);
     expect(insertIdx).toBeLessThan(commitIdx);

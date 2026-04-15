@@ -669,11 +669,16 @@ export async function createRecord(
     // Auto-assign default pipeline if one exists for this object
     await assignDefaultPipeline(client, recordId, objectDef.id, ownerId, tenantId);
 
-    // Re-fetch the record to pick up pipeline columns
+    // Re-fetch the record to pick up pipeline columns. We scope the WHERE
+    // clause by id + object_id + tenant_id as defence-in-depth — even
+    // though this runs inside the same transaction as the INSERT, we
+    // don't want the refetch to rely on RLS alone (ADR-006).
     const refetchCompiled = db
       .selectFrom('records')
       .selectAll()
       .where('id', '=', recordId)
+      .where('object_id', '=', objectDef.id)
+      .where('tenant_id', '=', tenantId)
       .compile();
 
     const finalResult = await client.query(
@@ -833,7 +838,12 @@ export async function listRecords(params: {
       .where(sql<boolean>`rr.source_record_id = any(${recordIds})`)
       .where('rd.source_object_id', '=', objectDef.id)
       .where('tgt_obj.api_name', '=', 'account')
+      // Defence-in-depth: scope every tenant-aware table, not just rd.
+      // Allows use of the (tenant_id, …) indexes on record_relationships
+      // and records.
       .where('rd.tenant_id', '=', tenantId)
+      .where('rr.tenant_id', '=', tenantId)
+      .where('acct.tenant_id', '=', tenantId)
       .execute();
 
     const linkedMap = new Map<string, LinkedParentRecord>();
@@ -951,6 +961,9 @@ export async function getRecord(
         .select(['r.id', 'r.name', 'r.field_values'])
         .where('rr.relationship_id', '=', relId)
         .where('rr.source_record_id', '=', recordId)
+        // Defence-in-depth: scope both tenant-aware tables.
+        .where('rr.tenant_id', '=', tenantId)
+        .where('r.tenant_id', '=', tenantId)
         .execute();
       relatedRecords = rrRows.map((r) => {
         const rec = r as unknown as Record<string, unknown>;
@@ -968,6 +981,9 @@ export async function getRecord(
         .select(['r.id', 'r.name', 'r.field_values'])
         .where('rr.relationship_id', '=', relId)
         .where('rr.target_record_id', '=', recordId)
+        // Defence-in-depth: scope both tenant-aware tables.
+        .where('rr.tenant_id', '=', tenantId)
+        .where('r.tenant_id', '=', tenantId)
         .execute();
       relatedRecords = rrRows.map((r) => {
         const rec = r as unknown as Record<string, unknown>;

@@ -135,14 +135,6 @@ const { fakeRecords, mockQuery, mockConnect } = vi.hoisted(() => {
       return { rows: [row] };
     }
 
-    // SELECT * FROM records WHERE id = $1 (re-fetch after insert)
-    if (s.startsWith('SELECT * FROM RECORDS WHERE ID = $1') && !s.includes('OBJECT_ID')) {
-      const id = params![0] as string;
-      const record = fakeRecords.get(id);
-      if (record) return { rows: [record] };
-      return { rows: [] };
-    }
-
     // SELECT COUNT (list records count)
     if (s.startsWith('SELECT COUNT(*)')) {
       return { rows: [{ total: String(fakeRecords.size) }] };
