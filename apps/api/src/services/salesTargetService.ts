@@ -1,4 +1,6 @@
-import { pool } from '../db/client.js';
+import { sql, type Selectable } from 'kysely';
+import { db } from '../db/kysely.js';
+import type { SalesTargets } from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -142,31 +144,34 @@ export async function upsertTarget(
 ): Promise<SalesTarget> {
   validateTargetParams(params);
 
-  const result = await pool.query(
-    `INSERT INTO sales_targets (tenant_id, target_type, target_entity_id, period_type, period_start, period_end, target_value, currency, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     ON CONFLICT (tenant_id, target_type, target_entity_id, period_start)
-     DO UPDATE SET
-       period_end = EXCLUDED.period_end,
-       target_value = EXCLUDED.target_value,
-       currency = EXCLUDED.currency,
-       period_type = EXCLUDED.period_type,
-       updated_at = NOW()
-     RETURNING *`,
-    [
-      tenantId,
-      params.targetType,
-      params.targetEntityId ?? null,
-      params.periodType,
-      params.periodStart,
-      params.periodEnd,
-      params.targetValue,
-      params.currency ?? 'GBP',
-      params.createdBy ?? null,
-    ],
-  );
+  const row = await db
+    .insertInto('sales_targets')
+    .values({
+      tenant_id: tenantId,
+      target_type: params.targetType,
+      target_entity_id: params.targetEntityId ?? null,
+      period_type: params.periodType,
+      period_start: params.periodStart,
+      period_end: params.periodEnd,
+      target_value: params.targetValue,
+      currency: params.currency ?? 'GBP',
+      created_by: params.createdBy ?? null,
+    })
+    .onConflict((oc) =>
+      oc
+        .columns(['tenant_id', 'target_type', 'target_entity_id', 'period_start'])
+        .doUpdateSet({
+          period_end: params.periodEnd,
+          target_value: params.targetValue,
+          currency: params.currency ?? 'GBP',
+          period_type: params.periodType,
+          updated_at: new Date(),
+        }),
+    )
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
-  return mapRow(result.rows[0]);
+  return mapRow(row);
 }
 
 /**
@@ -177,35 +182,39 @@ export async function listTargets(
   periodStart?: string,
   periodEnd?: string,
 ): Promise<SalesTarget[]> {
-  let query = 'SELECT * FROM sales_targets WHERE tenant_id = $1';
-  const queryParams: unknown[] = [tenantId];
+  let query = db
+    .selectFrom('sales_targets')
+    .selectAll()
+    .where('tenant_id', '=', tenantId);
 
   if (periodStart) {
-    queryParams.push(periodStart);
-    query += ` AND period_start >= $${queryParams.length}`;
+    query = query.where('period_start', '>=', new Date(periodStart));
   }
 
   if (periodEnd) {
-    queryParams.push(periodEnd);
-    query += ` AND period_end <= $${queryParams.length}`;
+    query = query.where('period_end', '<=', new Date(periodEnd));
   }
 
-  query += ' ORDER BY period_start DESC, target_type ASC';
+  const rows = await query
+    .orderBy('period_start', 'desc')
+    .orderBy('target_type', 'asc')
+    .execute();
 
-  const result = await pool.query(query, queryParams);
-  return result.rows.map(mapRow);
+  return rows.map(mapRow);
 }
 
 /**
  * Deletes a sales target by ID, scoped to tenant.
  */
 export async function deleteTarget(tenantId: string, targetId: string): Promise<void> {
-  const result = await pool.query(
-    'DELETE FROM sales_targets WHERE id = $1 AND tenant_id = $2',
-    [targetId, tenantId],
-  );
+  const result = await db
+    .deleteFrom('sales_targets')
+    .where('id', '=', targetId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (result.rowCount === 0) {
+  // Kysely returns DeleteResult with `numDeletedRows` as bigint.
+  if (result.numDeletedRows === 0n) {
     throw createServiceError('Target not found', 'NOT_FOUND');
   }
 }
@@ -215,6 +224,10 @@ export async function deleteTarget(tenantId: string, targetId: string): Promise<
 /**
  * Calculates the actual closed-won revenue for a given tenant and period.
  * Optionally scoped to a specific owner (user targets).
+ *
+ * Tenant defence-in-depth (ADR-006): every joined table is explicitly
+ * filtered on `tenant_id` so the query stays safe even if the pool-proxy
+ * RLS context is ever bypassed.
  */
 export async function calculateActual(
   tenantId: string,
@@ -222,28 +235,29 @@ export async function calculateActual(
   periodEnd: string,
   ownerId?: string,
 ): Promise<number> {
-  let query = `
-    SELECT COALESCE(SUM(
-      (r.field_values->>'value')::decimal
-    ), 0) as actual
-    FROM records r
-    JOIN object_definitions od ON r.object_id = od.id
-    JOIN stage_definitions sd ON r.current_stage_id = sd.id
-    WHERE od.api_name = 'opportunity'
-      AND r.tenant_id = $1
-      AND sd.stage_type = 'won'
-      AND r.updated_at >= $2
-      AND r.updated_at < $3`;
-
-  const queryParams: unknown[] = [tenantId, periodStart, periodEnd];
+  let query = db
+    .selectFrom('records as r')
+    .innerJoin('object_definitions as od', (join) =>
+      join.onRef('r.object_id', '=', 'od.id').on('od.tenant_id', '=', tenantId),
+    )
+    .innerJoin('stage_definitions as sd', (join) =>
+      join.onRef('r.current_stage_id', '=', 'sd.id').on('sd.tenant_id', '=', tenantId),
+    )
+    .where('r.tenant_id', '=', tenantId)
+    .where('od.api_name', '=', 'opportunity')
+    .where('sd.stage_type', '=', 'won')
+    .where('r.updated_at', '>=', new Date(periodStart))
+    .where('r.updated_at', '<', new Date(periodEnd))
+    .select(
+      sql<string>`COALESCE(SUM((r.field_values->>'value')::decimal), 0)`.as('actual'),
+    );
 
   if (ownerId) {
-    queryParams.push(ownerId);
-    query += ` AND r.owner_id = $${queryParams.length}`;
+    query = query.where('r.owner_id', '=', ownerId);
   }
 
-  const result = await pool.query(query, queryParams);
-  return parseFloat(result.rows[0]?.actual ?? '0');
+  const row = await query.executeTakeFirst();
+  return parseFloat(row?.actual ?? '0');
 }
 
 /**
@@ -298,16 +312,16 @@ export async function getTargetSummary(
   const periodLabel = formatPeriodLabel(defaultStart, defaultEnd);
 
   // Fetch all targets for this period
-  const targetsResult = await pool.query(
-    `SELECT * FROM sales_targets
-     WHERE tenant_id = $1
-       AND period_start <= $2
-       AND period_end >= $3
-     ORDER BY target_type ASC`,
-    [tenantId, defaultEnd, defaultStart],
-  );
+  const targetRows = await db
+    .selectFrom('sales_targets')
+    .selectAll()
+    .where('tenant_id', '=', tenantId)
+    .where('period_start', '<=', new Date(defaultEnd))
+    .where('period_end', '>=', new Date(defaultStart))
+    .orderBy('target_type', 'asc')
+    .execute();
 
-  const targets = targetsResult.rows.map(mapRow);
+  const targets = targetRows.map(mapRow);
 
   // Separate by type
   const businessTargets = targets.filter((t) => t.target_type === 'business');
@@ -323,7 +337,7 @@ export async function getTargetSummary(
 
   for (const teamTarget of teamTargets) {
     // Get team name from records
-    const teamName = await getRecordName(teamTarget.target_entity_id);
+    const teamName = await getRecordName(tenantId, teamTarget.target_entity_id);
 
     // Find user targets for this team
     const teamUsers = await getTeamUserTargets(
@@ -354,7 +368,7 @@ export async function getTargetSummary(
   if (standaloneUsers.length > 0) {
     const standaloneUserSummaries: UserTargetSummary[] = [];
     for (const ut of standaloneUsers) {
-      const userName = await getRecordName(ut.target_entity_id);
+      const userName = await getRecordName(tenantId, ut.target_entity_id);
       const userActual = await calculateActualForUserRecord(tenantId, ut.target_entity_id!, defaultStart, defaultEnd);
       standaloneUserSummaries.push({
         name: userName ?? 'Unknown User',
@@ -422,33 +436,34 @@ export async function getUserTarget(
   const defaultStart = periodStart ?? new Date(now.getFullYear(), currentQuarter * 3, 1).toISOString().split('T')[0];
   const defaultEnd = periodEnd ?? new Date(now.getFullYear(), currentQuarter * 3 + 3, 1).toISOString().split('T')[0];
 
-  // Find the user record by looking up records that have a descope_user_id matching userId
-  const userRecordResult = await pool.query(
-    `SELECT r.id, r.name FROM records r
-     JOIN object_definitions od ON r.object_id = od.id
-     WHERE od.api_name = 'user'
-       AND r.tenant_id = $1
-       AND r.field_values->>'descope_user_id' = $2
-     LIMIT 1`,
-    [tenantId, userId],
-  );
-
-  const userRecord = userRecordResult.rows[0] as { id: string; name: string } | undefined;
+  // Find the user record by looking up records that have a descope_user_id
+  // matching userId. Both sides of the JOIN are tenant-scoped.
+  const userRecord = await db
+    .selectFrom('records as r')
+    .innerJoin('object_definitions as od', (join) =>
+      join.onRef('r.object_id', '=', 'od.id').on('od.tenant_id', '=', tenantId),
+    )
+    .where('od.api_name', '=', 'user')
+    .where('r.tenant_id', '=', tenantId)
+    .where(sql<string>`r.field_values->>'descope_user_id'`, '=', userId)
+    .select(['r.id', 'r.name'])
+    .limit(1)
+    .executeTakeFirst();
 
   // Try to find a target using the user record ID
   let target: SalesTarget | undefined;
   if (userRecord) {
-    const targetResult = await pool.query(
-      `SELECT * FROM sales_targets
-       WHERE tenant_id = $1
-         AND target_type = 'user'
-         AND target_entity_id = $2
-         AND period_start <= $3
-         AND period_end >= $4
-       LIMIT 1`,
-      [tenantId, userRecord.id, defaultEnd, defaultStart],
-    );
-    target = targetResult.rows[0] ? mapRow(targetResult.rows[0]) : undefined;
+    const targetRow = await db
+      .selectFrom('sales_targets')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('target_type', '=', 'user')
+      .where('target_entity_id', '=', userRecord.id)
+      .where('period_start', '<=', new Date(defaultEnd))
+      .where('period_end', '>=', new Date(defaultStart))
+      .limit(1)
+      .executeTakeFirst();
+    target = targetRow ? mapRow(targetRow) : undefined;
   }
 
   // Calculate actual using owner_id (Descope user ID on records)
@@ -468,20 +483,20 @@ export async function getUserTarget(
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-function mapRow(row: Record<string, unknown>): SalesTarget {
+function mapRow(row: Selectable<SalesTargets>): SalesTarget {
   return {
-    id: row.id as string,
-    tenant_id: row.tenant_id as string,
+    id: row.id,
+    tenant_id: row.tenant_id,
     target_type: row.target_type as SalesTarget['target_type'],
-    target_entity_id: (row.target_entity_id as string) ?? null,
+    target_entity_id: row.target_entity_id,
     period_type: row.period_type as SalesTarget['period_type'],
     period_start: formatDate(row.period_start),
     period_end: formatDate(row.period_end),
     target_value: parseFloat(String(row.target_value)),
-    currency: (row.currency as string) ?? 'GBP',
-    created_by: (row.created_by as string) ?? null,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
+    currency: row.currency ?? 'GBP',
+    created_by: row.created_by,
+    created_at: row.created_at == null ? '' : String(row.created_at),
+    updated_at: row.updated_at == null ? '' : String(row.updated_at),
   };
 }
 
@@ -544,15 +559,27 @@ function inferPeriodType(start: string, end: string): string {
   return 'quarterly';
 }
 
-async function getRecordName(recordId: string | null): Promise<string | null> {
+/**
+ * Resolves a record's display name, scoped to the tenant.
+ *
+ * The original raw-SQL version accepted only `recordId` with no tenant_id
+ * filter — a latent defence-in-depth gap. The Kysely migration is the
+ * natural moment to pin this with an explicit tenant_id filter.
+ */
+async function getRecordName(
+  tenantId: string,
+  recordId: string | null,
+): Promise<string | null> {
   if (!recordId) return null;
 
-  const result = await pool.query(
-    'SELECT name FROM records WHERE id = $1',
-    [recordId],
-  );
+  const row = await db
+    .selectFrom('records')
+    .select('name')
+    .where('id', '=', recordId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  return (result.rows[0]?.name as string) ?? null;
+  return row?.name ?? null;
 }
 
 /**
@@ -566,16 +593,22 @@ async function calculateActualForUserRecord(
   periodStart: string,
   periodEnd: string,
 ): Promise<number> {
-  // Resolve descope_user_id from the user record
-  const userResult = await pool.query(
-    `SELECT r.field_values->>'descope_user_id' as descope_user_id
-     FROM records r
-     JOIN object_definitions od ON r.object_id = od.id
-     WHERE r.id = $1 AND od.api_name = 'user'`,
-    [userRecordId],
-  );
+  // Resolve descope_user_id from the user record. Both sides of the JOIN
+  // are tenant-scoped (defence-in-depth per ADR-006).
+  const userRow = await db
+    .selectFrom('records as r')
+    .innerJoin('object_definitions as od', (join) =>
+      join.onRef('r.object_id', '=', 'od.id').on('od.tenant_id', '=', tenantId),
+    )
+    .where('r.id', '=', userRecordId)
+    .where('r.tenant_id', '=', tenantId)
+    .where('od.api_name', '=', 'user')
+    .select(
+      sql<string | null>`r.field_values->>'descope_user_id'`.as('descope_user_id'),
+    )
+    .executeTakeFirst();
 
-  const descopeUserId = userResult.rows[0]?.descope_user_id as string | undefined;
+  const descopeUserId = userRow?.descope_user_id ?? undefined;
   if (!descopeUserId) {
     return 0;
   }
@@ -594,23 +627,29 @@ async function getTeamUserTargets(
   periodStart: string,
   periodEnd: string,
 ): Promise<UserTargetSummary[]> {
-  // Find user records that belong to this team
-  const teamUsersResult = await pool.query(
-    `SELECT r.id, r.name, r.field_values->>'descope_user_id' as descope_user_id
-     FROM records r
-     JOIN object_definitions od ON r.object_id = od.id
-     WHERE od.api_name = 'user'
-       AND r.tenant_id = $1
-       AND r.field_values->>'team_id' = $2`,
-    [tenantId, teamRecordId],
-  );
+  // Find user records that belong to this team. Both sides of the JOIN
+  // are tenant-scoped (defence-in-depth per ADR-006).
+  const teamUsers = await db
+    .selectFrom('records as r')
+    .innerJoin('object_definitions as od', (join) =>
+      join.onRef('r.object_id', '=', 'od.id').on('od.tenant_id', '=', tenantId),
+    )
+    .where('od.api_name', '=', 'user')
+    .where('r.tenant_id', '=', tenantId)
+    .where(sql<string>`r.field_values->>'team_id'`, '=', teamRecordId)
+    .select([
+      'r.id',
+      'r.name',
+      sql<string | null>`r.field_values->>'descope_user_id'`.as('descope_user_id'),
+    ])
+    .execute();
 
   const userSummaries: UserTargetSummary[] = [];
 
-  for (const userRow of teamUsersResult.rows) {
-    const userRecordId = userRow.id as string;
-    const userName = userRow.name as string;
-    const descopeUserId = userRow.descope_user_id as string | undefined;
+  for (const userRow of teamUsers) {
+    const userRecordId = userRow.id;
+    const userName = userRow.name;
+    const descopeUserId = userRow.descope_user_id ?? undefined;
 
     // Find the matching target
     const userTarget = allUserTargets.find(
