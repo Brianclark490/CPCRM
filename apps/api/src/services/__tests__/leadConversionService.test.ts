@@ -38,6 +38,20 @@ const { convertLead } = await import('../leadConversionService.js');
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
+/**
+ * Normalises a captured `clientQuery.mock.calls[i]` entry to `{ sql, params }`
+ * regardless of whether the caller used the legacy `(sql, params)` shape or
+ * Kysely's `({ text, values })` shape.
+ */
+function extractCall(call: unknown[]): { sql: string; params: unknown[] } {
+  const first = call[0];
+  if (typeof first === 'string') {
+    return { sql: first, params: (call[1] as unknown[]) ?? [] };
+  }
+  const obj = first as { text: string; values?: unknown[] };
+  return { sql: obj.text, params: obj.values ?? [] };
+}
+
 function setupLeadConversionMocks(overrides: {
   leadFieldValues?: Record<string, unknown>;
   leadStatus?: string;
@@ -66,8 +80,21 @@ function setupLeadConversionMocks(overrides: {
     existingAccountName = 'Existing Corp',
   } = overrides;
 
-  clientQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  clientQuery.mockImplementation(async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+    // Kysely's PostgresDriver calls client.query({ text, values }) while
+    // the legacy raw-pg path calls client.query(sql, params). Normalise
+    // both call shapes so a single dispatcher can handle both.
+    const sql =
+      typeof sqlOrQuery === 'string'
+        ? sqlOrQuery
+        : (sqlOrQuery as { text: string }).text;
+    const params =
+      typeof sqlOrQuery === 'string'
+        ? paramsArg
+        : ((sqlOrQuery as { values?: unknown[] }).values ?? []);
+    // Strip identifier quotes so Kysely's `"records"` matches the
+    // existing uppercase matchers written against unquoted identifiers.
+    const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
     // BEGIN / COMMIT / ROLLBACK
     if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
@@ -202,7 +229,7 @@ describe('convertLead', () => {
 
     // Verify transaction was used
     const calls = clientQuery.mock.calls.map((c: unknown[]) =>
-      (c[0] as string).replace(/\s+/g, ' ').trim().toUpperCase(),
+      extractCall(c).sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase(),
     );
     expect(calls[0]).toBe('BEGIN');
     expect(calls[calls.length - 1]).toBe('COMMIT');
@@ -271,8 +298,12 @@ describe('convertLead', () => {
     // Make the INSERT for account fail
     const originalImpl = clientQuery.getMockImplementation();
     let insertCount = 0;
-    clientQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
-      const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+    clientQuery.mockImplementation(async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+      const sql =
+        typeof sqlOrQuery === 'string'
+          ? sqlOrQuery
+          : (sqlOrQuery as { text: string }).text;
+      const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
       if (s.startsWith('INSERT INTO RECORDS')) {
         insertCount++;
         if (insertCount === 1) {
@@ -280,7 +311,7 @@ describe('convertLead', () => {
         }
       }
       if (typeof originalImpl === 'function') {
-        return (originalImpl as (...args: unknown[]) => unknown)(sql, params);
+        return (originalImpl as (...args: unknown[]) => unknown)(sqlOrQuery, paramsArg);
       }
       return { rows: [] };
     });
@@ -291,7 +322,7 @@ describe('convertLead', () => {
 
     // Verify ROLLBACK was called
     const calls = clientQuery.mock.calls.map((c: unknown[]) =>
-      (c[0] as string).replace(/\s+/g, ' ').trim().toUpperCase(),
+      extractCall(c).sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase(),
     );
     expect(calls).toContain('ROLLBACK');
     expect(clientRelease).toHaveBeenCalled();
@@ -329,16 +360,20 @@ describe('convertLead', () => {
     await convertLead(TENANT_ID, 'lead-1', 'user-123', {});
 
     // Find INSERT INTO records calls
-    const insertCalls = clientQuery.mock.calls.filter((c: unknown[]) => {
-      const sql = (c[0] as string).replace(/\s+/g, ' ').trim().toUpperCase();
-      return sql.startsWith('INSERT INTO RECORDS');
-    });
+    const insertCalls = clientQuery.mock.calls
+      .map((c: unknown[]) => extractCall(c))
+      .filter((c) => {
+        const sql = c.sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
+        return sql.startsWith('INSERT INTO RECORDS');
+      });
 
     expect(insertCalls.length).toBe(3); // account, contact, opportunity
 
+    // Kysely compiles `values({ id, tenant_id, object_id, name, field_values,
+    // owner_id, created_at, updated_at })` to 8 positional params in the
+    // declared field-order, so field_values is param index 4.
     // Account: lead.company → account.name, lead.industry → account.industry, etc.
-    const accountParams = insertCalls[0][1] as unknown[];
-    const accountFieldValues = JSON.parse(accountParams[4] as string);
+    const accountFieldValues = JSON.parse(insertCalls[0]!.params[4] as string);
     expect(accountFieldValues.name).toBe('Acme Corp');
     expect(accountFieldValues.industry).toBe('Technology');
     expect(accountFieldValues.website).toBe('https://acme.com');
@@ -347,8 +382,7 @@ describe('convertLead', () => {
     expect(accountFieldValues.address_line1).toBe('123 Main St');
 
     // Contact: lead.first_name → contact.first_name, etc.
-    const contactParams = insertCalls[1][1] as unknown[];
-    const contactFieldValues = JSON.parse(contactParams[4] as string);
+    const contactFieldValues = JSON.parse(insertCalls[1]!.params[4] as string);
     expect(contactFieldValues.first_name).toBe('John');
     expect(contactFieldValues.last_name).toBe('Smith');
     expect(contactFieldValues.email).toBe('john@acme.com');
@@ -356,8 +390,7 @@ describe('convertLead', () => {
     expect(contactFieldValues.job_title).toBe('CEO');
 
     // Opportunity: lead.estimated_value → opportunity.value, etc.
-    const oppParams = insertCalls[2][1] as unknown[];
-    const oppFieldValues = JSON.parse(oppParams[4] as string);
+    const oppFieldValues = JSON.parse(insertCalls[2]!.params[4] as string);
     expect(oppFieldValues.value).toBe(50000);
     expect(oppFieldValues.source).toBe('Website');
     expect(oppFieldValues.description).toBe('A great lead');
@@ -369,15 +402,18 @@ describe('convertLead', () => {
     const result = await convertLead(TENANT_ID, 'lead-1', 'user-123', {});
 
     // Find UPDATE records call
-    const updateCalls = clientQuery.mock.calls.filter((c: unknown[]) => {
-      const sql = (c[0] as string).replace(/\s+/g, ' ').trim().toUpperCase();
-      return sql.startsWith('UPDATE RECORDS');
-    });
+    const updateCalls = clientQuery.mock.calls
+      .map((c: unknown[]) => extractCall(c))
+      .filter((c) => {
+        const sql = c.sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
+        return sql.startsWith('UPDATE RECORDS');
+      });
 
     expect(updateCalls.length).toBe(1);
 
-    const updateParams = updateCalls[0][1] as unknown[];
-    const updatedFieldValues = JSON.parse(updateParams[0] as string);
+    // Kysely compiles `.set({ field_values, updated_at })` to two
+    // positional params in declared order, so field_values is param 0.
+    const updatedFieldValues = JSON.parse(updateCalls[0]!.params[0] as string);
 
     expect(updatedFieldValues.status).toBe('Converted');
     expect(updatedFieldValues.converted_at).toBeDefined();

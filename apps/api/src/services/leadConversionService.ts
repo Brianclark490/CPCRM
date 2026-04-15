@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
-import type pg from 'pg';
+import type { Kysely } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { DB } from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,13 @@ interface ConversionMapping {
   leadFieldApiName: string;
   targetFieldApiName: string;
 }
+
+/**
+ * Executor type used by helpers that need to run inside either a top-level
+ * Kysely instance or a checked-out transaction. `Transaction<DB>` extends
+ * `Kysely<DB>`, so callers can pass either without a cast.
+ */
+type DbExecutor = Kysely<DB>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,8 +72,12 @@ function applyMappings(
 /**
  * Converts a Lead into an Account + Contact + Opportunity.
  *
- * The entire operation is performed within a single database transaction.
- * If any step fails, all changes are rolled back.
+ * The entire operation is performed within a single Kysely transaction. If
+ * any step fails, Kysely rolls back automatically when the closure throws.
+ *
+ * Tenant defence-in-depth (ADR-006): every SELECT/INSERT/UPDATE in the
+ * closure is scoped by an explicit `tenant_id` filter as the second line of
+ * defence behind RLS.
  *
  * @param leadRecordId - UUID of the lead record to convert
  * @param ownerId - Descope user ID from auth
@@ -77,31 +89,32 @@ export async function convertLead(
   ownerId: string,
   options: ConvertLeadOptions,
 ): Promise<ConvertLeadResult> {
-  const client = await pool.connect();
-
-  try {
-    await client.query('BEGIN');
-
+  return db.transaction().execute(async (trx) => {
     // 1. Resolve lead object definition
-    const leadObjResult = await client.query(
-      'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
-      ['lead', tenantId],
-    );
-    if (leadObjResult.rows.length === 0) {
+    const leadObjRow = await trx
+      .selectFrom('object_definitions')
+      .select('id')
+      .where('api_name', '=', 'lead')
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirst();
+    if (!leadObjRow) {
       throwNotFoundError("Object type 'lead' not found");
     }
-    const leadObjectId = (leadObjResult.rows[0] as Record<string, unknown>).id as string;
+    const leadObjectId = leadObjRow.id;
 
     // 2. Fetch the lead record
-    const leadResult = await client.query(
-      'SELECT * FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-      [leadRecordId, leadObjectId, tenantId],
-    );
-    if (leadResult.rows.length === 0) {
+    const leadRow = await trx
+      .selectFrom('records')
+      .selectAll()
+      .where('id', '=', leadRecordId)
+      .where('object_id', '=', leadObjectId)
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirst();
+    if (!leadRow) {
       throwNotFoundError('Lead not found');
     }
-    const leadRow = leadResult.rows[0] as Record<string, unknown>;
-    const leadFieldValues = (leadRow.field_values as Record<string, unknown>) ?? {};
+    const leadFieldValues =
+      (leadRow.field_values as Record<string, unknown> | null) ?? {};
 
     // 3. Validate lead is not already converted
     if (leadFieldValues['status'] === 'Converted') {
@@ -109,30 +122,34 @@ export async function convertLead(
     }
 
     // 4. Read conversion mappings
-    const mappingsResult = await client.query(
-      'SELECT lead_field_api_name, target_object, target_field_api_name FROM lead_conversion_mappings WHERE tenant_id = $1 ORDER BY target_object',
-      [tenantId],
-    );
-    const mappings: ConversionMapping[] = mappingsResult.rows.map(
-      (row: Record<string, unknown>) => ({
-        targetObject: row.target_object as string,
-        leadFieldApiName: row.lead_field_api_name as string,
-        targetFieldApiName: row.target_field_api_name as string,
-      }),
-    );
+    const mappingRows = await trx
+      .selectFrom('lead_conversion_mappings')
+      .select(['lead_field_api_name', 'target_object', 'target_field_api_name'])
+      .where('tenant_id', '=', tenantId)
+      .orderBy('target_object')
+      .execute();
+    const mappings: ConversionMapping[] = mappingRows.map((row) => ({
+      targetObject: row.target_object,
+      leadFieldApiName: row.lead_field_api_name,
+      targetFieldApiName: row.target_field_api_name,
+    }));
 
     // 5. Resolve target object definitions
-    const accountObjResult = await client.query(
-      'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
-      ['account', tenantId],
-    );
-    const accountObjectId = (accountObjResult.rows[0] as Record<string, unknown>).id as string;
+    const accountObjRow = await trx
+      .selectFrom('object_definitions')
+      .select('id')
+      .where('api_name', '=', 'account')
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirstOrThrow();
+    const accountObjectId = accountObjRow.id;
 
-    const contactObjResult = await client.query(
-      'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
-      ['contact', tenantId],
-    );
-    const contactObjectId = (contactObjResult.rows[0] as Record<string, unknown>).id as string;
+    const contactObjRow = await trx
+      .selectFrom('object_definitions')
+      .select('id')
+      .where('api_name', '=', 'contact')
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirstOrThrow();
+    const contactObjectId = contactObjRow.id;
 
     // 6. Create or link Account
     let accountId: string;
@@ -140,48 +157,70 @@ export async function convertLead(
 
     if (options.accountId) {
       // Use existing account
-      const existingAccount = await client.query(
-        'SELECT id, name FROM records WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-        [options.accountId, accountObjectId, tenantId],
-      );
-      if (existingAccount.rows.length === 0) {
+      const existingAccount = await trx
+        .selectFrom('records')
+        .select(['id', 'name'])
+        .where('id', '=', options.accountId)
+        .where('object_id', '=', accountObjectId)
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirst();
+      if (!existingAccount) {
         throwNotFoundError('Account not found');
       }
-      accountId = (existingAccount.rows[0] as Record<string, unknown>).id as string;
-      accountName = (existingAccount.rows[0] as Record<string, unknown>).name as string;
+      accountId = existingAccount.id;
+      accountName = existingAccount.name;
     } else {
       // Create new account from mapped fields
       const accountFieldValues = applyMappings(leadFieldValues, mappings, 'account');
-      accountName = (accountFieldValues['name'] as string) ||
+      accountName =
+        (accountFieldValues['name'] as string) ||
         (leadFieldValues['company'] as string) ||
         'Untitled Account';
       accountId = randomUUID();
       const now = new Date();
 
-      await client.query(
-        `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [accountId, tenantId, accountObjectId, accountName, JSON.stringify(accountFieldValues), ownerId, now, now],
-      );
+      await trx
+        .insertInto('records')
+        .values({
+          id: accountId,
+          tenant_id: tenantId,
+          object_id: accountObjectId,
+          name: accountName,
+          field_values: JSON.stringify(accountFieldValues),
+          owner_id: ownerId,
+          created_at: now,
+          updated_at: now,
+        })
+        .execute();
     }
 
     // 7. Create Contact
     const contactFieldValues = applyMappings(leadFieldValues, mappings, 'contact');
     const firstName = (contactFieldValues['first_name'] as string) || '';
     const lastName = (contactFieldValues['last_name'] as string) || '';
-    const contactName = [firstName, lastName].filter((s) => s.trim().length > 0).join(' ') || 'Untitled Contact';
+    const contactName =
+      [firstName, lastName].filter((s) => s.trim().length > 0).join(' ') ||
+      'Untitled Contact';
 
     const contactId = randomUUID();
     const contactNow = new Date();
 
-    await client.query(
-      `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [contactId, tenantId, contactObjectId, contactName, JSON.stringify(contactFieldValues), ownerId, contactNow, contactNow],
-    );
+    await trx
+      .insertInto('records')
+      .values({
+        id: contactId,
+        tenant_id: tenantId,
+        object_id: contactObjectId,
+        name: contactName,
+        field_values: JSON.stringify(contactFieldValues),
+        owner_id: ownerId,
+        created_at: contactNow,
+        updated_at: contactNow,
+      })
+      .execute();
 
     // Link contact to account via contact_account relationship
-    await linkRecordInTransaction(client, 'contact_account', contactId, accountId, tenantId);
+    await linkRecordInTransaction(trx, 'contact_account', contactId, accountId, tenantId);
 
     // 8. Create Opportunity (optional, default true)
     const createOpportunity = options.createOpportunity !== false;
@@ -189,11 +228,13 @@ export async function convertLead(
     let opportunityName: string | null = null;
 
     if (createOpportunity) {
-      const opportunityObjResult = await client.query(
-        'SELECT id FROM object_definitions WHERE api_name = $1 AND tenant_id = $2',
-        ['opportunity', tenantId],
-      );
-      const opportunityObjectId = (opportunityObjResult.rows[0] as Record<string, unknown>).id as string;
+      const opportunityObjRow = await trx
+        .selectFrom('object_definitions')
+        .select('id')
+        .where('api_name', '=', 'opportunity')
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirstOrThrow();
+      const opportunityObjectId = opportunityObjRow.id;
 
       const opportunityFieldValues = applyMappings(leadFieldValues, mappings, 'opportunity');
 
@@ -205,17 +246,25 @@ export async function convertLead(
       opportunityId = randomUUID();
       const oppNow = new Date();
 
-      await client.query(
-        `INSERT INTO records (id, tenant_id, object_id, name, field_values, owner_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [opportunityId, tenantId, opportunityObjectId, opportunityName, JSON.stringify(opportunityFieldValues), ownerId, oppNow, oppNow],
-      );
+      await trx
+        .insertInto('records')
+        .values({
+          id: opportunityId,
+          tenant_id: tenantId,
+          object_id: opportunityObjectId,
+          name: opportunityName,
+          field_values: JSON.stringify(opportunityFieldValues),
+          owner_id: ownerId,
+          created_at: oppNow,
+          updated_at: oppNow,
+        })
+        .execute();
 
       // Link opportunity to account
-      await linkRecordInTransaction(client, 'opportunity_account', opportunityId, accountId, tenantId);
+      await linkRecordInTransaction(trx, 'opportunity_account', opportunityId, accountId, tenantId);
 
       // Link opportunity to contact
-      await linkRecordInTransaction(client, 'opportunity_contact', opportunityId, contactId, tenantId);
+      await linkRecordInTransaction(trx, 'opportunity_contact', opportunityId, contactId, tenantId);
     }
 
     // 9. Update lead status to "Converted" with metadata
@@ -229,14 +278,16 @@ export async function convertLead(
       ...(opportunityId ? { converted_opportunity_id: opportunityId } : {}),
     };
 
-    await client.query(
-      `UPDATE records
-       SET field_values = $1, updated_at = $2
-       WHERE id = $3 AND object_id = $4 AND tenant_id = $5`,
-      [JSON.stringify(updatedFieldValues), new Date(), leadRecordId, leadObjectId, tenantId],
-    );
-
-    await client.query('COMMIT');
+    await trx
+      .updateTable('records')
+      .set({
+        field_values: JSON.stringify(updatedFieldValues),
+        updated_at: new Date(),
+      })
+      .where('id', '=', leadRecordId)
+      .where('object_id', '=', leadObjectId)
+      .where('tenant_id', '=', tenantId)
+      .execute();
 
     logger.info(
       { leadRecordId, accountId, contactId, opportunityId, ownerId },
@@ -246,35 +297,36 @@ export async function convertLead(
     return {
       account: { id: accountId, name: accountName },
       contact: { id: contactId, name: contactName },
-      opportunity: opportunityId && opportunityName
-        ? { id: opportunityId, name: opportunityName }
-        : null,
+      opportunity:
+        opportunityId && opportunityName
+          ? { id: opportunityId, name: opportunityName }
+          : null,
       lead: { id: leadRecordId, status: 'Converted' },
     };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 /**
- * Creates a record_relationship within an existing transaction.
+ * Creates a record_relationship within an existing Kysely transaction.
+ *
+ * If the relationship definition isn't seeded yet, logs a warning and
+ * returns without inserting — matches the original raw-pg behaviour.
  */
 async function linkRecordInTransaction(
-  client: pg.PoolClient,
+  trx: DbExecutor,
   relationshipApiName: string,
   sourceRecordId: string,
   targetRecordId: string,
   tenantId: string,
 ): Promise<void> {
-  const relDefResult = await client.query(
-    'SELECT id FROM relationship_definitions WHERE api_name = $1 AND tenant_id = $2',
-    [relationshipApiName, tenantId],
-  );
+  const relDefRow = await trx
+    .selectFrom('relationship_definitions')
+    .select('id')
+    .where('api_name', '=', relationshipApiName)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (relDefResult.rows.length === 0) {
+  if (!relDefRow) {
     // Relationship not defined — skip silently (the system may not have it seeded yet)
     logger.warn(
       { relationshipApiName, sourceRecordId, targetRecordId },
@@ -283,13 +335,19 @@ async function linkRecordInTransaction(
     return;
   }
 
-  const relationshipId = (relDefResult.rows[0] as Record<string, unknown>).id as string;
+  const relationshipId = relDefRow.id;
   const linkId = randomUUID();
   const now = new Date();
 
-  await client.query(
-    `INSERT INTO record_relationships (id, tenant_id, relationship_id, source_record_id, target_record_id, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [linkId, tenantId, relationshipId, sourceRecordId, targetRecordId, now],
-  );
+  await trx
+    .insertInto('record_relationships')
+    .values({
+      id: linkId,
+      tenant_id: tenantId,
+      relationship_id: relationshipId,
+      source_record_id: sourceRecordId,
+      target_record_id: targetRecordId,
+      created_at: now,
+    })
+    .execute();
 }
