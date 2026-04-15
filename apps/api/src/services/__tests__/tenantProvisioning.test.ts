@@ -6,14 +6,30 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// Kysely's PostgresDialect acquires a client per query via `pool.connect()`,
+// so the mock routes both `pool.query` and `pool.connect().query` through
+// the same `runQuery` dispatcher. Validation tests only need the shape of
+// the slug-uniqueness check to resolve — the rest of the provisionTenant
+// path is covered by tenantProvisioning.e2e.test.ts.
 
-const { mockQuery } = vi.hoisted(() => {
+const { mockQuery, mockConnect } = vi.hoisted(() => {
   const mockQuery = vi.fn();
-  return { mockQuery };
+
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: unknown, params?: unknown[]) => {
+      const rawSql =
+        typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return mockQuery(rawSql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return { mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery, connect: vi.fn() },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 // ─── validateSlug ─────────────────────────────────────────────────────────────

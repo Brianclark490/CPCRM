@@ -44,20 +44,59 @@ const fakeObjects = new Map<string, FakeRow>();
 const fakeFields = new Map<string, FakeRow>();
 const fakeRelationships = new Map<string, FakeRow>();
 
-const mockClientQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-  const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+// Kysely's PostgresDriver calls `client.query({ text, values })`, while the
+// legacy seedDefaultObjects path calls `client.query(sql, params)` directly.
+// Normalise both call shapes so the single dispatcher handles both.
+const defaultClientQueryImpl = async (
+  sqlOrQuery: unknown,
+  paramsArg?: unknown[],
+) => {
+  const sql =
+    typeof sqlOrQuery === 'string'
+      ? sqlOrQuery
+      : (sqlOrQuery as { text: string }).text;
+  const params =
+    typeof sqlOrQuery === 'string'
+      ? paramsArg
+      : ((sqlOrQuery as { values?: unknown[] }).values ?? []);
+
+  // Strip identifier quotes so Kysely's `"tenants"` matches the legacy
+  // matchers that were written against unquoted identifiers.
+  const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
   // Transaction control
   if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') return { rows: [] };
 
+  // Slug uniqueness check (routed through pool.connect by Kysely).
+  // Kysely compiles `db.selectFrom('tenants').select('id').where('slug', '=', ?)`
+  // to `SELECT id FROM tenants WHERE slug = $1` (+ optional LIMIT for
+  // executeTakeFirst).
+  if (s.startsWith('SELECT ID FROM TENANTS WHERE SLUG')) {
+    const slug = params![0] as string;
+    const match = [...fakeTenants.values()].find((t) => t.slug === slug);
+    return { rows: match ? [{ id: match.id }] : [], rowCount: match ? 1 : 0 };
+  }
+
   // INSERT INTO tenants ... RETURNING *
-  // Params: $1=id, $2=name, $3=slug, $4=plan, $5=created_at, $6=updated_at
-  // ('active' and '{}' are hardcoded in the SQL, not parameterised)
+  // Kysely compiles `values({ id, name, slug, status, plan, settings,
+  // created_at, updated_at })` to 8 positional params in the declared
+  // field order. All columns are now parameterised (no hardcoded
+  // 'active'/'{}' like the old raw-SQL path).
   if (s.startsWith('INSERT INTO TENANTS')) {
-    const [id, name, slug, plan, created_at, updated_at] = params as unknown[];
-    const row: FakeRow = { id: id as string, name, slug, status: 'active', plan, settings: '{}', created_at, updated_at };
+    const [id, name, slug, status, plan, settings, created_at, updated_at] =
+      params as unknown[];
+    const row: FakeRow = {
+      id: id as string,
+      name,
+      slug,
+      status,
+      plan,
+      settings,
+      created_at,
+      updated_at,
+    };
     fakeTenants.set(id as string, row);
-    return { rows: [row] };
+    return { rows: [row], rowCount: 1, command: 'INSERT' };
   }
 
   // SELECT id, api_name FROM object_definitions WHERE api_name = ANY($1) AND tenant_id = $2
@@ -154,7 +193,9 @@ const mockClientQuery = vi.fn(async (sql: string, params?: unknown[]) => {
 
   // Default
   return { rows: [], rowCount: 0 };
-});
+};
+
+const mockClientQuery = vi.fn(defaultClientQueryImpl);
 
 const mockRelease = vi.fn();
 const mockConnect = vi.fn(() => ({
@@ -192,6 +233,9 @@ beforeEach(() => {
   fakeObjects.clear();
   fakeFields.clear();
   fakeRelationships.clear();
+  // Restore the default dispatcher — tests that need failure injection
+  // should call mockImplementation(...) within that test's scope.
+  mockClientQuery.mockImplementation(defaultClientQueryImpl);
   mockCreateTenantWithId.mockResolvedValue({});
   mockDeleteTenant.mockResolvedValue({});
   mockDescopeInvite.mockResolvedValue({});
@@ -292,8 +336,27 @@ describe('provisionTenant — end-to-end flow', () => {
   });
 
   it('rolls back Descope tenant when DB transaction fails', async () => {
-    // Make the DB client throw on the INSERT INTO tenants query
-    mockClientQuery.mockRejectedValueOnce(new Error('DB insert failed'));
+    // Make the DB client throw on the INSERT INTO tenants query.
+    // We can't use mockRejectedValueOnce here because Kysely now routes
+    // the pre-insert slug-uniqueness check through pool.connect().query
+    // as well, so "the first call" is no longer the INSERT. Target the
+    // INSERT explicitly and pass other queries through to the default
+    // in-memory dispatcher.
+    mockClientQuery.mockImplementation(
+      async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+        const sqlRaw =
+          typeof sqlOrQuery === 'string'
+            ? sqlOrQuery
+            : (sqlOrQuery as { text: string }).text;
+        if (
+          sqlRaw.toUpperCase().includes('INSERT INTO') &&
+          sqlRaw.toUpperCase().includes('TENANTS')
+        ) {
+          throw new Error('DB insert failed');
+        }
+        return defaultClientQueryImpl(sqlOrQuery, paramsArg);
+      },
+    );
 
     await expect(
       provisionTenant({
