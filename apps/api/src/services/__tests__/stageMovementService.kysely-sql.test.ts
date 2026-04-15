@@ -402,18 +402,12 @@ describe('stageMovementService Kysely SQL — tenant_id defence-in-depth', () =>
     const queries = dataQueries();
     expect(queries.length).toBeGreaterThan(0);
 
-    // We only require tenant-scoped tables to carry TENANT_ID. The
-    // `SELECT field_values FROM records WHERE id = $1` refetch is
-    // intentionally id-only because it runs inside the same transaction
-    // as the INSERT that just wrote the row; RLS still fences off cross-
-    // tenant reads on the underlying records table. Everything else must
-    // carry a TENANT_ID clause.
+    // Defence-in-depth (ADR-006): every data query — including the
+    // records re-fetch and the records UPDATE — must carry an explicit
+    // TENANT_ID predicate when a tenantId is supplied.
     for (const q of queries) {
-      const s = normalise(q.sql);
-      if (s.startsWith('SELECT FIELD_VALUES FROM RECORDS')) continue;
-      if (s.startsWith('UPDATE RECORDS')) continue; // pipeline assignment update is id-only
       expect(
-        s.includes('TENANT_ID'),
+        normalise(q.sql).includes('TENANT_ID'),
         `Query missing TENANT_ID:\n  ${q.sql}`,
       ).toBe(true);
     }

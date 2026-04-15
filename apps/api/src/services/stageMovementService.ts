@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { Kysely, Transaction } from 'kysely';
+import type { Kysely } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/kysely.js';
 import type { DB, Json } from '../db/kysely.types.js';
@@ -50,11 +50,11 @@ interface GateRow {
 }
 
 /**
- * Narrow executor type used by helpers that need to run inside either a
- * top-level Kysely instance or a checked-out transaction. `Transaction<DB>`
- * is assignable to `Kysely<DB>`, so callers can pass either without a cast.
+ * Executor type used by helpers that need to run inside either a top-level
+ * Kysely instance or a checked-out transaction. `Transaction<DB>` extends
+ * `Kysely<DB>`, so callers can pass either without a cast.
  */
-type DbExecutor = Kysely<DB> | Transaction<DB>;
+type DbExecutor = Kysely<DB>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -437,19 +437,22 @@ export async function moveRecordStage(
       'Record moved to new stage',
     );
 
-    const row = updatedRow as unknown as Record<string, unknown>;
+    // Kysely types Timestamp columns as Date on select. Normalise to Date
+    // here so downstream callers get a consistent shape regardless of
+    // whether the driver returned Date or an ISO string.
+    const toDate = (v: unknown): Date => (v instanceof Date ? v : new Date(v as string));
 
     return {
-      id: row.id as string,
-      objectId: row.object_id as string,
-      name: row.name as string,
-      fieldValues: (row.field_values as Record<string, unknown>) ?? {},
-      ownerId: row.owner_id as string,
-      pipelineId: row.pipeline_id as string,
-      currentStageId: row.current_stage_id as string,
-      stageEnteredAt: new Date(row.stage_entered_at as unknown as string),
-      createdAt: new Date(row.created_at as unknown as string),
-      updatedAt: new Date(row.updated_at as unknown as string),
+      id: updatedRow.id,
+      objectId: updatedRow.object_id,
+      name: updatedRow.name,
+      fieldValues: (updatedRow.field_values as Record<string, unknown>) ?? {},
+      ownerId: updatedRow.owner_id,
+      pipelineId: updatedRow.pipeline_id as string,
+      currentStageId: updatedRow.current_stage_id as string,
+      stageEnteredAt: toDate(updatedRow.stage_entered_at),
+      createdAt: toDate(updatedRow.created_at),
+      updatedAt: toDate(updatedRow.updated_at),
     };
   });
 }
@@ -519,11 +522,14 @@ export async function assignDefaultPipeline(
   }
 
   // Read the record's field_values to check for a stage field
-  const recordRow = await executor
+  let recordQuery = executor
     .selectFrom('records')
     .select('field_values')
-    .where('id', '=', recordId)
-    .executeTakeFirst();
+    .where('id', '=', recordId);
+  if (tenantId) {
+    recordQuery = recordQuery.where('tenant_id', '=', tenantId);
+  }
+  const recordRow = await recordQuery.executeTakeFirst();
 
   if (!recordRow) {
     return false;
@@ -562,7 +568,7 @@ export async function assignDefaultPipeline(
 
   if (defaultProbability !== null) {
     const updatedFieldValues = { ...fieldValues, probability: defaultProbability };
-    await executor
+    let updateQuery = executor
       .updateTable('records')
       .set({
         pipeline_id: pipelineId,
@@ -570,18 +576,24 @@ export async function assignDefaultPipeline(
         stage_entered_at: now,
         field_values: JSON.stringify(updatedFieldValues) as unknown as Json,
       })
-      .where('id', '=', recordId)
-      .execute();
+      .where('id', '=', recordId);
+    if (tenantId) {
+      updateQuery = updateQuery.where('tenant_id', '=', tenantId);
+    }
+    await updateQuery.execute();
   } else {
-    await executor
+    let updateQuery = executor
       .updateTable('records')
       .set({
         pipeline_id: pipelineId,
         current_stage_id: targetStageId,
         stage_entered_at: now,
       })
-      .where('id', '=', recordId)
-      .execute();
+      .where('id', '=', recordId);
+    if (tenantId) {
+      updateQuery = updateQuery.where('tenant_id', '=', tenantId);
+    }
+    await updateQuery.execute();
   }
 
   // Insert initial stage_history record (from_stage_id: NULL)

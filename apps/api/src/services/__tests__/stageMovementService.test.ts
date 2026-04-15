@@ -642,7 +642,7 @@ describe('moveRecordStage', () => {
     // The mock router counts every INSERT INTO stage_history it sees,
     // whether it comes through pool.query or a checked-out transaction
     // client. moveRecordStage must emit exactly one such insert.
-    expect(stageHistoryInserts.count).toBeGreaterThanOrEqual(1);
+    expect(stageHistoryInserts.count).toBe(1);
   });
 
   it('evaluates multiple gates on the same stage', async () => {
