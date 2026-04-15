@@ -628,19 +628,27 @@ export async function reorderObjectDefinitions(
     }
   }
 
-  // Run the batch inside a single transaction so the reorder is
-  // atomic: either every object's sort_order moves, or none do.
-  await db.transaction().execute(async (trx) => {
-    const now = new Date();
-    for (let i = 0; i < safeLength; i++) {
-      await trx
-        .updateTable('object_definitions')
-        .set({ sort_order: i + 1, updated_at: now })
-        .where('id', '=', orderedIds[i]!)
-        .where('tenant_id', '=', tenantId)
-        .execute();
-    }
-  });
+  // Reorder in a single atomic UPDATE using a CASE expression so we
+  // avoid N sequential round-trips (safeLength can be up to 500).
+  // A single statement is already atomic, so no explicit transaction
+  // is needed.
+  const idsToReorder = orderedIds.slice(0, safeLength);
+  const now = new Date();
+
+  const sortOrderCase = sql<number>`case ${sql.ref('id')} ${sql.join(
+    idsToReorder.map((id, index) => sql`when ${id} then ${index + 1}`),
+    sql` `,
+  )} end`;
+
+  await db
+    .updateTable('object_definitions')
+    .set({
+      sort_order: sortOrderCase,
+      updated_at: now,
+    })
+    .where('tenant_id', '=', tenantId)
+    .where('id', 'in', idsToReorder)
+    .execute();
 
   logger.info({ count: safeLength }, 'Object definitions reordered');
 }

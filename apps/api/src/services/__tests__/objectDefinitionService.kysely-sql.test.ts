@@ -569,26 +569,45 @@ describe('objectDefinitionService Kysely SQL — generated SQL shape', () => {
     expect(s).toContain('TENANT_ID =');
   });
 
-  it('reorderObjectDefinitions issues one UPDATE per id scoped by tenant_id, wrapped in a transaction', async () => {
+  it('reorderObjectDefinitions issues a single atomic UPDATE with CASE scoped by tenant_id + id IN (...)', async () => {
     await reorderObjectDefinitions(TENANT_ID, [OBJECT_ID, 'obj-test-002']);
 
     const updates = dataQueries().filter((q) =>
-      normalise(q.sql).startsWith('UPDATE OBJECT_DEFINITIONS SET SORT_ORDER'),
+      normalise(q.sql).startsWith('UPDATE OBJECT_DEFINITIONS SET'),
     );
-    expect(updates.length).toBe(2);
+    // Exactly one statement — the N-round-trip regression from the
+    // first migration pass is now pinned against reintroduction.
+    expect(updates.length).toBe(1);
 
-    for (const u of updates) {
-      const s = normalise(u.sql);
-      expect(s).toContain('SORT_ORDER =');
-      expect(s).toContain('UPDATED_AT =');
-      expect(s).toContain('ID =');
-      expect(s).toContain('TENANT_ID =');
-    }
+    const s = normalise(updates[0]!.sql);
+    expect(s).toContain('SORT_ORDER =');
+    expect(s).toContain('CASE');
+    expect(s).toContain('WHEN');
+    expect(s).toContain('THEN');
+    expect(s).toContain('END');
+    expect(s).toContain('UPDATED_AT =');
+    // WHERE is scoped by tenant_id and restricted to the reordered
+    // ids via `IN (...)`.
+    expect(s).toContain('WHERE');
+    expect(s).toContain('TENANT_ID =');
+    expect(s).toContain('ID IN');
 
-    // Reorder must run inside a transaction so partial reorders roll back.
+    // Params: two ids + two sort_order positions (+ updated_at +
+    // tenant_id + id IN binds). The two `when` branches bind their
+    // id and sort_order values inline; the `id in (...)` binds both
+    // ids again.
+    const p = updates[0]!.params;
+    expect(p).toContain(OBJECT_ID);
+    expect(p).toContain('obj-test-002');
+    expect(p).toContain(TENANT_ID);
+    expect(p).toContain(1);
+    expect(p).toContain(2);
+
+    // Single-statement reorder is atomic by itself — no explicit
+    // transaction needed.
     const sequence = capturedQueries.map((q) => normalise(q.sql));
-    expect(sequence).toContain('BEGIN');
-    expect(sequence).toContain('COMMIT');
+    expect(sequence).not.toContain('BEGIN');
+    expect(sequence).not.toContain('COMMIT');
   });
 });
 
@@ -616,6 +635,13 @@ describe('objectDefinitionService Kysely SQL — non-transactional paths', () =>
 
   it('deleteObjectDefinition runs without opening an explicit transaction', async () => {
     await deleteObjectDefinition(TENANT_ID, OBJECT_ID);
+    const sqls = capturedQueries.map((q) => normalise(q.sql));
+    expect(sqls).not.toContain('BEGIN');
+    expect(sqls).not.toContain('COMMIT');
+  });
+
+  it('reorderObjectDefinitions runs without opening an explicit transaction (single-statement CASE update is atomic)', async () => {
+    await reorderObjectDefinitions(TENANT_ID, [OBJECT_ID, 'obj-test-002']);
     const sqls = capturedQueries.map((q) => normalise(q.sql));
     expect(sqls).not.toContain('BEGIN');
     expect(sqls).not.toContain('COMMIT');
