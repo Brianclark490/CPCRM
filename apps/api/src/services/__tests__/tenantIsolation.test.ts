@@ -60,9 +60,19 @@ const { fakeObjects, fakeFields, fakeRecords, fakePipelines, fakeStages, fakeRel
       return { rows: match ? [match] : [] };
     }
 
-    // listObjectDefinitions: SELECT od.*, ... FROM object_definitions od WHERE od.tenant_id = $1
-    if (s.includes('FROM OBJECT_DEFINITIONS OD') && s.includes('WHERE OD.TENANT_ID')) {
-      const tenantId = params![0] as string;
+    // listObjectDefinitions: Kysely emits
+    //   select "od".*, (select COUNT(*) ...) as "field_count",
+    //          (select COUNT(*) ...) as "record_count"
+    //   from "object_definitions" as "od" where "od"."tenant_id" = $N
+    // After quote-strip + upper-case, the FROM clause becomes
+    // "FROM OBJECT_DEFINITIONS AS OD". Every bind is the same
+    // tenantId value (once per correlated subquery, once for the
+    // outer WHERE), so pulling from the last param is safe.
+    if (
+      s.includes('FROM OBJECT_DEFINITIONS AS OD') &&
+      s.includes('OD.TENANT_ID')
+    ) {
+      const tenantId = params![params!.length - 1] as string;
       const rows = [...fakeObjects.values()]
         .filter((r) => r.tenant_id === tenantId)
         .map((r) => ({ ...r, field_count: '0', record_count: '0' }));
