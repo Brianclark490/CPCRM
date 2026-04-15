@@ -7,37 +7,86 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// NOTE (Phase 3b Kysely migration, issue #445): the service is now on
+// Kysely. The mock below matches Kysely-emitted SQL — identifier
+// quoting is stripped by the normaliser, matching the pattern used by
+// stageMovementService.test.ts and pipelineAnalyticsService.test.ts.
+//
+// A dedicated Kysely SQL regression suite lives next door:
+//   apps/api/src/services/__tests__/stageGateService.kysely-sql.test.ts
 
-const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery } = vi.hoisted(() => {
+const {
+  fakeStages,
+  fakePipelines,
+  fakeObjects,
+  fakeFields,
+  fakeGates,
+  mockQuery,
+  mockConnect,
+} = vi.hoisted(() => {
   const fakeStages = new Map<string, Record<string, unknown>>();
   const fakePipelines = new Map<string, Record<string, unknown>>();
   const fakeObjects = new Map<string, Record<string, unknown>>();
   const fakeFields = new Map<string, Record<string, unknown>>();
   const fakeGates = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function runQuery(sql: string, params?: unknown[]) {
+    // Strip identifier quotes and normalise whitespace so pattern-matching
+    // is quote-agnostic (Kysely wraps identifiers in "…").
+    const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
-    // JOIN stage_definitions with pipeline_definitions to resolve object_id
-    if (s.includes('FROM STAGE_DEFINITIONS SD') && s.includes('JOIN PIPELINE_DEFINITIONS PD') && s.includes('WHERE SD.ID')) {
+    // stage_definitions INNER JOIN pipeline_definitions (resolveStageAndObject)
+    if (
+      s.includes('FROM STAGE_DEFINITIONS AS SD') &&
+      s.includes('JOIN PIPELINE_DEFINITIONS AS PD')
+    ) {
       const stageId = params![0] as string;
       const stage = fakeStages.get(stageId);
       if (!stage) return { rows: [] };
       const pipeline = fakePipelines.get(stage.pipeline_id as string);
       if (!pipeline) return { rows: [] };
-      return { rows: [{ stage_id: stage.id, pipeline_id: pipeline.id, object_id: pipeline.object_id }] };
+      return {
+        rows: [
+          {
+            stage_id: stage.id,
+            pipeline_id: pipeline.id,
+            object_id: pipeline.object_id,
+          },
+        ],
+      };
     }
 
-    // SELECT id, field_type, label, options FROM field_definitions WHERE id = $1
-    if (s.includes('FROM FIELD_DEFINITIONS WHERE ID = $1') && !s.includes('AND OBJECT_ID')) {
+    // SELECT id, field_type, label, options FROM field_definitions WHERE id = $1 AND tenant_id = $2
+    //   (getFieldInfo — all four projected columns)
+    if (
+      s.includes('FROM FIELD_DEFINITIONS') &&
+      s.includes('FIELD_TYPE') &&
+      s.includes('LABEL') &&
+      s.includes('OPTIONS')
+    ) {
       const fieldId = params![0] as string;
       const field = fakeFields.get(fieldId);
       if (!field) return { rows: [] };
-      return { rows: [{ id: field.id, field_type: field.field_type, label: field.label, options: field.options }] };
+      return {
+        rows: [
+          {
+            id: field.id,
+            field_type: field.field_type,
+            label: field.label,
+            options: field.options,
+          },
+        ],
+      };
     }
 
-    // SELECT id FROM field_definitions WHERE id = $1 AND object_id = $2
-    if (s.includes('FROM FIELD_DEFINITIONS WHERE ID = $1 AND OBJECT_ID')) {
+    // SELECT id FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3
+    //   (fieldBelongsToObject)
+    if (
+      s.includes('FROM FIELD_DEFINITIONS') &&
+      s.includes('SELECT ID') &&
+      s.includes('OBJECT_ID')
+    ) {
       const fieldId = params![0] as string;
       const objectId = params![1] as string;
       const field = fakeFields.get(fieldId);
@@ -45,8 +94,14 @@ const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery
       return { rows: [] };
     }
 
-    // SELECT id FROM stage_gates WHERE stage_id = $1 AND field_id = $2 (duplicate check)
-    if (s.startsWith('SELECT ID FROM STAGE_GATES WHERE STAGE_ID') && s.includes('FIELD_ID')) {
+    // SELECT id FROM stage_gates WHERE stage_id = $1 AND field_id = $2 AND tenant_id = $3
+    //   (duplicate check in createStageGate)
+    if (
+      s.includes('FROM STAGE_GATES') &&
+      !s.includes('AS SG') &&
+      s.includes('SELECT ID') &&
+      s.includes('FIELD_ID')
+    ) {
       const stageId = params![0] as string;
       const fieldId = params![1] as string;
       const match = [...fakeGates.values()].find(
@@ -56,37 +111,59 @@ const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery
       return { rows: [] };
     }
 
-    // INSERT INTO stage_gates
+    // INSERT INTO stage_gates (columns...) VALUES (...)
+    //   Kysely emits columns in the order supplied in .values({...}).
+    //   Param order mirrors: id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message
     if (s.startsWith('INSERT INTO STAGE_GATES')) {
-      const [id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message] = params as unknown[];
-      const row: Record<string, unknown> = { id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message };
+      const [id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message] =
+        params as unknown[];
+      const row: Record<string, unknown> = {
+        id,
+        tenant_id,
+        stage_id,
+        field_id,
+        gate_type,
+        gate_value,
+        error_message,
+      };
       fakeGates.set(id as string, row);
       return { rows: [row] };
     }
 
-    // SELECT sg.* with JOIN fd (gate with field metadata) WHERE sg.id = $1
-    if (s.includes('FROM STAGE_GATES SG') && s.includes('JOIN FIELD_DEFINITIONS FD') && s.includes('WHERE SG.ID = $1')) {
+    // SELECT sg.*, fd.label, fd.field_type FROM stage_gates AS sg
+    //   INNER JOIN field_definitions AS fd ... WHERE sg.id = $1 AND sg.tenant_id = $2
+    if (
+      s.includes('FROM STAGE_GATES AS SG') &&
+      s.includes('JOIN FIELD_DEFINITIONS AS FD') &&
+      s.includes('SG.ID =')
+    ) {
       const gateId = params![0] as string;
       const gate = fakeGates.get(gateId);
       if (!gate) return { rows: [] };
       const field = fakeFields.get(gate.field_id as string);
       if (!field) return { rows: [] };
       return {
-        rows: [{
-          id: gate.id,
-          stage_id: gate.stage_id,
-          field_id: gate.field_id,
-          gate_type: gate.gate_type,
-          gate_value: gate.gate_value,
-          error_message: gate.error_message,
-          field_label: field.label,
-          field_type: field.field_type,
-        }],
+        rows: [
+          {
+            id: gate.id,
+            stage_id: gate.stage_id,
+            field_id: gate.field_id,
+            gate_type: gate.gate_type,
+            gate_value: gate.gate_value,
+            error_message: gate.error_message,
+            field_label: field.label,
+            field_type: field.field_type,
+          },
+        ],
       };
     }
 
-    // SELECT sg.* with JOIN fd (gate with field metadata) WHERE sg.stage_id = $1 ORDER BY sg.id
-    if (s.includes('FROM STAGE_GATES SG') && s.includes('JOIN FIELD_DEFINITIONS FD') && s.includes('WHERE SG.STAGE_ID = $1')) {
+    // Same join, list variant: WHERE sg.stage_id = $1 AND sg.tenant_id = $2 ORDER BY sg.id
+    if (
+      s.includes('FROM STAGE_GATES AS SG') &&
+      s.includes('JOIN FIELD_DEFINITIONS AS FD') &&
+      s.includes('SG.STAGE_ID =')
+    ) {
       const stageId = params![0] as string;
       const gates = [...fakeGates.values()].filter((g) => g.stage_id === stageId);
       const rows = gates.map((g) => {
@@ -105,8 +182,12 @@ const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery
       return { rows };
     }
 
-    // SELECT * FROM stage_gates WHERE id = $1 AND stage_id = $2
-    if (s.startsWith('SELECT * FROM STAGE_GATES WHERE ID = $1 AND STAGE_ID')) {
+    // SELECT * FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3
+    //   (updateStageGate existing gate lookup — selectAll, no alias)
+    if (
+      s.startsWith('SELECT * FROM STAGE_GATES') &&
+      s.includes('STAGE_ID')
+    ) {
       const gateId = params![0] as string;
       const stageId = params![1] as string;
       const gate = fakeGates.get(gateId);
@@ -114,8 +195,12 @@ const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery
       return { rows: [] };
     }
 
-    // SELECT id FROM stage_gates WHERE id = $1 AND stage_id = $2
-    if (s.startsWith('SELECT ID FROM STAGE_GATES WHERE ID = $1 AND STAGE_ID')) {
+    // SELECT id FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3
+    //   (deleteStageGate existence check)
+    if (
+      s.startsWith('SELECT ID FROM STAGE_GATES') &&
+      s.includes('STAGE_ID')
+    ) {
       const gateId = params![0] as string;
       const stageId = params![1] as string;
       const gate = fakeGates.get(gateId);
@@ -123,23 +208,31 @@ const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery
       return { rows: [] };
     }
 
-    // UPDATE stage_gates SET ...
+    // UPDATE stage_gates SET ... WHERE id = $N AND stage_id = $N+1 AND tenant_id = $N+2
+    //   Kysely emits SET clauses in the order of the object keys (insertion
+    //   order). updateStageGate builds `updates` in a fixed order:
+    //     gate_type → gate_value → error_message
+    //   so the bound params come in that order followed by id, stage_id, tenant_id.
     if (s.startsWith('UPDATE STAGE_GATES SET')) {
-      const gateId = params![params!.length - 3] as string;
-      const stageId = params![params!.length - 2] as string;
+      let paramIdx = 0;
+      const updateOrder: Array<'gate_type' | 'gate_value' | 'error_message'> = [];
+      if (s.includes('GATE_TYPE =')) updateOrder.push('gate_type');
+      if (s.includes('GATE_VALUE =')) updateOrder.push('gate_value');
+      if (s.includes('ERROR_MESSAGE =')) updateOrder.push('error_message');
+      const gateId = params![paramIdx + updateOrder.length] as string;
+      const stageId = params![paramIdx + updateOrder.length + 1] as string;
       const gate = fakeGates.get(gateId);
       if (gate && gate.stage_id === stageId) {
-        let paramIdx = 0;
-        if (s.includes('GATE_TYPE =')) { gate.gate_type = params![paramIdx++]; }
-        if (s.includes('GATE_VALUE =')) { gate.gate_value = params![paramIdx++]; }
-        if (s.includes('ERROR_MESSAGE =')) { gate.error_message = params![paramIdx++]; }
+        for (const col of updateOrder) {
+          gate[col] = params![paramIdx++];
+        }
         fakeGates.set(gateId, gate);
         return { rows: [gate] };
       }
       return { rows: [] };
     }
 
-    // DELETE FROM stage_gates
+    // DELETE FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3
     if (s.startsWith('DELETE FROM STAGE_GATES')) {
       const gateId = params![0] as string;
       const stageId = params![1] as string;
@@ -152,13 +245,34 @@ const { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const rawSql = typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return runQuery(rawSql, params);
   });
 
-  return { fakeStages, fakePipelines, fakeObjects, fakeFields, fakeGates, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql = typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return runQuery(rawSql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return {
+    fakeStages,
+    fakePipelines,
+    fakeObjects,
+    fakeFields,
+    fakeGates,
+    mockQuery,
+    mockConnect,
+  };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 import {

@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
+import type { Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { StageGates } from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,18 +60,29 @@ function throwConflictError(message: string): never {
 
 // ─── Row → response model ───────────────────────────────────────────────────
 
-function rowToStageGateResponse(row: Record<string, unknown>): StageGateResponse {
+interface GateWithFieldRow {
+  id: string;
+  stage_id: string;
+  field_id: string;
+  gate_type: string;
+  gate_value: string | null;
+  error_message: string | null;
+  field_label: string;
+  field_type: string;
+}
+
+function rowToStageGateResponse(row: GateWithFieldRow): StageGateResponse {
   return {
-    id: row.id as string,
-    stageId: row.stage_id as string,
+    id: row.id,
+    stageId: row.stage_id,
     field: {
-      id: row.field_id as string,
-      label: row.field_label as string,
-      fieldType: row.field_type as string,
+      id: row.field_id,
+      label: row.field_label,
+      fieldType: row.field_type,
     },
-    gateType: row.gate_type as string,
-    gateValue: (row.gate_value as string | null) ?? null,
-    errorMessage: (row.error_message as string | null) ?? null,
+    gateType: row.gate_type,
+    gateValue: row.gate_value ?? null,
+    errorMessage: row.error_message ?? null,
   };
 }
 
@@ -81,24 +94,31 @@ interface StageWithObject {
   objectId: string;
 }
 
-async function resolveStageAndObject(tenantId: string, stageId: string): Promise<StageWithObject> {
-  const result = await pool.query(
-    `SELECT sd.id AS stage_id, sd.pipeline_id, pd.object_id
-     FROM stage_definitions sd
-     JOIN pipeline_definitions pd ON pd.id = sd.pipeline_id
-     WHERE sd.id = $1 AND sd.tenant_id = $2`,
-    [stageId, tenantId],
-  );
+async function resolveStageAndObject(
+  tenantId: string,
+  stageId: string,
+): Promise<StageWithObject> {
+  const row = await db
+    .selectFrom('stage_definitions as sd')
+    .innerJoin('pipeline_definitions as pd', (join) =>
+      join
+        .onRef('pd.id', '=', 'sd.pipeline_id')
+        .onRef('pd.tenant_id', '=', 'sd.tenant_id'),
+    )
+    .select(['sd.id as stage_id', 'sd.pipeline_id', 'pd.object_id'])
+    .where('sd.id', '=', stageId)
+    .where('sd.tenant_id', '=', tenantId)
+    .where('pd.tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (result.rows.length === 0) {
+  if (!row) {
     throwNotFoundError('Stage not found');
   }
 
-  const row = result.rows[0] as Record<string, unknown>;
   return {
-    stageId: row.stage_id as string,
-    pipelineId: row.pipeline_id as string,
-    objectId: row.object_id as string,
+    stageId: row.stage_id,
+    pipelineId: row.pipeline_id,
+    objectId: row.object_id,
   };
 }
 
@@ -109,21 +129,24 @@ interface FieldInfo {
   options: Record<string, unknown>;
 }
 
-async function getFieldInfo(fieldId: string, tenantId?: string): Promise<FieldInfo | null> {
-  const query = tenantId
-    ? 'SELECT id, field_type, label, options FROM field_definitions WHERE id = $1 AND tenant_id = $2'
-    : 'SELECT id, field_type, label, options FROM field_definitions WHERE id = $1';
-  const params: unknown[] = tenantId ? [fieldId, tenantId] : [fieldId];
-  const result = await pool.query(query, params);
+async function getFieldInfo(
+  fieldId: string,
+  tenantId: string,
+): Promise<FieldInfo | null> {
+  const row = await db
+    .selectFrom('field_definitions')
+    .select(['id', 'field_type', 'label', 'options'])
+    .where('id', '=', fieldId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (result.rows.length === 0) return null;
+  if (!row) return null;
 
-  const row = result.rows[0] as Record<string, unknown>;
   return {
-    id: row.id as string,
-    fieldType: row.field_type as string,
-    label: row.label as string,
-    options: (row.options as Record<string, unknown>) ?? {},
+    id: row.id,
+    fieldType: row.field_type,
+    label: row.label,
+    options: (row.options as Record<string, unknown> | null) ?? {},
   };
 }
 
@@ -174,13 +197,35 @@ function validateGateTypeAgainstField(
   }
 }
 
-// ─── Query fragment for gates with field metadata ───────────────────────────
-
-const GATE_SELECT_SQL = `
-  SELECT sg.id, sg.stage_id, sg.field_id, sg.gate_type, sg.gate_value, sg.error_message,
-         fd.label AS field_label, fd.field_type
-  FROM stage_gates sg
-  JOIN field_definitions fd ON fd.id = sg.field_id`;
+/**
+ * Select a stage_gate joined to its field_definition, returning the row shape
+ * expected by rowToStageGateResponse.
+ *
+ * The join enforces `fd.tenant_id = sg.tenant_id` so defence-in-depth
+ * (ADR-006) holds for both tables once the caller applies a
+ * `sg.tenant_id = :tenant` predicate — a stage gate cannot accidentally
+ * surface field metadata from another tenant even if a corrupt row
+ * references an out-of-tenant field_id.
+ */
+function selectGateWithField() {
+  return db
+    .selectFrom('stage_gates as sg')
+    .innerJoin('field_definitions as fd', (join) =>
+      join
+        .onRef('fd.id', '=', 'sg.field_id')
+        .onRef('fd.tenant_id', '=', 'sg.tenant_id'),
+    )
+    .select([
+      'sg.id',
+      'sg.stage_id',
+      'sg.field_id',
+      'sg.gate_type',
+      'sg.gate_value',
+      'sg.error_message',
+      'fd.label as field_label',
+      'fd.field_type',
+    ]);
+}
 
 // ─── Service functions ───────────────────────────────────────────────────────
 
@@ -189,15 +234,19 @@ const GATE_SELECT_SQL = `
  *
  * @throws {Error} NOT_FOUND — stage does not exist
  */
-export async function listStageGates(tenantId: string, stageId: string): Promise<StageGateResponse[]> {
+export async function listStageGates(
+  tenantId: string,
+  stageId: string,
+): Promise<StageGateResponse[]> {
   await resolveStageAndObject(tenantId, stageId);
 
-  const result = await pool.query(
-    `${GATE_SELECT_SQL} WHERE sg.stage_id = $1 AND sg.tenant_id = $2 ORDER BY sg.id`,
-    [stageId, tenantId],
-  );
+  const rows = await selectGateWithField()
+    .where('sg.stage_id', '=', stageId)
+    .where('sg.tenant_id', '=', tenantId)
+    .orderBy('sg.id')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => rowToStageGateResponse(row));
+  return rows.map(rowToStageGateResponse);
 }
 
 /**
@@ -233,11 +282,15 @@ export async function createStageGate(
     throwNotFoundError('Field not found');
   }
 
-  const fieldBelongsToObject = await pool.query(
-    'SELECT id FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [params.fieldId, stageInfo.objectId, tenantId],
-  );
-  if (fieldBelongsToObject.rows.length === 0) {
+  const fieldBelongsToObject = await db
+    .selectFrom('field_definitions')
+    .select('id')
+    .where('id', '=', params.fieldId)
+    .where('object_id', '=', stageInfo.objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+
+  if (!fieldBelongsToObject) {
     throwValidationError('Field does not belong to the same object as the pipeline');
   }
 
@@ -245,39 +298,42 @@ export async function createStageGate(
   validateGateTypeAgainstField(params.gateType, params.gateValue ?? null, field);
 
   // Check for duplicate gate on same field/stage
-  const duplicate = await pool.query(
-    'SELECT id FROM stage_gates WHERE stage_id = $1 AND field_id = $2 AND tenant_id = $3',
-    [stageId, params.fieldId, tenantId],
-  );
-  if (duplicate.rows.length > 0) {
+  const duplicate = await db
+    .selectFrom('stage_gates')
+    .select('id')
+    .where('stage_id', '=', stageId)
+    .where('field_id', '=', params.fieldId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+
+  if (duplicate) {
     throwConflictError('A gate already exists for this field on this stage');
   }
 
   const gateId = randomUUID();
 
-  await pool.query(
-    `INSERT INTO stage_gates (id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      gateId,
-      tenantId,
-      stageId,
-      params.fieldId,
-      params.gateType,
-      params.gateValue ?? null,
-      params.errorMessage ?? null,
-    ],
-  );
+  await db
+    .insertInto('stage_gates')
+    .values({
+      id: gateId,
+      tenant_id: tenantId,
+      stage_id: stageId,
+      field_id: params.fieldId,
+      gate_type: params.gateType,
+      gate_value: params.gateValue ?? null,
+      error_message: params.errorMessage ?? null,
+    })
+    .execute();
 
   // Fetch the created gate with field metadata
-  const result = await pool.query(
-    `${GATE_SELECT_SQL} WHERE sg.id = $1 AND sg.tenant_id = $2`,
-    [gateId, tenantId],
-  );
+  const created = await selectGateWithField()
+    .where('sg.id', '=', gateId)
+    .where('sg.tenant_id', '=', tenantId)
+    .executeTakeFirstOrThrow();
 
   logger.info({ gateId, stageId, fieldId: params.fieldId }, 'Stage gate created');
 
-  return rowToStageGateResponse(result.rows[0] as Record<string, unknown>);
+  return rowToStageGateResponse(created);
 }
 
 /**
@@ -295,80 +351,66 @@ export async function updateStageGate(
   await resolveStageAndObject(tenantId, stageId);
 
   // Fetch existing gate
-  const existing = await pool.query(
-    'SELECT * FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3',
-    [gateId, stageId, tenantId],
-  );
+  const existingRow = await db
+    .selectFrom('stage_gates')
+    .selectAll()
+    .where('id', '=', gateId)
+    .where('stage_id', '=', stageId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existingRow) {
     throwNotFoundError('Stage gate not found');
   }
 
-  const existingRow = existing.rows[0] as Record<string, unknown>;
-
-  // Determine effective gate_type and gate_value
-  const effectiveGateType = params.gateType ?? (existingRow.gate_type as string);
-  const effectiveGateValue = 'gateValue' in params
-    ? (params.gateValue ?? null)
-    : (existingRow.gate_value as string | null);
+  // Determine effective gate_type and gate_value. A caller can clear
+  // gate_value by passing null explicitly; passing undefined (or omitting
+  // the key) means "keep the existing value".
+  const effectiveGateType =
+    params.gateType !== undefined ? params.gateType : existingRow.gate_type;
+  const effectiveGateValue =
+    params.gateValue !== undefined ? params.gateValue : existingRow.gate_value;
 
   if (!ALLOWED_GATE_TYPES.has(effectiveGateType)) {
     throwValidationError(`gate_type must be one of: ${[...ALLOWED_GATE_TYPES].join(', ')}`);
   }
 
   // Validate gate_type against field_type
-  const field = await getFieldInfo(existingRow.field_id as string, tenantId);
+  const field = await getFieldInfo(existingRow.field_id, tenantId);
   if (!field) {
     throwNotFoundError('Field not found');
   }
 
   validateGateTypeAgainstField(effectiveGateType, effectiveGateValue, field);
 
-  // Build dynamic update
-  const updates: string[] = [];
-  const values: unknown[] = [];
-  let paramIndex = 1;
+  // Build a typed update object so Kysely enforces the column/value
+  // contract from the generated schema. Only defined values are
+  // included — passing `undefined` on the params object is treated as
+  // "leave unchanged", so we never emit `SET col = NULL` unintentionally.
+  const updates: Updateable<StageGates> = {};
+  if (params.gateType !== undefined) updates.gate_type = params.gateType;
+  if (params.gateValue !== undefined) updates.gate_value = params.gateValue;
+  if (params.errorMessage !== undefined) updates.error_message = params.errorMessage;
 
-  if ('gateType' in params) {
-    updates.push(`gate_type = $${paramIndex++}`);
-    values.push(params.gateType);
+  if (Object.keys(updates).length > 0) {
+    await db
+      .updateTable('stage_gates')
+      .set(updates)
+      .where('id', '=', gateId)
+      .where('stage_id', '=', stageId)
+      .where('tenant_id', '=', tenantId)
+      .execute();
   }
-  if ('gateValue' in params) {
-    updates.push(`gate_value = $${paramIndex++}`);
-    values.push(params.gateValue ?? null);
-  }
-  if ('errorMessage' in params) {
-    updates.push(`error_message = $${paramIndex++}`);
-    values.push(params.errorMessage ?? null);
-  }
-
-  if (updates.length === 0) {
-    // Nothing to update — return existing gate with field metadata
-    const result = await pool.query(
-      `${GATE_SELECT_SQL} WHERE sg.id = $1 AND sg.tenant_id = $2`,
-      [gateId, tenantId],
-    );
-    return rowToStageGateResponse(result.rows[0] as Record<string, unknown>);
-  }
-
-  values.push(gateId);
-  values.push(stageId);
-  values.push(tenantId);
-
-  await pool.query(
-    `UPDATE stage_gates SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND stage_id = $${paramIndex++} AND tenant_id = $${paramIndex}`,
-    values,
-  );
 
   // Fetch the updated gate with field metadata
-  const result = await pool.query(
-    `${GATE_SELECT_SQL} WHERE sg.id = $1 AND sg.tenant_id = $2`,
-    [gateId, tenantId],
-  );
+  const updated = await selectGateWithField()
+    .where('sg.id', '=', gateId)
+    .where('sg.tenant_id', '=', tenantId)
+    .executeTakeFirstOrThrow();
 
   logger.info({ gateId, stageId }, 'Stage gate updated');
 
-  return rowToStageGateResponse(result.rows[0] as Record<string, unknown>);
+  return rowToStageGateResponse(updated);
 }
 
 /**
@@ -383,19 +425,24 @@ export async function deleteStageGate(
 ): Promise<void> {
   await resolveStageAndObject(tenantId, stageId);
 
-  const existing = await pool.query(
-    'SELECT id FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3',
-    [gateId, stageId, tenantId],
-  );
+  const existing = await db
+    .selectFrom('stage_gates')
+    .select('id')
+    .where('id', '=', gateId)
+    .where('stage_id', '=', stageId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existing) {
     throwNotFoundError('Stage gate not found');
   }
 
-  await pool.query(
-    'DELETE FROM stage_gates WHERE id = $1 AND stage_id = $2 AND tenant_id = $3',
-    [gateId, stageId, tenantId],
-  );
+  await db
+    .deleteFrom('stage_gates')
+    .where('id', '=', gateId)
+    .where('stage_id', '=', stageId)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
   logger.info({ gateId, stageId }, 'Stage gate deleted');
 }
