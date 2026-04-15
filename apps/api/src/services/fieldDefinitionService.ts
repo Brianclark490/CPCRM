@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
+import { sql, type Selectable, type Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { FieldDefinitions } from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,21 +89,30 @@ function throwConflictError(message: string): never {
 
 // ─── Row → domain model ─────────────────────────────────────────────────────
 
-function rowToFieldDefinition(row: Record<string, unknown>): FieldDefinition {
+/**
+ * Row shape returned by `selectAll()` / `returningAll()` against
+ * `field_definitions`. Typing the mapper against `Selectable<FieldDefinitions>`
+ * means schema drift (a renamed column, a changed nullability) is a
+ * compile-time error at the call sites, rather than an `unknown` cast
+ * leaking an incorrect runtime shape into the domain model.
+ */
+type FieldDefinitionRow = Selectable<FieldDefinitions>;
+
+function rowToFieldDefinition(row: FieldDefinitionRow): FieldDefinition {
   return {
-    id: row.id as string,
-    objectId: row.object_id as string,
-    apiName: row.api_name as string,
-    label: row.label as string,
-    fieldType: row.field_type as string,
-    description: (row.description as string | null) ?? undefined,
-    required: row.required as boolean,
-    defaultValue: (row.default_value as string | null) ?? undefined,
-    options: (row.options as Record<string, unknown>) ?? {},
-    sortOrder: row.sort_order as number,
-    isSystem: row.is_system as boolean,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    id: row.id,
+    objectId: row.object_id,
+    apiName: row.api_name,
+    label: row.label,
+    fieldType: row.field_type,
+    description: row.description ?? undefined,
+    required: row.required,
+    defaultValue: row.default_value ?? undefined,
+    options: (row.options as Record<string, unknown> | null) ?? {},
+    sortOrder: row.sort_order,
+    isSystem: row.is_system,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -259,11 +270,13 @@ export function validateFieldOptions(
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 async function assertObjectExists(tenantId: string, objectId: string): Promise<void> {
-  const result = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [objectId, tenantId],
-  );
-  if (result.rows.length === 0) {
+  const row = await db
+    .selectFrom('object_definitions')
+    .select('id')
+    .where('id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (!row) {
     throwNotFoundError('Object definition not found');
   }
 }
@@ -299,75 +312,91 @@ export async function createFieldDefinition(
   if (optionsError) throwValidationError(optionsError);
 
   // Check uniqueness of api_name within this object and tenant
-  const existing = await pool.query(
-    'SELECT id FROM field_definitions WHERE object_id = $1 AND api_name = $2 AND tenant_id = $3',
-    [objectId, params.apiName.trim(), tenantId],
-  );
-  if (existing.rows.length > 0) {
+  const existing = await db
+    .selectFrom('field_definitions')
+    .select('id')
+    .where('object_id', '=', objectId)
+    .where('api_name', '=', params.apiName.trim())
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (existing) {
     throwConflictError(`A field with api_name "${params.apiName.trim()}" already exists on this object`);
   }
 
   // Determine next sort_order
-  const maxSortResult = await pool.query(
-    'SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM field_definitions WHERE object_id = $1 AND tenant_id = $2',
-    [objectId, tenantId],
-  );
-  const nextSortOrder = (parseInt(maxSortResult.rows[0].max_sort as string, 10) || 0) + 1;
+  const maxSortRow = await db
+    .selectFrom('field_definitions')
+    .select(sql<string>`COALESCE(MAX(sort_order), 0)`.as('max_sort'))
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirstOrThrow();
+  const nextSortOrder = (parseInt(maxSortRow.max_sort, 10) || 0) + 1;
 
   const fieldId = randomUUID();
   const now = new Date();
 
-  const result = await pool.query(
-    `INSERT INTO field_definitions
-       (id, tenant_id, object_id, api_name, label, field_type, description, required, default_value, options, sort_order, is_system, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-     RETURNING *`,
-    [
-      fieldId,
-      tenantId,
-      objectId,
-      params.apiName.trim(),
-      params.label.trim(),
-      params.fieldType.trim(),
-      params.description?.trim() ?? null,
-      params.required ?? false,
-      params.defaultValue ?? null,
-      JSON.stringify(params.options ?? {}),
-      nextSortOrder,
-      false,
-      now,
-      now,
-    ],
-  );
+  const inserted = await db
+    .insertInto('field_definitions')
+    .values({
+      id: fieldId,
+      tenant_id: tenantId,
+      object_id: objectId,
+      api_name: params.apiName.trim(),
+      label: params.label.trim(),
+      field_type: params.fieldType.trim(),
+      description: params.description?.trim() ?? null,
+      required: params.required ?? false,
+      default_value: params.defaultValue ?? null,
+      options: JSON.stringify(params.options ?? {}),
+      sort_order: nextSortOrder,
+      is_system: false,
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   // Auto-add to default form layout
-  const defaultFormLayout = await pool.query(
-    `SELECT id FROM layout_definitions
-     WHERE object_id = $1 AND layout_type = 'form' AND is_default = true AND tenant_id = $2
-     LIMIT 1`,
-    [objectId, tenantId],
-  );
+  const defaultFormLayout = await db
+    .selectFrom('layout_definitions')
+    .select('id')
+    .where('object_id', '=', objectId)
+    .where('layout_type', '=', 'form')
+    .where('is_default', '=', true)
+    .where('tenant_id', '=', tenantId)
+    .limit(1)
+    .executeTakeFirst();
 
-  if (defaultFormLayout.rows.length > 0) {
-    const layoutId = defaultFormLayout.rows[0].id as string;
+  if (defaultFormLayout) {
+    const layoutId = defaultFormLayout.id;
 
     // Determine next sort_order within the layout
-    const maxLayoutSort = await pool.query(
-      'SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM layout_fields WHERE layout_id = $1',
-      [layoutId],
-    );
-    const nextLayoutSortOrder = (parseInt(maxLayoutSort.rows[0].max_sort as string, 10) || 0) + 1;
+    const maxLayoutSortRow = await db
+      .selectFrom('layout_fields')
+      .select(sql<string>`COALESCE(MAX(sort_order), 0)`.as('max_sort'))
+      .where('layout_id', '=', layoutId)
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirstOrThrow();
+    const nextLayoutSortOrder =
+      (parseInt(maxLayoutSortRow.max_sort, 10) || 0) + 1;
 
-    await pool.query(
-      `INSERT INTO layout_fields (id, layout_id, field_id, section, sort_order, width)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [randomUUID(), layoutId, fieldId, 0, nextLayoutSortOrder, 'full'],
-    );
+    await db
+      .insertInto('layout_fields')
+      .values({
+        id: randomUUID(),
+        tenant_id: tenantId,
+        layout_id: layoutId,
+        field_id: fieldId,
+        section: 0,
+        sort_order: nextLayoutSortOrder,
+        width: 'full',
+      })
+      .execute();
   }
 
   logger.info({ fieldId, objectId, apiName: params.apiName }, 'Field definition created');
 
-  return rowToFieldDefinition(result.rows[0]);
+  return rowToFieldDefinition(inserted);
 }
 
 /**
@@ -381,12 +410,15 @@ export async function listFieldDefinitions(
 ): Promise<FieldDefinition[]> {
   await assertObjectExists(tenantId, objectId);
 
-  const result = await pool.query(
-    'SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
-    [objectId, tenantId],
-  );
+  const rows = await db
+    .selectFrom('field_definitions')
+    .selectAll()
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .orderBy('sort_order', 'asc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => rowToFieldDefinition(row));
+  return rows.map((row) => rowToFieldDefinition(row));
 }
 
 /**
@@ -406,20 +438,20 @@ export async function updateFieldDefinition(
 ): Promise<FieldDefinition & { warning?: string }> {
   await assertObjectExists(tenantId, objectId);
 
-  const existing = await pool.query(
-    'SELECT * FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [fieldId, objectId, tenantId],
-  );
+  const existingRow = await db
+    .selectFrom('field_definitions')
+    .selectAll()
+    .where('id', '=', fieldId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existingRow) {
     throwNotFoundError('Field definition not found');
   }
 
-  const row = existing.rows[0] as Record<string, unknown>;
-  const isSystem = row.is_system as boolean;
-
   // System fields: cannot change field_type
-  if (isSystem && params.fieldType !== undefined) {
+  if (existingRow.is_system && params.fieldType !== undefined) {
     throwValidationError('Cannot change field_type on system fields');
   }
 
@@ -435,73 +467,55 @@ export async function updateFieldDefinition(
   }
 
   // Determine the effective field type for options validation
-  const effectiveFieldType = params.fieldType?.trim() ?? (row.field_type as string);
+  const effectiveFieldType = params.fieldType?.trim() ?? existingRow.field_type;
 
   if (params.options !== undefined) {
     const optionsError = validateFieldOptions(effectiveFieldType, params.options);
     if (optionsError) throwValidationError(optionsError);
   }
 
-  // Build dynamic update
-  const updates: string[] = [];
-  const values: unknown[] = [];
-  let paramIndex = 1;
+  // Build a typed update object so Kysely enforces the column/value
+  // contract from the generated schema. Only keys the caller explicitly
+  // provided are emitted — `undefined` means "leave unchanged".
+  const updates: Updateable<FieldDefinitions> = {};
+  if (params.label !== undefined) updates.label = params.label.trim();
+  if (params.fieldType !== undefined) updates.field_type = params.fieldType.trim();
+  if (params.description !== undefined) updates.description = params.description?.trim() ?? null;
+  if (params.required !== undefined) updates.required = params.required;
+  if (params.defaultValue !== undefined) updates.default_value = params.defaultValue ?? null;
+  if (params.options !== undefined) updates.options = JSON.stringify(params.options);
 
-  if ('label' in params) {
-    updates.push(`label = $${paramIndex++}`);
-    values.push(params.label!.trim());
-  }
-  if ('fieldType' in params) {
-    updates.push(`field_type = $${paramIndex++}`);
-    values.push(params.fieldType!.trim());
-  }
-  if ('description' in params) {
-    updates.push(`description = $${paramIndex++}`);
-    values.push(params.description?.trim() ?? null);
-  }
-  if ('required' in params) {
-    updates.push(`required = $${paramIndex++}`);
-    values.push(params.required);
-  }
-  if ('defaultValue' in params) {
-    updates.push(`default_value = $${paramIndex++}`);
-    values.push(params.defaultValue ?? null);
-  }
-  if ('options' in params) {
-    updates.push(`options = $${paramIndex++}`);
-    values.push(JSON.stringify(params.options));
+  if (Object.keys(updates).length === 0) {
+    return rowToFieldDefinition(existingRow);
   }
 
-  if (updates.length === 0) {
-    return rowToFieldDefinition(row);
-  }
+  updates.updated_at = new Date();
 
-  const now = new Date();
-  updates.push(`updated_at = $${paramIndex++}`);
-  values.push(now);
-
-  values.push(fieldId);
-  values.push(objectId);
-
-  const result = await pool.query(
-    `UPDATE field_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND object_id = $${paramIndex} RETURNING *`,
-    values,
-  );
+  const updatedRow = await db
+    .updateTable('field_definitions')
+    .set(updates)
+    .where('id', '=', fieldId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ fieldId, objectId }, 'Field definition updated');
 
-  const updated = rowToFieldDefinition(result.rows[0]);
+  const updated = rowToFieldDefinition(updatedRow);
 
   // Warn if field_type changed and records exist
   let warning: string | undefined;
-  if (params.fieldType !== undefined && params.fieldType.trim() !== (row.field_type as string)) {
-    const recordCount = await pool.query(
-      'SELECT COUNT(*) AS count FROM records WHERE object_id = $1 AND tenant_id = $2',
-      [objectId, tenantId],
-    );
-    const count = parseInt(recordCount.rows[0].count as string, 10);
+  if (params.fieldType !== undefined && params.fieldType.trim() !== existingRow.field_type) {
+    const recordCountRow = await db
+      .selectFrom('records')
+      .select(sql<string>`COUNT(*)`.as('count'))
+      .where('object_id', '=', objectId)
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirstOrThrow();
+    const count = parseInt(recordCountRow.count, 10);
     if (count > 0) {
-      warning = `field_type changed from "${row.field_type}" to "${params.fieldType.trim()}"; ${count} existing record(s) may contain data that does not match the new type`;
+      warning = `field_type changed from "${existingRow.field_type}" to "${params.fieldType.trim()}"; ${count} existing record(s) may contain data that does not match the new type`;
     }
   }
 
@@ -527,27 +541,30 @@ export async function deleteFieldDefinition(
 ): Promise<void> {
   await assertObjectExists(tenantId, objectId);
 
-  const existing = await pool.query(
-    'SELECT * FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [fieldId, objectId, tenantId],
-  );
+  const existingRow = await db
+    .selectFrom('field_definitions')
+    .selectAll()
+    .where('id', '=', fieldId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existingRow) {
     throwNotFoundError('Field definition not found');
   }
 
-  const row = existing.rows[0] as Record<string, unknown>;
-
-  if (row.is_system === true) {
+  if (existingRow.is_system === true) {
     throwDeleteBlockedError('Cannot delete system fields');
   }
 
   // layout_fields has ON DELETE CASCADE from field_definitions, so deleting
   // the field definition will automatically remove it from all layouts.
-  await pool.query(
-    'DELETE FROM field_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [fieldId, objectId, tenantId],
-  );
+  await db
+    .deleteFrom('field_definitions')
+    .where('id', '=', fieldId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
   logger.info({ fieldId, objectId }, 'Field definition deleted');
 }
@@ -579,14 +596,16 @@ export async function reorderFieldDefinitions(
   const fieldCount = sanitizedFieldIds.length;
 
   // Verify all field IDs belong to this object
-  const existingFields = await pool.query(
-    'SELECT id FROM field_definitions WHERE object_id = $1 AND tenant_id = $2',
-    [objectId, tenantId],
-  );
-  const existingIds = new Set(existingFields.rows.map((r: Record<string, unknown>) => r.id as string));
+  const existingFields = await db
+    .selectFrom('field_definitions')
+    .select('id')
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .execute();
+  const existingIds = new Set(existingFields.map((r) => r.id));
 
   for (let i = 0; i < fieldCount; i++) {
-    if (!existingIds.has(sanitizedFieldIds[i])) {
+    if (!existingIds.has(sanitizedFieldIds[i]!)) {
       throwValidationError(`Field ID "${sanitizedFieldIds[i]}" does not belong to this object`);
     }
   }
@@ -594,19 +613,25 @@ export async function reorderFieldDefinitions(
   // Update sort_order for each field
   const now = new Date();
   for (let i = 0; i < fieldCount; i++) {
-    await pool.query(
-      'UPDATE field_definitions SET sort_order = $1, updated_at = $2 WHERE id = $3 AND object_id = $4',
-      [i + 1, now, sanitizedFieldIds[i], objectId],
-    );
+    await db
+      .updateTable('field_definitions')
+      .set({ sort_order: i + 1, updated_at: now })
+      .where('id', '=', sanitizedFieldIds[i]!)
+      .where('object_id', '=', objectId)
+      .where('tenant_id', '=', tenantId)
+      .execute();
   }
 
   logger.info({ objectId, fieldCount }, 'Field definitions reordered');
 
   // Return the updated list
-  const result = await pool.query(
-    'SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order ASC',
-    [objectId, tenantId],
-  );
+  const rows = await db
+    .selectFrom('field_definitions')
+    .selectAll()
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .orderBy('sort_order', 'asc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => rowToFieldDefinition(row));
+  return rows.map((row) => rowToFieldDefinition(row));
 }

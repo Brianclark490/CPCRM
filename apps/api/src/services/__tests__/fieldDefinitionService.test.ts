@@ -19,19 +19,39 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// NOTE (Phase 3b Kysely migration, issue #445): the service is now on
+// Kysely. The mock below matches Kysely-emitted SQL — identifier
+// quoting is stripped by the normaliser, matching the pattern used by
+// stageMovementService.test.ts and stageGateService.test.ts.
+//
+// A dedicated Kysely SQL regression suite lives next door:
+//   apps/api/src/services/__tests__/fieldDefinitionService.kysely-sql.test.ts
 
-const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, mockQuery } = vi.hoisted(() => {
+const {
+  fakeObjects,
+  fakeFields,
+  fakeRecords,
+  fakeLayouts,
+  fakeLayoutFields,
+  mockQuery,
+  mockConnect,
+} = vi.hoisted(() => {
   const fakeObjects = new Map<string, Record<string, unknown>>();
   const fakeFields = new Map<string, Record<string, unknown>>();
   const fakeRecords = new Map<string, Record<string, unknown>>();
   const fakeLayouts = new Map<string, Record<string, unknown>>();
   const fakeLayoutFields = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function runQuery(rawSql: string, params?: unknown[]) {
+    // Strip identifier quoting so matching is quote-agnostic.
+    const s = rawSql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
-    // SELECT id FROM object_definitions WHERE id = $1
-    if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE ID')) {
+    // SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2
+    if (
+      s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS') &&
+      s.includes('WHERE ID')
+    ) {
       const id = params![0] as string;
       const row = fakeObjects.get(id);
       if (row) return { rows: [{ id: row.id }] };
@@ -39,7 +59,11 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
     }
 
     // SELECT id FROM field_definitions WHERE object_id = $1 AND api_name = $2
-    if (s.startsWith('SELECT ID FROM FIELD_DEFINITIONS WHERE OBJECT_ID') && s.includes('API_NAME')) {
+    if (
+      s.startsWith('SELECT ID FROM FIELD_DEFINITIONS') &&
+      s.includes('OBJECT_ID') &&
+      s.includes('API_NAME')
+    ) {
       const objectId = params![0] as string;
       const apiName = params![1] as string;
       const match = [...fakeFields.values()].find(
@@ -60,43 +84,97 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
     // SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM layout_fields
     if (s.includes('MAX(SORT_ORDER)') && s.includes('LAYOUT_FIELDS')) {
       const layoutId = params![0] as string;
-      const lfs = [...fakeLayoutFields.values()].filter((lf) => lf.layout_id === layoutId);
-      const maxSort = lfs.reduce((max, lf) => Math.max(max, lf.sort_order as number), 0);
+      const lfs = [...fakeLayoutFields.values()].filter(
+        (lf) => lf.layout_id === layoutId,
+      );
+      const maxSort = lfs.reduce(
+        (max, lf) => Math.max(max, lf.sort_order as number),
+        0,
+      );
       return { rows: [{ max_sort: String(maxSort) }] };
     }
 
-    // INSERT INTO field_definitions
+    // INSERT INTO field_definitions — Kysely binds values in the column
+    // order declared in the service's `.values({...})` call.
     if (s.startsWith('INSERT INTO FIELD_DEFINITIONS')) {
-      const [id, _tenant_id, object_id, api_name, label, field_type, description, required, default_value, options, sort_order, is_system, created_at, updated_at] = params as unknown[];
+      const [
+        id,
+        _tenant_id,
+        object_id,
+        api_name,
+        label,
+        field_type,
+        description,
+        required,
+        default_value,
+        options,
+        sort_order,
+        is_system,
+        created_at,
+        updated_at,
+      ] = params as unknown[];
       const row: Record<string, unknown> = {
-        id, object_id, api_name, label, field_type, description, required,
-        default_value, options: typeof options === 'string' ? JSON.parse(options as string) : options,
-        sort_order, is_system, created_at, updated_at,
+        id,
+        tenant_id: _tenant_id,
+        object_id,
+        api_name,
+        label,
+        field_type,
+        description,
+        required,
+        default_value,
+        options:
+          typeof options === 'string' ? JSON.parse(options as string) : options,
+        sort_order,
+        is_system,
+        created_at,
+        updated_at,
       };
       fakeFields.set(id as string, row);
       return { rows: [row] };
     }
 
     // SELECT id FROM layout_definitions WHERE object_id AND layout_type = 'form'
-    if (s.includes('FROM LAYOUT_DEFINITIONS') && s.includes('FORM') && s.includes('IS_DEFAULT')) {
+    if (
+      s.includes('FROM LAYOUT_DEFINITIONS') &&
+      s.includes('LAYOUT_TYPE') &&
+      s.includes('IS_DEFAULT')
+    ) {
       const objectId = params![0] as string;
       const match = [...fakeLayouts.values()].find(
-        (l) => l.object_id === objectId && l.layout_type === 'form' && l.is_default === true,
+        (l) =>
+          l.object_id === objectId &&
+          l.layout_type === 'form' &&
+          l.is_default === true,
       );
       if (match) return { rows: [{ id: match.id }] };
       return { rows: [] };
     }
 
-    // INSERT INTO layout_fields
+    // INSERT INTO layout_fields — columns: id, tenant_id, layout_id,
+    // field_id, section, sort_order, width
     if (s.startsWith('INSERT INTO LAYOUT_FIELDS')) {
-      const [id, layout_id, field_id, section, sort_order, width] = params as unknown[];
-      const row: Record<string, unknown> = { id, layout_id, field_id, section, sort_order, width };
+      const [id, _tenant_id, layout_id, field_id, section, sort_order, width] =
+        params as unknown[];
+      const row: Record<string, unknown> = {
+        id,
+        tenant_id: _tenant_id,
+        layout_id,
+        field_id,
+        section,
+        sort_order,
+        width,
+      };
       fakeLayoutFields.set(id as string, row);
       return { rows: [row] };
     }
 
-    // SELECT * FROM field_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY sort_order
-    if (s.startsWith('SELECT * FROM FIELD_DEFINITIONS WHERE OBJECT_ID') && s.includes('ORDER BY')) {
+    // SELECT * FROM field_definitions WHERE object_id + ORDER BY sort_order
+    if (
+      s.includes('FROM FIELD_DEFINITIONS') &&
+      s.includes('OBJECT_ID') &&
+      s.includes('ORDER BY')
+    ) {
       const objectId = params![0] as string;
       const rows = [...fakeFields.values()]
         .filter((f) => f.object_id === objectId)
@@ -104,8 +182,13 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
       return { rows };
     }
 
-    // SELECT * FROM field_definitions WHERE id = $1 AND object_id = $2
-    if (s.startsWith('SELECT * FROM FIELD_DEFINITIONS WHERE ID = $1 AND OBJECT_ID')) {
+    // SELECT * FROM field_definitions WHERE id AND object_id AND tenant_id
+    if (
+      s.startsWith('SELECT') &&
+      s.includes('FROM FIELD_DEFINITIONS') &&
+      s.includes('WHERE ID =') &&
+      s.includes('OBJECT_ID')
+    ) {
       const fieldId = params![0] as string;
       const objectId = params![1] as string;
       const match = fakeFields.get(fieldId);
@@ -114,7 +197,11 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
     }
 
     // SELECT id FROM field_definitions WHERE object_id = $1 (for reorder)
-    if (s.startsWith('SELECT ID FROM FIELD_DEFINITIONS WHERE OBJECT_ID')) {
+    if (
+      s.startsWith('SELECT ID FROM FIELD_DEFINITIONS') &&
+      s.includes('OBJECT_ID') &&
+      !s.includes('API_NAME')
+    ) {
       const objectId = params![0] as string;
       const rows = [...fakeFields.values()]
         .filter((f) => f.object_id === objectId)
@@ -123,7 +210,7 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
     }
 
     // UPDATE field_definitions SET sort_order (reorder)
-    if (s.startsWith('UPDATE FIELD_DEFINITIONS SET SORT_ORDER = $1')) {
+    if (s.startsWith('UPDATE FIELD_DEFINITIONS SET SORT_ORDER =')) {
       const sortOrder = params![0] as number;
       const updatedAt = params![1] as Date;
       const fieldId = params![2] as string;
@@ -136,24 +223,41 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
       return { rows: [] };
     }
 
-    // UPDATE field_definitions SET ... (general update)
+    // UPDATE field_definitions SET ... (general update) → ends with
+    // `... WHERE id = $N AND object_id = $N+1 AND tenant_id = $N+2`.
     if (s.startsWith('UPDATE FIELD_DEFINITIONS SET')) {
-      // The field id and object_id are the last two params
-      const fieldId = params![params!.length - 2] as string;
-      const objectId = params![params!.length - 1] as string;
+      const p = params as unknown[];
+      // id, object_id, tenant_id are the final three binds
+      const fieldId = p[p.length - 3] as string;
+      const objectId = p[p.length - 2] as string;
       const field = fakeFields.get(fieldId);
       if (field && field.object_id === objectId) {
-        const updated: Record<string, unknown> = { ...field, updated_at: new Date() };
-        // Parse SET clauses from the SQL to update fields
-        let paramIdx = 0;
-        if (s.includes('LABEL =')) { updated.label = params![paramIdx++]; }
-        if (s.includes('FIELD_TYPE =')) { updated.field_type = params![paramIdx++]; }
-        if (s.includes('DESCRIPTION =')) { updated.description = params![paramIdx++]; }
-        if (s.includes('REQUIRED =')) { updated.required = params![paramIdx++]; }
-        if (s.includes('DEFAULT_VALUE =')) { updated.default_value = params![paramIdx++]; }
+        const updated: Record<string, unknown> = { ...field };
+        let idx = 0;
+        // Match SET clauses in declaration order:
+        // label, field_type, description, required, default_value, options, updated_at
+        if (s.includes('SET LABEL =') || s.includes(', LABEL =')) {
+          updated.label = p[idx++];
+        }
+        if (s.includes('FIELD_TYPE =')) {
+          updated.field_type = p[idx++];
+        }
+        if (s.includes('DESCRIPTION =')) {
+          updated.description = p[idx++];
+        }
+        if (s.includes('REQUIRED =')) {
+          updated.required = p[idx++];
+        }
+        if (s.includes('DEFAULT_VALUE =')) {
+          updated.default_value = p[idx++];
+        }
         if (s.includes('OPTIONS =')) {
-          const opts = params![paramIdx++];
-          updated.options = typeof opts === 'string' ? JSON.parse(opts as string) : opts;
+          const opts = p[idx++];
+          updated.options =
+            typeof opts === 'string' ? JSON.parse(opts as string) : opts;
+        }
+        if (s.includes('UPDATED_AT =')) {
+          updated.updated_at = p[idx++] as Date;
         }
         fakeFields.set(fieldId, updated);
         return { rows: [updated] };
@@ -161,10 +265,12 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
       return { rows: [] };
     }
 
-    // SELECT COUNT(*) AS count FROM records WHERE object_id
-    if (s.includes('SELECT COUNT(*) AS COUNT FROM RECORDS WHERE OBJECT_ID')) {
+    // SELECT count(*) AS count FROM records WHERE object_id
+    if (s.includes('FROM RECORDS') && s.includes('COUNT(*)')) {
       const objectId = params![0] as string;
-      const count = [...fakeRecords.values()].filter((r) => r.object_id === objectId).length;
+      const count = [...fakeRecords.values()].filter(
+        (r) => r.object_id === objectId,
+      ).length;
       return { rows: [{ count: String(count) }] };
     }
 
@@ -184,13 +290,36 @@ const { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, moc
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
+    const rawSql =
+      typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    return runQuery(rawSql, params);
   });
 
-  return { fakeObjects, fakeFields, fakeRecords, fakeLayouts, fakeLayoutFields, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      const rawSql =
+        typeof sql === 'string' ? sql : (sql as { text: string }).text;
+      return runQuery(rawSql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return {
+    fakeObjects,
+    fakeFields,
+    fakeRecords,
+    fakeLayouts,
+    fakeLayoutFields,
+    mockQuery,
+    mockConnect,
+  };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
