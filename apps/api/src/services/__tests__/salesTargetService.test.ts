@@ -7,50 +7,80 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
+//
+// Kysely's PostgresDriver calls `client.query({text, values})` while the
+// legacy raw-pg path used `pool.query(sql, params)` tuples. This mock
+// accepts both shapes and normalises identifier quoting so the SQL matchers
+// stay readable.
 
-const { fakeTargets, mockQuery } = vi.hoisted(() => {
+const { fakeTargets, mockQuery, mockConnect, clientCalls } = vi.hoisted(() => {
   const fakeTargets = new Map<string, Record<string, unknown>>();
+  const clientCalls: Array<{ sql: string; params: unknown[] }> = [];
+  let targetCounter = 0;
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function runQuery(rawSql: string, params: unknown[]): { rows: unknown[]; rowCount?: number; command?: string } {
+    const s = rawSql
+      .replace(/\s+/g, ' ')
+      .replace(/"/g, '')
+      .trim()
+      .toUpperCase();
 
-    // INSERT INTO sales_targets ... RETURNING *
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+      return { rows: [] };
+    }
+    if (s.startsWith('SELECT SET_CONFIG')) {
+      return { rows: [] };
+    }
+
+    // INSERT INTO sales_targets ... ON CONFLICT ... RETURNING *
     if (s.startsWith('INSERT INTO SALES_TARGETS')) {
-      const id = 'new-target-id';
+      const id = `new-target-id-${++targetCounter}`;
+      const [
+        tenant_id,
+        target_type,
+        target_entity_id,
+        period_type,
+        period_start,
+        period_end,
+        target_value,
+        currency,
+        created_by,
+      ] = params as unknown[];
       const row = {
         id,
-        tenant_id: params![0],
-        target_type: params![1],
-        target_entity_id: params![2],
-        period_type: params![3],
-        period_start: new Date(params![4] as string),
-        period_end: new Date(params![5] as string),
-        target_value: params![6],
-        currency: params![7],
+        tenant_id,
+        target_type,
+        target_entity_id,
+        period_type,
+        period_start,
+        period_end,
+        target_value,
+        currency,
+        created_by,
         created_at: new Date(),
         updated_at: new Date(),
       };
       fakeTargets.set(id, row);
-      return { rows: [row] };
+      return { rows: [row], rowCount: 1, command: 'INSERT' };
     }
 
-    // SELECT * FROM sales_targets WHERE tenant_id = $1 (list)
-    if (s.startsWith('SELECT * FROM SALES_TARGETS WHERE TENANT_ID')) {
-      const tenantId = params![0] as string;
+    // SELECT FROM sales_targets (list)
+    if (s.includes('FROM SALES_TARGETS') && s.startsWith('SELECT')) {
+      const tenantId = params[0] as string;
       const rows = [...fakeTargets.values()].filter((t) => t.tenant_id === tenantId);
       return { rows };
     }
 
     // DELETE FROM sales_targets WHERE id = $1 AND tenant_id = $2
     if (s.startsWith('DELETE FROM SALES_TARGETS')) {
-      const targetId = params![0] as string;
-      const tenantId = params![1] as string;
+      const targetId = params[0] as string;
+      const tenantId = params[1] as string;
       const target = fakeTargets.get(targetId);
       if (target && target.tenant_id === tenantId) {
         fakeTargets.delete(targetId);
-        return { rowCount: 1 };
+        return { rows: [], rowCount: 1, command: 'DELETE' };
       }
-      return { rowCount: 0 };
+      return { rows: [], rowCount: 0, command: 'DELETE' };
     }
 
     // Actuals calculation query (COALESCE(SUM...))
@@ -60,13 +90,35 @@ const { fakeTargets, mockQuery } = vi.hoisted(() => {
 
     // Fallback
     return { rows: [] };
+  }
+
+  function normaliseCall(sqlOrQuery: unknown, paramsArg?: unknown[]) {
+    if (typeof sqlOrQuery === 'string') {
+      return { sql: sqlOrQuery, params: paramsArg ?? [] };
+    }
+    const q = sqlOrQuery as { text: string; values?: unknown[] };
+    return { sql: q.text, params: q.values ?? [] };
+  }
+
+  const mockQuery = vi.fn(async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+    const { sql, params } = normaliseCall(sqlOrQuery, paramsArg);
+    return runQuery(sql, params);
   });
 
-  return { fakeTargets, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+      const { sql, params } = normaliseCall(sqlOrQuery, paramsArg);
+      clientCalls.push({ sql, params });
+      return runQuery(sql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return { fakeTargets, mockQuery, mockConnect, clientCalls };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 const { upsertTarget, listTargets, deleteTarget, calculateActual, calculatePace } = await import(
@@ -79,6 +131,7 @@ describe('salesTargetService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fakeTargets.clear();
+    clientCalls.length = 0;
   });
 
   // ── upsertTarget ──────────────────────────────────────────────────────────
@@ -95,10 +148,9 @@ describe('salesTargetService', () => {
       });
 
       expect(result).toBeDefined();
-      expect(result.id).toBe('new-target-id');
+      expect(result.id).toBe('new-target-id-1');
       expect(result.target_type).toBe('business');
       expect(result.target_value).toBe(500000);
-      expect(mockQuery).toHaveBeenCalledTimes(1);
     });
 
     it('rejects invalid target_type', async () => {
@@ -270,8 +322,13 @@ describe('salesTargetService', () => {
     it('passes owner_id when provided', async () => {
       await calculateActual(TENANT_ID, '2026-01-01', '2026-04-01', 'user-123');
 
-      const lastCall = mockQuery.mock.calls[mockQuery.mock.calls.length - 1];
-      expect(lastCall[1]).toContain('user-123');
+      // Kysely's PostgresDriver checks out a client and runs the SELECT
+      // against it; assert the owner_id bind landed on one of the
+      // captured client.query calls.
+      const ownerIdBound = clientCalls.some((c) =>
+        c.params.some((p) => p === 'user-123'),
+      );
+      expect(ownerIdBound).toBe(true);
     });
   });
 
@@ -317,9 +374,9 @@ describe('salesTargetService', () => {
     });
 
     it('returns on_track before the period starts', () => {
-      vi.setSystemTime(new Date('2025-12-01'));
+      vi.setSystemTime(new Date('2026-12-01'));
 
-      const result = calculatePace(0, '2026-01-01', '2026-04-01');
+      const result = calculatePace(0, '2027-01-01', '2027-04-01');
       expect(result).toBe('on_track');
     });
   });
