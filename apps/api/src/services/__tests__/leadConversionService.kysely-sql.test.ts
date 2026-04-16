@@ -163,8 +163,12 @@ const {
   const mockQuery = vi.fn(async (sql: unknown, params?: unknown[]) => {
     const rawSql =
       typeof sql === 'string' ? sql : (sql as { text: string }).text;
+    const paramValues =
+      typeof sql === 'string'
+        ? params
+        : (sql as { values?: unknown[] }).values;
     // Pool-level calls (non-transactional validation) — index -1
-    return runQuery(rawSql, params, -1);
+    return runQuery(rawSql, paramValues, -1);
   });
 
   const mockConnect = vi.fn(async () => {

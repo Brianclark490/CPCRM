@@ -188,11 +188,11 @@ export async function listTargets(
     .where('tenant_id', '=', tenantId);
 
   if (periodStart) {
-    query = query.where('period_start', '>=', new Date(periodStart));
+    query = query.where('period_start', '>=', sql<Date>`${periodStart}::date`);
   }
 
   if (periodEnd) {
-    query = query.where('period_end', '<=', new Date(periodEnd));
+    query = query.where('period_end', '<=', sql<Date>`${periodEnd}::date`);
   }
 
   const rows = await query
@@ -316,8 +316,8 @@ export async function getTargetSummary(
     .selectFrom('sales_targets')
     .selectAll()
     .where('tenant_id', '=', tenantId)
-    .where('period_start', '<=', new Date(defaultEnd))
-    .where('period_end', '>=', new Date(defaultStart))
+    .where('period_start', '<=', sql<Date>`${defaultEnd}::date`)
+    .where('period_end', '>=', sql<Date>`${defaultStart}::date`)
     .orderBy('target_type', 'asc')
     .execute();
 
@@ -459,8 +459,8 @@ export async function getUserTarget(
       .where('tenant_id', '=', tenantId)
       .where('target_type', '=', 'user')
       .where('target_entity_id', '=', userRecord.id)
-      .where('period_start', '<=', new Date(defaultEnd))
-      .where('period_end', '>=', new Date(defaultStart))
+      .where('period_start', '<=', sql<Date>`${defaultEnd}::date`)
+      .where('period_end', '>=', sql<Date>`${defaultStart}::date`)
       .limit(1)
       .executeTakeFirst();
     target = targetRow ? mapRow(targetRow) : undefined;
@@ -495,8 +495,8 @@ function mapRow(row: Selectable<SalesTargets>): SalesTarget {
     target_value: parseFloat(String(row.target_value)),
     currency: row.currency ?? 'GBP',
     created_by: row.created_by,
-    created_at: row.created_at == null ? '' : String(row.created_at),
-    updated_at: row.updated_at == null ? '' : String(row.updated_at),
+    created_at: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at ?? ''),
+    updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at ?? ''),
   };
 }
 

@@ -140,7 +140,10 @@ export async function convertLead(
       .select('id')
       .where('api_name', '=', 'account')
       .where('tenant_id', '=', tenantId)
-      .executeTakeFirstOrThrow();
+      .executeTakeFirst();
+    if (!accountObjRow) {
+      throwNotFoundError("Object type 'account' not found");
+    }
     const accountObjectId = accountObjRow.id;
 
     const contactObjRow = await trx
@@ -148,7 +151,10 @@ export async function convertLead(
       .select('id')
       .where('api_name', '=', 'contact')
       .where('tenant_id', '=', tenantId)
-      .executeTakeFirstOrThrow();
+      .executeTakeFirst();
+    if (!contactObjRow) {
+      throwNotFoundError("Object type 'contact' not found");
+    }
     const contactObjectId = contactObjRow.id;
 
     // 6. Create or link Account
@@ -233,7 +239,10 @@ export async function convertLead(
         .select('id')
         .where('api_name', '=', 'opportunity')
         .where('tenant_id', '=', tenantId)
-        .executeTakeFirstOrThrow();
+        .executeTakeFirst();
+      if (!opportunityObjRow) {
+        throwNotFoundError("Object type 'opportunity' not found");
+      }
       const opportunityObjectId = opportunityObjRow.id;
 
       const opportunityFieldValues = applyMappings(leadFieldValues, mappings, 'opportunity');
