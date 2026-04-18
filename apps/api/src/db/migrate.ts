@@ -15,12 +15,15 @@ import { runMigrations } from './runMigrations.js';
 import { pool } from './client.js';
 
 async function main(): Promise<void> {
-  await runMigrations();
-  await pool.end();
+  try {
+    await runMigrations();
+  } finally {
+    await pool.end();
+  }
 }
 
 main().catch((err) => {
   // eslint-disable-next-line no-console
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
 });
