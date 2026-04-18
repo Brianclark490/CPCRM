@@ -758,7 +758,11 @@ async function seedFields(
   if (result.fieldsSkipped > 0) {
     const rows = await trx
       .selectFrom('field_definitions as fd')
-      .innerJoin('object_definitions as od', 'fd.object_id', 'od.id')
+      .innerJoin('object_definitions as od', (join) =>
+        join
+          .onRef('od.id', '=', 'fd.object_id')
+          .onRef('od.tenant_id', '=', 'fd.tenant_id'),
+      )
       .select(['fd.id', 'od.api_name as object_api_name', 'fd.api_name'])
       .where('od.api_name', 'in', OBJECT_SEEDS.map((o) => o.apiName))
       .where('fd.tenant_id', '=', tenantId)
@@ -904,7 +908,11 @@ async function seedLayouts(
   if (result.layoutsSkipped > 0) {
     const rows = await trx
       .selectFrom('layout_definitions as ld')
-      .innerJoin('object_definitions as od', 'ld.object_id', 'od.id')
+      .innerJoin('object_definitions as od', (join) =>
+        join
+          .onRef('od.id', '=', 'ld.object_id')
+          .onRef('od.tenant_id', '=', 'ld.tenant_id'),
+      )
       .select(['ld.id', 'od.api_name as object_api_name', 'ld.name'])
       .where('od.api_name', 'in', OBJECT_SEEDS.map((o) => o.apiName))
       .where('ld.tenant_id', '=', tenantId)
@@ -1105,7 +1113,11 @@ async function seedPipelines(
     if (pipelineIds.length > 0) {
       const rows = await trx
         .selectFrom('stage_definitions as sd')
-        .innerJoin('pipeline_definitions as pd', 'sd.pipeline_id', 'pd.id')
+        .innerJoin('pipeline_definitions as pd', (join) =>
+          join
+            .onRef('pd.id', '=', 'sd.pipeline_id')
+            .onRef('pd.tenant_id', '=', 'sd.tenant_id'),
+        )
         .select(['sd.id', 'sd.api_name', 'pd.api_name as pipeline_api_name'])
         .where('sd.pipeline_id', 'in', pipelineIds)
         .where('sd.tenant_id', '=', tenantId)
