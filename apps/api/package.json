@@ -11,6 +11,7 @@
     "lint": "echo 'lint not yet implemented'",
     "typecheck": "tsc --noEmit",
     "generate-openapi": "node dist/generateOpenAPI.js",
+    "db:migrate": "tsx src/db/migrate.ts",
     "db:types": "kysely-codegen --dialect postgres --url $DATABASE_URL --out-file src/db/kysely.types.ts"
   },
   "dependencies": {
