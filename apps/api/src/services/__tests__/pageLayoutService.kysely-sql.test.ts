@@ -280,13 +280,14 @@ describe('pageLayoutService Kysely SQL — publishPageLayout', () => {
     )!;
     const s = normalise(update.sql);
 
-    expect(s).toContain('PUBLISHED_LAYOUT =');
+    expect(s).toContain('PUBLISHED_LAYOUT = LAYOUT');
     expect(s).toContain('VERSION =');
     expect(s).toContain('STATUS =');
     expect(s).toContain('PUBLISHED_AT =');
     expect(s).toContain('UPDATED_AT =');
     expect(s).toContain('RETURNING');
     expect(update.params).toContain(TENANT_ID);
+    expect(update.params.find((p) => typeof p === 'object' && p !== null && !(p instanceof Date))).toBeUndefined();
   });
 
   it('INSERT INTO page_layout_versions carries tenant_id and version', async () => {

@@ -149,12 +149,10 @@ const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockCon
       }
       const row = layoutId ? fakePageLayouts.get(layoutId) : undefined;
       if (row) {
-        if (s.includes('PUBLISHED_LAYOUT')) {
-          // Publish: SET published_layout=$1, version=$2, status=$3, published_at=$4, updated_at=$5
-          const [published_layout, version, _status, published_at, updated_at] = params;
-          row.published_layout = typeof published_layout === 'string'
-            ? JSON.parse(published_layout as string)
-            : published_layout;
+        if (s.includes('PUBLISHED_LAYOUT = LAYOUT')) {
+          // Publish: SET published_layout=layout (column ref), version=$1, status=$2, published_at=$3, updated_at=$4
+          row.published_layout = row.layout;
+          const [version, _status, published_at, updated_at] = params;
           row.version = version;
           row.status = 'published';
           row.published_at = published_at;

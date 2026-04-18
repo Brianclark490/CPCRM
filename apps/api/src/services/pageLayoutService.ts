@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { sql } from 'kysely';
 import type { Selectable, Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/kysely.js';
@@ -533,7 +534,7 @@ export async function publishPageLayout(
     const row = await trx
       .updateTable('page_layouts')
       .set({
-        published_layout: existingRow.layout,
+        published_layout: sql`layout`,
         version: newVersion,
         status: 'published',
         published_at: now,
@@ -551,7 +552,7 @@ export async function publishPageLayout(
         layout_id: layoutId,
         tenant_id: tenantId,
         version: newVersion,
-        layout: existingRow.layout,
+        layout: row.layout,
         published_by: publishedBy,
         published_at: now,
       })

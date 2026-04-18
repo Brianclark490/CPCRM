@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Selectable, Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/kysely.js';
-import type { LayoutDefinitions, LayoutFields } from '../db/kysely.types.js';
+import type { LayoutDefinitions } from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
