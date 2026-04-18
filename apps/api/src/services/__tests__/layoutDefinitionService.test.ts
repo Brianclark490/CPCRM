@@ -18,41 +18,42 @@ vi.mock('../../lib/logger.js', () => ({
 
 // ─── Fake DB pool ─────────────────────────────────────────────────────────────
 
-const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi.hoisted(() => {
+const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery, mockConnect } = vi.hoisted(() => {
   const fakeObjects = new Map<string, Record<string, unknown>>();
   const fakeLayouts = new Map<string, Record<string, unknown>>();
   const fakeLayoutFields = new Map<string, Record<string, unknown>>();
   const fakeFields = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function normaliseCall(sqlOrQuery: unknown, paramsArg?: unknown[]) {
+    if (typeof sqlOrQuery === 'string') {
+      return { sql: sqlOrQuery, params: paramsArg ?? [] };
+    }
+    const q = sqlOrQuery as { text: string; values?: unknown[] };
+    return { sql: q.text, params: q.values ?? [] };
+  }
+
+  function runQuery(rawSql: string, params: unknown[]) {
+    const s = rawSql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
+
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') return { rows: [] };
+    if (s.startsWith('SELECT SET_CONFIG')) return { rows: [] };
 
     // SELECT id FROM object_definitions WHERE id = $1
     if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE ID')) {
-      const id = params![0] as string;
+      const id = params[0] as string;
       const row = fakeObjects.get(id);
       if (row) return { rows: [{ id: row.id }] };
       return { rows: [] };
     }
 
-    // SELECT id FROM layout_definitions WHERE object_id = $1 AND name = $2
-    if (s.startsWith('SELECT ID FROM LAYOUT_DEFINITIONS WHERE OBJECT_ID = $1 AND NAME = $2') && !s.includes('ID != $3')) {
-      const objectId = params![0] as string;
-      const name = params![1] as string;
+    // SELECT id FROM layout_definitions WHERE object_id AND name (uniqueness check)
+    if (s.startsWith('SELECT ID FROM LAYOUT_DEFINITIONS') && s.includes('NAME =')) {
+      const hasExclude = s.includes('ID !=');
+      const objectId = params[0] as string;
+      const name = params[1] as string;
+      const excludeId = hasExclude ? (params[2] as string) : null;
       const match = [...fakeLayouts.values()].find(
-        (l) => l.object_id === objectId && l.name === name,
-      );
-      if (match) return { rows: [{ id: match.id }] };
-      return { rows: [] };
-    }
-
-    // SELECT id FROM layout_definitions WHERE object_id = $1 AND name = $2 AND id != $3
-    if (s.startsWith('SELECT ID FROM LAYOUT_DEFINITIONS WHERE OBJECT_ID = $1 AND NAME = $2 AND ID != $3')) {
-      const objectId = params![0] as string;
-      const name = params![1] as string;
-      const excludeId = params![2] as string;
-      const match = [...fakeLayouts.values()].find(
-        (l) => l.object_id === objectId && l.name === name && l.id !== excludeId,
+        (l) => l.object_id === objectId && l.name === name && (excludeId ? l.id !== excludeId : true),
       );
       if (match) return { rows: [{ id: match.id }] };
       return { rows: [] };
@@ -60,7 +61,7 @@ const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi
 
     // INSERT INTO layout_definitions
     if (s.startsWith('INSERT INTO LAYOUT_DEFINITIONS')) {
-      const [id, _tenant_id, object_id, name, layout_type, is_default, created_at, updated_at] = params as unknown[];
+      const [id, _tenant_id, object_id, name, layout_type, is_default, created_at, updated_at] = params;
       const row: Record<string, unknown> = {
         id, object_id, name, layout_type, is_default, created_at, updated_at,
       };
@@ -68,9 +69,9 @@ const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi
       return { rows: [row] };
     }
 
-    // SELECT * FROM layout_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY
-    if (s.startsWith('SELECT * FROM LAYOUT_DEFINITIONS WHERE OBJECT_ID') && s.includes('ORDER BY')) {
-      const objectId = params![0] as string;
+    // SELECT * FROM layout_definitions ... ORDER BY (list)
+    if (s.includes('FROM LAYOUT_DEFINITIONS') && s.startsWith('SELECT') && s.includes('ORDER BY')) {
+      const objectId = params[0] as string;
       const rows = [...fakeLayouts.values()]
         .filter((l) => l.object_id === objectId)
         .sort((a, b) => {
@@ -82,17 +83,29 @@ const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi
     }
 
     // SELECT * FROM layout_definitions WHERE id = $1 AND object_id = $2
-    if (s.startsWith('SELECT * FROM LAYOUT_DEFINITIONS WHERE ID = $1 AND OBJECT_ID')) {
-      const layoutId = params![0] as string;
-      const objectId = params![1] as string;
+    if (s.includes('FROM LAYOUT_DEFINITIONS') && s.startsWith('SELECT') && s.includes('ID =') && s.includes('OBJECT_ID =')) {
+      const layoutId = params[0] as string;
+      const objectId = params[1] as string;
       const match = fakeLayouts.get(layoutId);
       if (match && match.object_id === objectId) return { rows: [match] };
       return { rows: [] };
     }
 
     // SELECT lf.*, fd.api_name ... FROM layout_fields lf JOIN field_definitions fd
-    if (s.includes('FROM LAYOUT_FIELDS LF') && s.includes('JOIN FIELD_DEFINITIONS FD')) {
-      const layoutId = params![0] as string;
+    if (s.includes('FROM LAYOUT_FIELDS') && s.includes('FIELD_DEFINITIONS')) {
+      // Under Kysely, the tenant_id params come before the layout_id param.
+      // Walk params to find a value that matches a known layout_id.
+      let layoutId: string | undefined;
+      for (const p of params) {
+        if (typeof p === 'string' && fakeLayoutFields.size > 0) {
+          const hasMatch = [...fakeLayoutFields.values()].some((lf) => lf.layout_id === p);
+          if (hasMatch) { layoutId = p; break; }
+        }
+      }
+      if (!layoutId) {
+        // Fallback: any param that's not the tenant_id
+        layoutId = (params.find((p) => p !== 'test-tenant-001') as string) ?? '';
+      }
       const rows = [...fakeLayoutFields.values()]
         .filter((lf) => lf.layout_id === layoutId)
         .sort((a, b) => {
@@ -114,79 +127,108 @@ const { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery } = vi
       return { rows };
     }
 
-    // UPDATE layout_definitions SET ... (general update)
+    // UPDATE layout_definitions SET ... RETURNING
     if (s.startsWith('UPDATE LAYOUT_DEFINITIONS SET') && s.includes('RETURNING')) {
-      // The layout_id and object_id are the last two params
-      const layoutId = params![params!.length - 2] as string;
-      const objectId = params![params!.length - 1] as string;
-      const layout = fakeLayouts.get(layoutId);
-      if (layout && layout.object_id === objectId) {
+      // Find the layout_id from WHERE params — it's the first UUID-looking
+      // param after all the SET params. Walk from the end of the params:
+      // the last few are WHERE clause values.
+      // Under Kysely: SET name=$1, updated_at=$2 WHERE id=$3 AND object_id=$4 AND tenant_id=$5
+      // We need the id from the WHERE. Find it by searching fakeLayouts.
+      let layoutId: string | undefined;
+      for (const p of params) {
+        if (typeof p === 'string' && fakeLayouts.has(p)) {
+          layoutId = p;
+          break;
+        }
+      }
+      const layout = layoutId ? fakeLayouts.get(layoutId) : undefined;
+      if (layout) {
         const updated: Record<string, unknown> = { ...layout, updated_at: new Date() };
         let paramIdx = 0;
-        if (s.includes('NAME =')) { updated.name = params![paramIdx++]; }
-        if (s.includes('LAYOUT_TYPE =')) { updated.layout_type = params![paramIdx++]; }
-        fakeLayouts.set(layoutId, updated);
+        if (s.includes('NAME =')) { updated.name = params[paramIdx++]; }
+        if (s.includes('LAYOUT_TYPE =')) { updated.layout_type = params[paramIdx++]; }
+        fakeLayouts.set(layoutId!, updated);
         return { rows: [updated] };
       }
       return { rows: [] };
     }
 
-    // UPDATE layout_definitions SET updated_at = $1 WHERE id = $2 (timestamp only)
+    // UPDATE layout_definitions SET updated_at (timestamp only, no RETURNING)
     if (s.startsWith('UPDATE LAYOUT_DEFINITIONS SET UPDATED_AT') && !s.includes('RETURNING')) {
-      const updatedAt = params![0];
-      const layoutId = params![1] as string;
-      const layout = fakeLayouts.get(layoutId);
-      if (layout) {
-        layout.updated_at = updatedAt;
+      const updatedAt = params[0];
+      // Find layout_id in remaining params
+      for (const p of params) {
+        if (typeof p === 'string' && fakeLayouts.has(p)) {
+          fakeLayouts.get(p)!.updated_at = updatedAt;
+          break;
+        }
       }
       return { rows: [] };
     }
 
-    // SELECT id FROM field_definitions WHERE object_id = $1 (for field validation)
-    if (s.startsWith('SELECT ID FROM FIELD_DEFINITIONS WHERE OBJECT_ID')) {
-      const objectId = params![0] as string;
+    // SELECT id FROM field_definitions WHERE object_id = $1
+    if (s.startsWith('SELECT ID FROM FIELD_DEFINITIONS')) {
+      const objectId = params[0] as string;
       const rows = [...fakeFields.values()]
         .filter((f) => f.object_id === objectId)
         .map((f) => ({ id: f.id }));
       return { rows };
     }
 
-    // DELETE FROM layout_fields WHERE layout_id = $1
-    if (s.startsWith('DELETE FROM LAYOUT_FIELDS WHERE LAYOUT_ID')) {
-      const layoutId = params![0] as string;
+    // DELETE FROM layout_fields
+    if (s.startsWith('DELETE FROM LAYOUT_FIELDS')) {
+      const layoutId = params[0] as string;
       for (const [key, lf] of fakeLayoutFields.entries()) {
         if (lf.layout_id === layoutId) fakeLayoutFields.delete(key);
       }
       return { rows: [] };
     }
 
-    // INSERT INTO layout_fields
+    // INSERT INTO layout_fields — columns: id, tenant_id, layout_id,
+    // field_id, section, section_label, sort_order, width (8 params)
     if (s.startsWith('INSERT INTO LAYOUT_FIELDS')) {
-      const [id, layout_id, field_id, section, section_label, sort_order, width] = params as unknown[];
+      const [id, _tenant_id, layout_id, field_id, section, section_label, sort_order, width] = params;
       const row: Record<string, unknown> = { id, layout_id, field_id, section, section_label, sort_order, width };
       fakeLayoutFields.set(id as string, row);
       return { rows: [row] };
     }
 
-    // DELETE FROM layout_definitions WHERE id = $1
-    if (s.startsWith('DELETE FROM LAYOUT_DEFINITIONS WHERE ID')) {
-      const layoutId = params![0] as string;
-      fakeLayouts.delete(layoutId);
-      // Also clean up layout_fields
-      for (const [key, lf] of fakeLayoutFields.entries()) {
-        if (lf.layout_id === layoutId) fakeLayoutFields.delete(key);
+    // DELETE FROM layout_definitions
+    if (s.startsWith('DELETE FROM LAYOUT_DEFINITIONS')) {
+      // Find the layout_id param
+      for (const p of params) {
+        if (typeof p === 'string' && fakeLayouts.has(p)) {
+          fakeLayouts.delete(p);
+          for (const [key, lf] of fakeLayoutFields.entries()) {
+            if (lf.layout_id === p) fakeLayoutFields.delete(key);
+          }
+          break;
+        }
       }
       return { rows: [] };
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+    const { sql, params } = normaliseCall(sqlOrQuery, paramsArg);
+    return runQuery(sql, params);
   });
 
-  return { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery };
+  const mockConnect = vi.fn(async () => ({
+    query: vi.fn(async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+      const { sql, params } = normaliseCall(sqlOrQuery, paramsArg);
+      return runQuery(sql, params);
+    }),
+    release: vi.fn(),
+  }));
+
+  return { fakeObjects, fakeLayouts, fakeLayoutFields, fakeFields, mockQuery, mockConnect };
 });
 
 vi.mock('../../db/client.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 // ─── Test helpers ────────────────────────────────────────────────────────────

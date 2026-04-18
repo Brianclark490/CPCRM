@@ -26,12 +26,23 @@ const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockCon
   const fakePageLayouts = new Map<string, Record<string, unknown>>();
   const fakePageLayoutVersions = new Map<string, Record<string, unknown>>();
 
-  const mockQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-    const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
+  function normaliseCall(sqlOrQuery: unknown, paramsArg?: unknown[]) {
+    if (typeof sqlOrQuery === 'string') {
+      return { sql: sqlOrQuery, params: paramsArg ?? [] };
+    }
+    const q = sqlOrQuery as { text: string; values?: unknown[] };
+    return { sql: q.text, params: q.values ?? [] };
+  }
+
+  function runQuery(rawSql: string, params: unknown[]) {
+    const s = rawSql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
+
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') return { rows: [] };
+    if (s.startsWith('SELECT SET_CONFIG')) return { rows: [] };
 
     // SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2
     if (s.startsWith('SELECT ID FROM OBJECT_DEFINITIONS WHERE ID')) {
-      const id = params![0] as string;
+      const id = params[0] as string;
       const row = fakeObjects.get(id);
       if (row) return { rows: [{ id: row.id }] };
       return { rows: [] };
@@ -39,10 +50,20 @@ const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockCon
 
     // SELECT id FROM page_layouts WHERE tenant_id = ... (conflict check)
     if (s.startsWith('SELECT ID FROM PAGE_LAYOUTS WHERE TENANT_ID')) {
-      const tenantId = params![0] as string;
-      const objectId = params![1] as string;
-      const role = params!.length > 2 ? (params![2] as string) : null;
-      const excludeId = s.includes('ID !=') ? (params![2] as string) : undefined;
+      const tenantId = params[0] as string;
+      const objectId = params[1] as string;
+      const hasExclude = s.includes('ID !=');
+      const isNullRole = s.includes('IS NULL');
+
+      let excludeId: string | undefined;
+      let role: string | null;
+
+      if (hasExclude) {
+        excludeId = params[2] as string;
+        role = isNullRole ? null : (params[3] as string);
+      } else {
+        role = isNullRole ? null : (params[2] as string);
+      }
 
       const match = [...fakePageLayouts.values()].find((l) => {
         if (l.tenant_id !== tenantId || l.object_id !== objectId) return false;
@@ -54,6 +75,35 @@ const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockCon
       if (match) return { rows: [{ id: match.id }] };
       return { rows: [] };
     }
+
+    // ── page_layout_versions (more specific, must precede page_layouts) ──
+
+    // INSERT INTO page_layout_versions
+    if (s.startsWith('INSERT INTO PAGE_LAYOUT_VERSIONS')) {
+      const [id, layout_id, tenant_id, version, layout, published_by, published_at] = params as unknown[];
+      const row: Record<string, unknown> = {
+        id, layout_id, tenant_id, version, layout, published_by, published_at,
+      };
+      fakePageLayoutVersions.set(id as string, row);
+      return { rows: [row] };
+    }
+
+    // SELECT * FROM page_layout_versions
+    if (s.includes('FROM PAGE_LAYOUT_VERSIONS') && s.startsWith('SELECT')) {
+      const layoutId = params[0] as string;
+      const tenantId = params[1] as string;
+      const version = params.length > 2 ? (params[2] as number) : undefined;
+      const rows = [...fakePageLayoutVersions.values()]
+        .filter((v) => {
+          if (v.layout_id !== layoutId || v.tenant_id !== tenantId) return false;
+          if (version !== undefined) return v.version === version;
+          return true;
+        })
+        .sort((a, b) => (b.version as number) - (a.version as number));
+      return { rows };
+    }
+
+    // ── page_layouts ─────────────────────────────────────────────────────
 
     // INSERT INTO page_layouts
     if (s.startsWith('INSERT INTO PAGE_LAYOUTS')) {
@@ -68,120 +118,88 @@ const { fakeObjects, fakePageLayouts, fakePageLayoutVersions, mockQuery, mockCon
       return { rows: [row] };
     }
 
-    // SELECT * FROM page_layouts WHERE tenant_id = ... ORDER BY name
-    if (s.startsWith('SELECT * FROM PAGE_LAYOUTS WHERE TENANT_ID') && s.includes('ORDER BY')) {
-      const tenantId = params![0] as string;
-      const objectId = params![1] as string;
+    // SELECT * FROM page_layouts ... ORDER BY (list)
+    if (s.includes('FROM PAGE_LAYOUTS') && s.startsWith('SELECT') && s.includes('ORDER BY')) {
+      const tenantId = params[0] as string;
+      const objectId = params[1] as string;
       const rows = [...fakePageLayouts.values()]
         .filter((l) => l.tenant_id === tenantId && l.object_id === objectId)
         .sort((a, b) => (a.name as string).localeCompare(b.name as string));
       return { rows };
     }
 
-    // SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3
-    if (s.startsWith('SELECT * FROM PAGE_LAYOUTS WHERE ID')) {
-      const id = params![0] as string;
+    // SELECT ... FROM page_layouts WHERE id = ... (getById / existence check)
+    if (s.includes('FROM PAGE_LAYOUTS') && s.startsWith('SELECT') && s.includes('WHERE ID =')) {
+      const id = params[0] as string;
       const row = fakePageLayouts.get(id);
-      if (row && row.tenant_id === params![1] && row.object_id === params![2]) {
+      if (row && row.tenant_id === params[1] && row.object_id === params[2]) {
         return { rows: [row] };
       }
       return { rows: [] };
     }
 
-    // SELECT id FROM page_layouts WHERE id = ... (for listVersions check)
-    if (s.startsWith('SELECT ID FROM PAGE_LAYOUTS WHERE ID')) {
-      const id = params![0] as string;
-      const row = fakePageLayouts.get(id);
-      if (row && row.tenant_id === params![1] && row.object_id === params![2]) {
-        return { rows: [{ id: row.id }] };
-      }
-      return { rows: [] };
-    }
-
-    // UPDATE page_layouts SET published_layout ... (publish)
-    if (s.startsWith('UPDATE PAGE_LAYOUTS') && s.includes('PUBLISHED_LAYOUT = LAYOUT')) {
-      const newVersion = params![0] as number;
-      const now = params![1] as Date;
-      const layoutId = params![2] as string;
-      const row = fakePageLayouts.get(layoutId);
-      if (row) {
-        row.published_layout = row.layout;
-        row.version = newVersion;
-        row.status = 'published';
-        row.published_at = now;
-        row.updated_at = now;
-        return { rows: [row] };
-      }
-      return { rows: [] };
-    }
-
-    // UPDATE page_layouts SET ... (general update)
+    // UPDATE page_layouts SET ...
     if (s.startsWith('UPDATE PAGE_LAYOUTS SET')) {
-      // Find the layout ID in params (second-to-last param)
-      const layoutId = params![params!.length - 2] as string;
-      const row = fakePageLayouts.get(layoutId);
-      if (row) {
-        // Apply updates from params based on SQL fragments
-        const sqlLower = sql.toLowerCase();
-        let paramIdx = 0;
-        if (sqlLower.includes('name =')) { row.name = params![paramIdx++]; }
-        if (sqlLower.includes('role =')) { row.role = params![paramIdx++]; }
-        if (sqlLower.includes('layout =')) {
-          const val = params![paramIdx++];
-          row.layout = typeof val === 'string' ? JSON.parse(val) : val;
+      let layoutId: string | undefined;
+      for (const p of params) {
+        if (typeof p === 'string' && fakePageLayouts.has(p)) {
+          layoutId = p;
+          break;
         }
-        if (sqlLower.includes('is_default =')) { row.is_default = params![paramIdx++]; }
-        row.updated_at = params![paramIdx] ?? new Date();
+      }
+      const row = layoutId ? fakePageLayouts.get(layoutId) : undefined;
+      if (row) {
+        if (s.includes('PUBLISHED_LAYOUT')) {
+          // Publish: SET published_layout=$1, version=$2, status=$3, published_at=$4, updated_at=$5
+          const [published_layout, version, _status, published_at, updated_at] = params;
+          row.published_layout = typeof published_layout === 'string'
+            ? JSON.parse(published_layout as string)
+            : published_layout;
+          row.version = version;
+          row.status = 'published';
+          row.published_at = published_at;
+          row.updated_at = updated_at;
+        } else {
+          // General / copy / revert update
+          let paramIdx = 0;
+          if (s.includes('NAME =')) { row.name = params[paramIdx++]; }
+          if (s.includes('ROLE =')) { row.role = params[paramIdx++]; }
+          if (s.includes('LAYOUT =')) {
+            const val = params[paramIdx++];
+            row.layout = typeof val === 'string' ? JSON.parse(val as string) : val;
+          }
+          if (s.includes('IS_DEFAULT =')) { row.is_default = params[paramIdx++]; }
+          row.updated_at = params[paramIdx] ?? new Date();
+        }
         return { rows: [row] };
       }
       return { rows: [] };
     }
 
-    // INSERT INTO page_layout_versions
-    if (s.startsWith('INSERT INTO PAGE_LAYOUT_VERSIONS')) {
-      const [id, layout_id, tenant_id, version, layout, published_by, published_at] = params as unknown[];
-      const row: Record<string, unknown> = {
-        id, layout_id, tenant_id, version, layout, published_by, published_at,
-      };
-      fakePageLayoutVersions.set(id as string, row);
-      return { rows: [row] };
-    }
-
-    // SELECT * FROM page_layout_versions WHERE layout_id = ... AND tenant_id = ... AND version = ...
-    if (s.startsWith('SELECT * FROM PAGE_LAYOUT_VERSIONS WHERE LAYOUT_ID') && s.includes('VERSION')) {
-      const layoutId = params![0] as string;
-      const tenantId = params![1] as string;
-      const version = params!.length > 2 ? (params![2] as number) : undefined;
-      const rows = [...fakePageLayoutVersions.values()]
-        .filter((v) => {
-          if (v.layout_id !== layoutId || v.tenant_id !== tenantId) return false;
-          if (version !== undefined) return v.version === version;
-          return true;
-        })
-        .sort((a, b) => (b.version as number) - (a.version as number));
-      return { rows };
-    }
-
-    // DELETE FROM page_layouts WHERE id = $1 AND tenant_id = $2
-    if (s.startsWith('DELETE FROM PAGE_LAYOUTS WHERE ID')) {
-      const id = params![0] as string;
-      fakePageLayouts.delete(id);
-      return { rows: [] };
-    }
-
-    // Transaction control statements (no-op in tests)
-    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+    // DELETE FROM page_layouts
+    if (s.startsWith('DELETE FROM PAGE_LAYOUTS')) {
+      for (const p of params) {
+        if (typeof p === 'string' && fakePageLayouts.has(p)) {
+          fakePageLayouts.delete(p);
+          break;
+        }
+      }
       return { rows: [] };
     }
 
     return { rows: [] };
+  }
+
+  const mockQuery = vi.fn(async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+    const { sql, params } = normaliseCall(sqlOrQuery, paramsArg);
+    return runQuery(sql, params);
   });
 
-  // The publish flow uses pool.connect() for transactions.  Return a fake
-  // client whose .query() delegates to the same mockQuery so the in-memory
-  // data stores stay consistent.
   const mockConnect = vi.fn(async () => ({
-    query: mockQuery,
+    query: vi.fn(async (sqlOrQuery: unknown, paramsArg?: unknown[]) => {
+      const { sql, params } = normaliseCall(sqlOrQuery, paramsArg);
+      return runQuery(sql, params);
+    }),
     release: vi.fn(),
   }));
 
