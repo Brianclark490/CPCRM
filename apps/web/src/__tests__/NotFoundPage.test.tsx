@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { NotFoundPage } from '../pages/NotFoundPage.js';
+import { renderWithQuery } from './utils/renderWithQuery.js';
 
 const mockNavigate = vi.fn();
 
@@ -16,7 +17,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
 
 describe('NotFoundPage', () => {
   it('renders the page not found heading and message', () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <NotFoundPage />
       </MemoryRouter>,
@@ -29,7 +30,7 @@ describe('NotFoundPage', () => {
   });
 
   it('navigates to /dashboard when the button is clicked', async () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <NotFoundPage />
       </MemoryRouter>,
