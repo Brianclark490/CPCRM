@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
-import { pool } from '../db/client.js';
+import type { Transaction } from 'kysely';
+import { db } from '../db/kysely.js';
+import type { DB } from '../db/kysely.types.js';
 import { logger } from '../lib/logger.js';
 
 // ─── Seed data types ──────────────────────────────────────────────────────────
@@ -569,10 +571,6 @@ const STAGE_GATE_SEEDS: StageGateSeed[] = [
 // IMPLEMENTATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-interface QueryClient {
-  query(text: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
-}
-
 /**
  * Seeds all default CRM objects, fields, relationships, layouts, and lead
  * conversion mappings for a tenant.
@@ -585,12 +583,8 @@ interface QueryClient {
  * @param ownerId - The owner/tenant identifier (e.g. Descope user ID or 'SYSTEM').
  */
 export async function seedDefaultObjects(tenantId: string, ownerId: string): Promise<SeedResult> {
-  const client = await pool.connect();
-
-  try {
-    await client.query('BEGIN');
-    const result = await seedWithClient(client, tenantId, ownerId);
-    await client.query('COMMIT');
+  return db.transaction().execute(async (trx) => {
+    const result = await seedWithClient(trx, tenantId, ownerId);
 
     logger.info(
       {
@@ -619,20 +613,15 @@ export async function seedDefaultObjects(tenantId: string, ownerId: string): Pro
     );
 
     return result;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 /**
- * Inner implementation that runs against an already-connected client.
- * Exported for testing and for callers that manage their own transaction.
+ * Inner implementation that runs against an already-open Kysely transaction.
+ * Exported for callers that manage their own transaction (e.g. tenantProvisioning).
  */
 export async function seedWithClient(
-  client: QueryClient,
+  trx: Transaction<DB>,
   tenantId: string,
   ownerId: string,
 ): Promise<SeedResult> {
@@ -657,29 +646,14 @@ export async function seedWithClient(
     stageGatesSkipped: 0,
   };
 
-  // Step 1: Seed object definitions
-  const objectIdMap = await seedObjects(client, tenantId, ownerId, result);
-
-  // Step 2: Seed field definitions
-  const fieldIdMap = await seedFields(client, tenantId, objectIdMap, result);
-
-  // Step 2b: Update name_field_id and name_template on object definitions
-  await seedNameFieldConfig(client, objectIdMap, fieldIdMap);
-
-  // Step 3: Seed relationship definitions
-  await seedRelationships(client, tenantId, objectIdMap, result);
-
-  // Step 4: Seed layout definitions
-  const layoutIdMap = await seedLayouts(client, tenantId, objectIdMap, result);
-
-  // Step 5: Seed layout fields
-  await seedLayoutFields(client, tenantId, fieldIdMap, layoutIdMap, result);
-
-  // Step 6: Seed lead conversion mappings
-  await seedLeadConversionMappings(client, tenantId, result);
-
-  // Step 7: Seed pipeline definitions, stages, and stage gates
-  await seedPipelines(client, tenantId, ownerId, objectIdMap, fieldIdMap, result);
+  const objectIdMap = await seedObjects(trx, tenantId, ownerId, result);
+  const fieldIdMap = await seedFields(trx, tenantId, objectIdMap, result);
+  await seedNameFieldConfig(trx, objectIdMap, fieldIdMap);
+  await seedRelationships(trx, tenantId, objectIdMap, result);
+  const layoutIdMap = await seedLayouts(trx, tenantId, objectIdMap, result);
+  await seedLayoutFields(trx, tenantId, fieldIdMap, layoutIdMap, result);
+  await seedLeadConversionMappings(trx, tenantId, result);
+  await seedPipelines(trx, tenantId, ownerId, objectIdMap, fieldIdMap, result);
 
   return result;
 }
@@ -687,7 +661,7 @@ export async function seedWithClient(
 // ─── Step helpers ─────────────────────────────────────────────────────────────
 
 async function seedObjects(
-  client: QueryClient,
+  trx: Transaction<DB>,
   tenantId: string,
   ownerId: string,
   result: SeedResult,
@@ -696,30 +670,40 @@ async function seedObjects(
 
   for (const obj of OBJECT_SEEDS) {
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO object_definitions (id, api_name, label, plural_label, description, icon, is_system, owner_id, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)
-       ON CONFLICT (tenant_id, api_name) DO NOTHING
-       RETURNING id`,
-      [id, obj.apiName, obj.label, obj.pluralLabel, obj.description, obj.icon, ownerId, tenantId],
-    );
+    const row = await trx
+      .insertInto('object_definitions')
+      .values({
+        id,
+        api_name: obj.apiName,
+        label: obj.label,
+        plural_label: obj.pluralLabel,
+        description: obj.description,
+        icon: obj.icon,
+        is_system: true,
+        owner_id: ownerId,
+        tenant_id: tenantId,
+      })
+      .onConflict((oc) => oc.columns(['tenant_id', 'api_name']).doNothing())
+      .returning('id')
+      .executeTakeFirst();
 
-    if (rows.length > 0) {
-      objectIdMap.set(obj.apiName, rows[0].id as string);
+    if (row) {
+      objectIdMap.set(obj.apiName, row.id);
       result.objectsCreated++;
     } else {
       result.objectsSkipped++;
     }
   }
 
-  // Fetch IDs for objects that already existed (skipped by ON CONFLICT)
   if (result.objectsSkipped > 0) {
-    const { rows } = await client.query(
-      `SELECT id, api_name FROM object_definitions WHERE api_name = ANY($1) AND tenant_id = $2`,
-      [OBJECT_SEEDS.map((o) => o.apiName), tenantId],
-    );
+    const rows = await trx
+      .selectFrom('object_definitions')
+      .select(['id', 'api_name'])
+      .where('api_name', 'in', OBJECT_SEEDS.map((o) => o.apiName))
+      .where('tenant_id', '=', tenantId)
+      .execute();
     for (const row of rows) {
-      objectIdMap.set(row.api_name as string, row.id as string);
+      objectIdMap.set(row.api_name, row.id);
     }
   }
 
@@ -732,7 +716,7 @@ async function seedObjects(
 }
 
 async function seedFields(
-  client: QueryClient,
+  trx: Transaction<DB>,
   tenantId: string,
   objectIdMap: Map<string, string>,
   result: SeedResult,
@@ -744,35 +728,44 @@ async function seedFields(
     if (!objectId) continue;
 
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO field_definitions (id, object_id, api_name, label, field_type, required, options, sort_order, is_system, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (tenant_id, object_id, api_name) DO NOTHING
-       RETURNING id`,
-      [id, objectId, field.apiName, field.label, field.fieldType, field.required, JSON.stringify(field.options), field.sortOrder, field.isSystem ?? false, tenantId],
-    );
+    const row = await trx
+      .insertInto('field_definitions')
+      .values({
+        id,
+        object_id: objectId,
+        api_name: field.apiName,
+        label: field.label,
+        field_type: field.fieldType,
+        required: field.required,
+        options: JSON.stringify(field.options),
+        sort_order: field.sortOrder,
+        is_system: field.isSystem ?? false,
+        tenant_id: tenantId,
+      })
+      .onConflict((oc) => oc.columns(['tenant_id', 'object_id', 'api_name']).doNothing())
+      .returning('id')
+      .executeTakeFirst();
 
     const key = `${field.objectApiName}.${field.apiName}`;
-    if (rows.length > 0) {
-      fieldIdMap.set(key, rows[0].id as string);
+    if (row) {
+      fieldIdMap.set(key, row.id);
       result.fieldsCreated++;
     } else {
       result.fieldsSkipped++;
     }
   }
 
-  // Fetch IDs for fields that already existed
   if (result.fieldsSkipped > 0) {
-    const { rows } = await client.query(
-      `SELECT fd.id, od.api_name AS object_api_name, fd.api_name
-       FROM field_definitions fd
-       JOIN object_definitions od ON fd.object_id = od.id
-       WHERE od.api_name = ANY($1) AND fd.tenant_id = $2`,
-      [OBJECT_SEEDS.map((o) => o.apiName), tenantId],
-    );
+    const rows = await trx
+      .selectFrom('field_definitions as fd')
+      .innerJoin('object_definitions as od', 'fd.object_id', 'od.id')
+      .select(['fd.id', 'od.api_name as object_api_name', 'fd.api_name'])
+      .where('od.api_name', 'in', OBJECT_SEEDS.map((o) => o.apiName))
+      .where('fd.tenant_id', '=', tenantId)
+      .execute();
     for (const row of rows) {
       const key = `${row.object_api_name}.${row.api_name}`;
-      fieldIdMap.set(key, row.id as string);
+      fieldIdMap.set(key, row.id);
     }
   }
 
@@ -785,7 +778,7 @@ async function seedFields(
 }
 
 async function seedNameFieldConfig(
-  client: QueryClient,
+  trx: Transaction<DB>,
   objectIdMap: Map<string, string>,
   fieldIdMap: Map<string, string>,
 ): Promise<void> {
@@ -797,18 +790,33 @@ async function seedNameFieldConfig(
       const fieldKey = `${obj.apiName}.${obj.nameFieldApiName}`;
       const fieldId = fieldIdMap.get(fieldKey);
       if (fieldId) {
-        await client.query(
-          `UPDATE object_definitions SET name_field_id = $1 WHERE id = $2 AND (name_field_id IS NULL OR name_field_id != $1)`,
-          [fieldId, objectId],
-        );
+        await trx
+          .updateTable('object_definitions')
+          .set({ name_field_id: fieldId })
+          .where('id', '=', objectId)
+          .where((eb) =>
+            eb.or([
+              eb('name_field_id', 'is', null),
+              eb('name_field_id', '!=', fieldId),
+            ]),
+          )
+          .execute();
       }
     }
 
     if (obj.nameTemplate) {
-      await client.query(
-        `UPDATE object_definitions SET name_template = $1 WHERE id = $2 AND (name_template IS NULL OR name_template != $1)`,
-        [obj.nameTemplate, objectId],
-      );
+      const tmpl = obj.nameTemplate;
+      await trx
+        .updateTable('object_definitions')
+        .set({ name_template: tmpl })
+        .where('id', '=', objectId)
+        .where((eb) =>
+          eb.or([
+            eb('name_template', 'is', null),
+            eb('name_template', '!=', tmpl),
+          ]),
+        )
+        .execute();
     }
   }
 
@@ -816,7 +824,7 @@ async function seedNameFieldConfig(
 }
 
 async function seedRelationships(
-  client: QueryClient,
+  trx: Transaction<DB>,
   tenantId: string,
   objectIdMap: Map<string, string>,
   result: SeedResult,
@@ -827,15 +835,24 @@ async function seedRelationships(
     if (!sourceObjectId || !targetObjectId) continue;
 
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO relationship_definitions (id, source_object_id, target_object_id, relationship_type, api_name, label, reverse_label, required, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT (tenant_id, source_object_id, api_name) DO NOTHING
-       RETURNING id`,
-      [id, sourceObjectId, targetObjectId, rel.relationshipType, rel.apiName, rel.label, rel.reverseLabel, rel.required, tenantId],
-    );
+    const row = await trx
+      .insertInto('relationship_definitions')
+      .values({
+        id,
+        source_object_id: sourceObjectId,
+        target_object_id: targetObjectId,
+        relationship_type: rel.relationshipType,
+        api_name: rel.apiName,
+        label: rel.label,
+        reverse_label: rel.reverseLabel,
+        required: rel.required,
+        tenant_id: tenantId,
+      })
+      .onConflict((oc) => oc.columns(['tenant_id', 'source_object_id', 'api_name']).doNothing())
+      .returning('id')
+      .executeTakeFirst();
 
-    if (rows.length > 0) {
+    if (row) {
       result.relationshipsCreated++;
     } else {
       result.relationshipsSkipped++;
@@ -849,7 +866,7 @@ async function seedRelationships(
 }
 
 async function seedLayouts(
-  client: QueryClient,
+  trx: Transaction<DB>,
   tenantId: string,
   objectIdMap: Map<string, string>,
   result: SeedResult,
@@ -861,35 +878,40 @@ async function seedLayouts(
     if (!objectId) continue;
 
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO layout_definitions (id, object_id, name, layout_type, is_default, tenant_id)
-       VALUES ($1, $2, $3, $4, true, $5)
-       ON CONFLICT (tenant_id, object_id, name) DO NOTHING
-       RETURNING id`,
-      [id, objectId, layout.name, layout.layoutType, tenantId],
-    );
+    const row = await trx
+      .insertInto('layout_definitions')
+      .values({
+        id,
+        object_id: objectId,
+        name: layout.name,
+        layout_type: layout.layoutType,
+        is_default: true,
+        tenant_id: tenantId,
+      })
+      .onConflict((oc) => oc.columns(['tenant_id', 'object_id', 'name']).doNothing())
+      .returning('id')
+      .executeTakeFirst();
 
     const key = `${layout.objectApiName}.${layout.name}`;
-    if (rows.length > 0) {
-      layoutIdMap.set(key, rows[0].id as string);
+    if (row) {
+      layoutIdMap.set(key, row.id);
       result.layoutsCreated++;
     } else {
       result.layoutsSkipped++;
     }
   }
 
-  // Fetch IDs for layouts that already existed
   if (result.layoutsSkipped > 0) {
-    const { rows } = await client.query(
-      `SELECT ld.id, od.api_name AS object_api_name, ld.name
-       FROM layout_definitions ld
-       JOIN object_definitions od ON ld.object_id = od.id
-       WHERE od.api_name = ANY($1) AND ld.tenant_id = $2`,
-      [OBJECT_SEEDS.map((o) => o.apiName), tenantId],
-    );
+    const rows = await trx
+      .selectFrom('layout_definitions as ld')
+      .innerJoin('object_definitions as od', 'ld.object_id', 'od.id')
+      .select(['ld.id', 'od.api_name as object_api_name', 'ld.name'])
+      .where('od.api_name', 'in', OBJECT_SEEDS.map((o) => o.apiName))
+      .where('ld.tenant_id', '=', tenantId)
+      .execute();
     for (const row of rows) {
       const key = `${row.object_api_name}.${row.name}`;
-      layoutIdMap.set(key, row.id as string);
+      layoutIdMap.set(key, row.id);
     }
   }
 
@@ -902,7 +924,7 @@ async function seedLayouts(
 }
 
 async function seedLayoutFields(
-  client: QueryClient,
+  trx: Transaction<DB>,
   tenantId: string,
   fieldIdMap: Map<string, string>,
   layoutIdMap: Map<string, string>,
@@ -918,15 +940,23 @@ async function seedLayoutFields(
     if (!layoutId || !fieldId) continue;
 
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO layout_fields (id, layout_id, field_id, section, section_label, sort_order, width, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (tenant_id, layout_id, field_id) DO NOTHING
-       RETURNING id`,
-      [id, layoutId, fieldId, lf.section, lf.sectionLabel, lf.sortOrder, lf.width, tenantId],
-    );
+    const row = await trx
+      .insertInto('layout_fields')
+      .values({
+        id,
+        layout_id: layoutId,
+        field_id: fieldId,
+        section: lf.section,
+        section_label: lf.sectionLabel,
+        sort_order: lf.sortOrder,
+        width: lf.width,
+        tenant_id: tenantId,
+      })
+      .onConflict((oc) => oc.columns(['tenant_id', 'layout_id', 'field_id']).doNothing())
+      .returning('id')
+      .executeTakeFirst();
 
-    if (rows.length > 0) {
+    if (row) {
       result.layoutFieldsCreated++;
     } else {
       result.layoutFieldsSkipped++;
@@ -940,21 +970,30 @@ async function seedLayoutFields(
 }
 
 async function seedLeadConversionMappings(
-  client: QueryClient,
+  trx: Transaction<DB>,
   tenantId: string,
   result: SeedResult,
 ): Promise<void> {
   for (const mapping of LEAD_CONVERSION_MAPPING_SEEDS) {
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO lead_conversion_mappings (id, lead_field_api_name, target_object, target_field_api_name, tenant_id)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (tenant_id, lead_field_api_name, target_object, target_field_api_name) DO NOTHING
-       RETURNING id`,
-      [id, mapping.leadFieldApiName, mapping.targetObject, mapping.targetFieldApiName, tenantId],
-    );
+    const row = await trx
+      .insertInto('lead_conversion_mappings')
+      .values({
+        id,
+        lead_field_api_name: mapping.leadFieldApiName,
+        target_object: mapping.targetObject,
+        target_field_api_name: mapping.targetFieldApiName,
+        tenant_id: tenantId,
+      })
+      .onConflict((oc) =>
+        oc
+          .columns(['tenant_id', 'lead_field_api_name', 'target_object', 'target_field_api_name'])
+          .doNothing(),
+      )
+      .returning('id')
+      .executeTakeFirst();
 
-    if (rows.length > 0) {
+    if (row) {
       result.leadConversionMappingsCreated++;
     } else {
       result.leadConversionMappingsSkipped++;
@@ -968,7 +1007,7 @@ async function seedLeadConversionMappings(
 }
 
 async function seedPipelines(
-  client: QueryClient,
+  trx: Transaction<DB>,
   tenantId: string,
   ownerId: string,
   objectIdMap: Map<string, string>,
@@ -976,37 +1015,48 @@ async function seedPipelines(
   result: SeedResult,
 ): Promise<void> {
   const pipelineIdMap = new Map<string, string>();
+  const now = new Date();
 
-  // Step 7a: Create pipeline definitions
   for (const pipeline of PIPELINE_SEEDS) {
     const objectId = objectIdMap.get(pipeline.objectApiName);
     if (!objectId) continue;
 
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO pipeline_definitions (id, tenant_id, object_id, name, api_name, is_default, is_system, owner_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, true, $6, $7, NOW(), NOW())
-       ON CONFLICT (tenant_id, object_id, api_name) DO NOTHING
-       RETURNING id`,
-      [id, tenantId, objectId, pipeline.name, pipeline.apiName, pipeline.isSystem, ownerId],
-    );
+    const row = await trx
+      .insertInto('pipeline_definitions')
+      .values({
+        id,
+        tenant_id: tenantId,
+        object_id: objectId,
+        name: pipeline.name,
+        api_name: pipeline.apiName,
+        is_default: true,
+        is_system: pipeline.isSystem,
+        owner_id: ownerId,
+        created_at: now,
+        updated_at: now,
+      })
+      .onConflict((oc) => oc.columns(['tenant_id', 'object_id', 'api_name']).doNothing())
+      .returning('id')
+      .executeTakeFirst();
 
-    if (rows.length > 0) {
-      pipelineIdMap.set(pipeline.apiName, rows[0].id as string);
+    if (row) {
+      pipelineIdMap.set(pipeline.apiName, row.id);
       result.pipelinesCreated++;
     } else {
       result.pipelinesSkipped++;
     }
   }
 
-  // Fetch IDs for pipelines that already existed
   if (result.pipelinesSkipped > 0) {
-    const { rows } = await client.query(
-      `SELECT id, api_name FROM pipeline_definitions WHERE api_name = ANY($1) AND tenant_id = $2`,
-      [PIPELINE_SEEDS.map((p) => p.apiName), tenantId],
-    );
+    const rows = await trx
+      .selectFrom('pipeline_definitions')
+      .select(['id', 'api_name'])
+      .where('api_name', 'in', PIPELINE_SEEDS.map((p) => p.apiName))
+      .where('tenant_id', '=', tenantId)
+      .execute();
     for (const row of rows) {
-      pipelineIdMap.set(row.api_name as string, row.id as string);
+      pipelineIdMap.set(row.api_name, row.id);
     }
   }
 
@@ -1015,7 +1065,6 @@ async function seedPipelines(
     'Seeded pipeline definitions',
   );
 
-  // Step 7b: Create stage definitions
   const stageIdMap = new Map<string, string>();
 
   for (const stage of STAGE_SEEDS) {
@@ -1023,37 +1072,47 @@ async function seedPipelines(
     if (!pipelineId) continue;
 
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO stage_definitions (id, tenant_id, pipeline_id, name, api_name, sort_order, stage_type, colour, default_probability, expected_days, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-       ON CONFLICT (tenant_id, pipeline_id, api_name) DO NOTHING
-       RETURNING id`,
-      [id, tenantId, pipelineId, stage.name, stage.apiName, stage.sortOrder, stage.stageType, stage.colour, stage.defaultProbability, stage.expectedDays],
-    );
+    const row = await trx
+      .insertInto('stage_definitions')
+      .values({
+        id,
+        tenant_id: tenantId,
+        pipeline_id: pipelineId,
+        name: stage.name,
+        api_name: stage.apiName,
+        sort_order: stage.sortOrder,
+        stage_type: stage.stageType,
+        colour: stage.colour,
+        default_probability: stage.defaultProbability,
+        expected_days: stage.expectedDays,
+        created_at: now,
+      })
+      .onConflict((oc) => oc.columns(['tenant_id', 'pipeline_id', 'api_name']).doNothing())
+      .returning('id')
+      .executeTakeFirst();
 
     const key = `${stage.pipelineApiName}.${stage.apiName}`;
-    if (rows.length > 0) {
-      stageIdMap.set(key, rows[0].id as string);
+    if (row) {
+      stageIdMap.set(key, row.id);
       result.stagesCreated++;
     } else {
       result.stagesSkipped++;
     }
   }
 
-  // Fetch IDs for stages that already existed
   if (result.stagesSkipped > 0) {
     const pipelineIds = [...pipelineIdMap.values()];
     if (pipelineIds.length > 0) {
-      const { rows } = await client.query(
-        `SELECT sd.id, sd.api_name, pd.api_name AS pipeline_api_name
-         FROM stage_definitions sd
-         JOIN pipeline_definitions pd ON sd.pipeline_id = pd.id
-         WHERE sd.pipeline_id = ANY($1) AND sd.tenant_id = $2`,
-        [pipelineIds, tenantId],
-      );
+      const rows = await trx
+        .selectFrom('stage_definitions as sd')
+        .innerJoin('pipeline_definitions as pd', 'sd.pipeline_id', 'pd.id')
+        .select(['sd.id', 'sd.api_name', 'pd.api_name as pipeline_api_name'])
+        .where('sd.pipeline_id', 'in', pipelineIds)
+        .where('sd.tenant_id', '=', tenantId)
+        .execute();
       for (const row of rows) {
         const key = `${row.pipeline_api_name}.${row.api_name}`;
-        stageIdMap.set(key, row.id as string);
+        stageIdMap.set(key, row.id);
       }
     }
   }
@@ -1063,7 +1122,6 @@ async function seedPipelines(
     'Seeded stage definitions',
   );
 
-  // Step 7c: Create stage gates
   for (const gate of STAGE_GATE_SEEDS) {
     const stageKey = `${gate.pipelineApiName}.${gate.stageApiName}`;
     const stageId = stageIdMap.get(stageKey);
@@ -1073,15 +1131,22 @@ async function seedPipelines(
     if (!stageId || !fieldId) continue;
 
     const id = randomUUID();
-    const { rows } = await client.query(
-      `INSERT INTO stage_gates (id, tenant_id, stage_id, field_id, gate_type, gate_value, error_message)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (tenant_id, stage_id, field_id) DO NOTHING
-       RETURNING id`,
-      [id, tenantId, stageId, fieldId, gate.gateType, gate.gateValue, gate.errorMessage],
-    );
+    const row = await trx
+      .insertInto('stage_gates')
+      .values({
+        id,
+        tenant_id: tenantId,
+        stage_id: stageId,
+        field_id: fieldId,
+        gate_type: gate.gateType,
+        gate_value: gate.gateValue,
+        error_message: gate.errorMessage,
+      })
+      .onConflict((oc) => oc.columns(['tenant_id', 'stage_id', 'field_id']).doNothing())
+      .returning('id')
+      .executeTakeFirst();
 
-    if (rows.length > 0) {
+    if (row) {
       result.stageGatesCreated++;
     } else {
       result.stageGatesSkipped++;

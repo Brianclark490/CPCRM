@@ -1,5 +1,4 @@
 import type { Selectable, Updateable } from 'kysely';
-import { pool } from '../db/client.js';
 import { db } from '../db/kysely.js';
 import type { Tenants } from '../db/kysely.types.js';
 import { getDescopeManagementClient } from '../lib/descopeManagementClient.js';
@@ -117,7 +116,7 @@ function coerceTenantRow(row: Selectable<Tenants>): TenantRow {
  * 1. Validates the slug (format + uniqueness).
  * 2. Creates the tenant in Descope (using the slug as the Descope tenant ID).
  * 3. Inserts the tenant record + seeds all default CRM data inside a single
- *    database transaction so that a seed failure rolls back the DB insert.
+ *    Kysely transaction so that a seed failure rolls back the DB insert.
  * 4. Invites the admin user into the new tenant with the "admin" role in
  *    Descope (create + assign tenant roles + send magic-link invite in one
  *    API call).
@@ -127,16 +126,6 @@ function coerceTenantRow(row: Selectable<Tenants>): TenantRow {
  *   attempts to delete the Descope tenant before re-throwing.
  * - The DB insert + seed run inside a single transaction, so a seed failure
  *   automatically rolls back the tenant row.
- *
- * Transaction implementation note:
- * - `seedWithClient` takes a raw pg `PoolClient` (it originates from the
- *   1109-line `seedDefaultObjects.ts` which is out of scope for this
- *   migration), so the BEGIN/COMMIT envelope is still managed via the raw
- *   client — Kysely doesn't own that transaction. The tenant INSERT inside
- *   the transaction is still built via Kysely and `.compile()`d so the
- *   column list and value shapes stay under Kysely's compile-time safety
- *   net; the compiled SQL + params are then handed to the raw client
- *   (which holds the transaction) to keep INSERT and seed atomic.
  *
  * @throws {Error} with `code: 'VALIDATION_ERROR'` for invalid input.
  * @throws {Error} with `code: 'DUPLICATE_SLUG'` if the slug is already taken.
@@ -187,97 +176,39 @@ export async function provisionTenant(
 
   // ── 3. Insert tenant record + seed CRM data (single DB transaction) ────────
 
-  const client = await pool.connect();
-  // The Descope tenant ID is the slug — use a descriptive alias throughout.
   const tenantId = slug;
-  let seedResult: SeedResult;
+  let txResult: { tenantRow: TenantRow; seedResult: SeedResult };
 
   try {
-    await client.query('BEGIN');
+    txResult = await db.transaction().execute(async (trx) => {
+      const now = new Date();
+      const defaultSettings = {
+        currency: 'GBP',
+        dateFormat: 'DD/MM/YYYY',
+        timezone: 'Europe/London',
+      };
 
-    const now = new Date();
-    const defaultSettings = {
-      currency: 'GBP',
-      dateFormat: 'DD/MM/YYYY',
-      timezone: 'Europe/London',
-    };
+      const row = await trx
+        .insertInto('tenants')
+        .values({
+          id: tenantId,
+          name: name.trim(),
+          slug,
+          status: 'active',
+          plan,
+          settings: JSON.stringify(defaultSettings),
+          created_at: now,
+          updated_at: now,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
 
-    // Build the INSERT with Kysely so the column list, value shapes and
-    // RETURNING projection are all type-checked against the generated
-    // Tenants schema, then execute the compiled query on the raw client
-    // (which owns the BEGIN/COMMIT envelope shared with seedWithClient).
-    const insertTenant = db
-      .insertInto('tenants')
-      .values({
-        id: tenantId,
-        name: name.trim(),
-        slug,
-        status: 'active',
-        plan,
-        settings: JSON.stringify(defaultSettings),
-        created_at: now,
-        updated_at: now,
-      })
-      .returningAll()
-      .compile();
+      logger.info({ tenantId }, 'Tenant record inserted, seeding default CRM data');
+      const sr = await seedWithClient(trx, tenantId, tenantId);
 
-    const tenantResult = await client.query(
-      insertTenant.sql,
-      [...insertTenant.parameters],
-    );
-    const tenantRow = coerceTenantRow(tenantResult.rows[0] as Selectable<Tenants>);
-
-    logger.info({ tenantId }, 'Tenant record inserted, seeding default CRM data');
-    seedResult = await seedWithClient(client, tenantId, tenantId);
-
-    await client.query('COMMIT');
-    logger.info({ tenantId }, 'Tenant record and seed data committed');
-
-    // ── 4. Invite admin user via Descope ───────────────────────────────────
-
-    logger.info({ tenantId, adminEmail }, 'Inviting admin user via Descope');
-
-    let inviteSent = false;
-    try {
-      await descopeClient.management.user.invite(adminEmail, {
-        email: adminEmail,
-        displayName: adminName.trim(),
-        userTenants: [{ tenantId, roleNames: ['admin'] }],
-        sendMail: true,
-      });
-      inviteSent = true;
-      logger.info({ tenantId, adminEmail }, 'Admin user invited successfully');
-    } catch (inviteErr) {
-      // Log but do not roll back: the tenant and seed data are committed.
-      // The platform admin can resend the invite manually.
-      logger.error(
-        { err: inviteErr, tenantId, adminEmail },
-        'Failed to send admin invite; tenant was created but invite was not sent',
-      );
-    }
-
-    return {
-      tenant: {
-        id: tenantRow.id,
-        name: tenantRow.name,
-        slug: tenantRow.slug,
-        status: tenantRow.status,
-      },
-      adminUser: {
-        email: adminEmail,
-        inviteSent,
-      },
-      seeded: {
-        objects: seedResult.objectsCreated,
-        fields: seedResult.fieldsCreated,
-        relationships: seedResult.relationshipsCreated,
-        pipelines: seedResult.pipelinesCreated,
-      },
-    };
+      return { tenantRow: coerceTenantRow(row), seedResult: sr };
+    });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-
-    // Attempt to clean up the Descope tenant so the slug is not orphaned
     logger.warn({ err, tenantId }, 'Provisioning failed; rolling back Descope tenant');
     await descopeClient.management.tenant.delete(tenantId).catch((deleteErr: unknown) => {
       logger.error(
@@ -287,9 +218,49 @@ export async function provisionTenant(
     });
 
     throw err;
-  } finally {
-    client.release();
   }
+
+  logger.info({ tenantId }, 'Tenant record and seed data committed');
+
+  // ── 4. Invite admin user via Descope ───────────────────────────────────────
+
+  logger.info({ tenantId, adminEmail }, 'Inviting admin user via Descope');
+
+  let inviteSent = false;
+  try {
+    await descopeClient.management.user.invite(adminEmail, {
+      email: adminEmail,
+      displayName: adminName.trim(),
+      userTenants: [{ tenantId, roleNames: ['admin'] }],
+      sendMail: true,
+    });
+    inviteSent = true;
+    logger.info({ tenantId, adminEmail }, 'Admin user invited successfully');
+  } catch (inviteErr) {
+    logger.error(
+      { err: inviteErr, tenantId, adminEmail },
+      'Failed to send admin invite; tenant was created but invite was not sent',
+    );
+  }
+
+  return {
+    tenant: {
+      id: txResult.tenantRow.id,
+      name: txResult.tenantRow.name,
+      slug: txResult.tenantRow.slug,
+      status: txResult.tenantRow.status,
+    },
+    adminUser: {
+      email: adminEmail,
+      inviteSent,
+    },
+    seeded: {
+      objects: txResult.seedResult.objectsCreated,
+      fields: txResult.seedResult.fieldsCreated,
+      relationships: txResult.seedResult.relationshipsCreated,
+      pipelines: txResult.seedResult.pipelinesCreated,
+    },
+  };
 }
 
 // ─── List / get / update / delete helpers ─────────────────────────────────────

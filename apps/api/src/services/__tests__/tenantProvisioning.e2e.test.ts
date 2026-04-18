@@ -44,89 +44,73 @@ const fakeObjects = new Map<string, FakeRow>();
 const fakeFields = new Map<string, FakeRow>();
 const fakeRelationships = new Map<string, FakeRow>();
 
-// Kysely's PostgresDriver calls `client.query({ text, values })`, while the
-// legacy seedDefaultObjects path calls `client.query(sql, params)` directly.
-// Normalise both call shapes so the single dispatcher handles both.
+function normaliseCall(sqlOrQuery: unknown, paramsArg?: unknown[]) {
+  if (typeof sqlOrQuery === 'string') {
+    return { sql: sqlOrQuery, params: paramsArg ?? [] };
+  }
+  const q = sqlOrQuery as { text: string; values?: unknown[] };
+  return { sql: q.text, params: q.values ?? [] };
+}
+
+function extractInsertRow(sql: string, params: unknown[]): Record<string, unknown> {
+  const normalized = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim();
+  const match = normalized.match(/INSERT INTO \w+ \(([^)]+)\)/i);
+  if (!match) return {};
+  const columns = match[1].split(',').map((c) => c.trim().toLowerCase());
+  const row: Record<string, unknown> = {};
+  columns.forEach((col, i) => { row[col] = params[i]; });
+  return row;
+}
+
 const defaultClientQueryImpl = async (
   sqlOrQuery: unknown,
   paramsArg?: unknown[],
 ) => {
-  const sql =
-    typeof sqlOrQuery === 'string'
-      ? sqlOrQuery
-      : (sqlOrQuery as { text: string }).text;
-  const params =
-    typeof sqlOrQuery === 'string'
-      ? paramsArg
-      : ((sqlOrQuery as { values?: unknown[] }).values ?? []);
-
-  // Strip identifier quotes so Kysely's `"tenants"` matches the legacy
-  // matchers that were written against unquoted identifiers.
+  const { sql, params } = normaliseCall(sqlOrQuery, paramsArg);
   const s = sql.replace(/\s+/g, ' ').replace(/"/g, '').trim().toUpperCase();
 
-  // Transaction control
   if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') return { rows: [] };
+  if (s.startsWith('SELECT SET_CONFIG')) return { rows: [] };
 
-  // Slug uniqueness check (routed through pool.connect by Kysely).
-  // Kysely compiles `db.selectFrom('tenants').select('id').where('slug', '=', ?)`
-  // to `SELECT id FROM tenants WHERE slug = $1` (+ optional LIMIT for
-  // executeTakeFirst).
+  // Slug uniqueness check
   if (s.startsWith('SELECT ID FROM TENANTS WHERE SLUG')) {
-    const slug = params![0] as string;
+    const slug = params[0] as string;
     const match = [...fakeTenants.values()].find((t) => t.slug === slug);
     return { rows: match ? [{ id: match.id }] : [], rowCount: match ? 1 : 0 };
   }
 
-  // INSERT INTO tenants ... RETURNING *
-  // Kysely compiles `values({ id, name, slug, status, plan, settings,
-  // created_at, updated_at })` to 8 positional params in the declared
-  // field order. All columns are now parameterised (no hardcoded
-  // 'active'/'{}' like the old raw-SQL path).
+  // INSERT INTO tenants
   if (s.startsWith('INSERT INTO TENANTS')) {
-    const [id, name, slug, status, plan, settings, created_at, updated_at] =
-      params as unknown[];
-    const row: FakeRow = {
-      id: id as string,
-      name,
-      slug,
-      status,
-      plan,
-      settings,
-      created_at,
-      updated_at,
-    };
-    fakeTenants.set(id as string, row);
+    const row = extractInsertRow(sql, params);
+    fakeTenants.set(row.id as string, { ...row, id: row.id as string });
     return { rows: [row], rowCount: 1, command: 'INSERT' };
   }
 
-  // SELECT id, api_name FROM object_definitions WHERE api_name = ANY($1) AND tenant_id = $2
-  if (s.includes('FROM OBJECT_DEFINITIONS') && s.includes('ANY')) {
-    const apiNames = params![0] as string[];
-    const tenantId = params![1] as string;
+  // SELECT ... FROM object_definitions WHERE api_name IN (...)
+  if (s.includes('FROM OBJECT_DEFINITIONS') && !s.startsWith('INSERT') && !s.startsWith('UPDATE') && s.includes('IN (')) {
+    const tenantId = params[params.length - 1] as string;
+    const apiNames = params.slice(0, -1) as string[];
     const rows = [...fakeObjects.values()]
       .filter((o) => apiNames.includes(o.api_name as string) && o.tenant_id === tenantId)
       .map((o) => ({ id: o.id, api_name: o.api_name }));
     return { rows };
   }
 
-  // INSERT INTO object_definitions ... ON CONFLICT ... RETURNING id
+  // INSERT INTO object_definitions
   if (s.startsWith('INSERT INTO OBJECT_DEFINITIONS')) {
-    const id = params![0] as string;
-    const apiName = params![1] as string;
-    const tenantId = params![7] as string;
+    const row = extractInsertRow(sql, params);
     const existing = [...fakeObjects.values()].find(
-      (o) => o.tenant_id === tenantId && o.api_name === apiName,
+      (o) => o.tenant_id === row.tenant_id && o.api_name === row.api_name,
     );
     if (existing) return { rows: [] };
-    const row: FakeRow = { id, api_name: apiName, tenant_id: tenantId };
-    fakeObjects.set(id, row);
-    return { rows: [{ id }] };
+    fakeObjects.set(row.id as string, { ...row, id: row.id as string });
+    return { rows: [{ id: row.id }] };
   }
 
-  // SELECT fd.id, od.api_name ... FROM field_definitions fd JOIN object_definitions od
-  if (s.includes('FROM FIELD_DEFINITIONS FD') && s.includes('JOIN OBJECT_DEFINITIONS OD')) {
-    const apiNames = params![0] as string[];
-    const tenantId = params![1] as string;
+  // SELECT fd.id ... FROM field_definitions fd JOIN object_definitions od
+  if (s.includes('FROM FIELD_DEFINITIONS') && s.includes('JOIN OBJECT_DEFINITIONS')) {
+    const tenantId = params[params.length - 1] as string;
+    const apiNames = params.slice(0, -1) as string[];
     const rows: { id: string; object_api_name: string; api_name: string }[] = [];
     for (const field of fakeFields.values()) {
       if (field.tenant_id !== tenantId) continue;
@@ -142,56 +126,80 @@ const defaultClientQueryImpl = async (
     return { rows };
   }
 
-  // INSERT INTO field_definitions ... ON CONFLICT ... RETURNING id
+  // INSERT INTO field_definitions
   if (s.startsWith('INSERT INTO FIELD_DEFINITIONS')) {
-    const id = params![0] as string;
-    const objectId = params![1] as string;
-    const apiName = params![2] as string;
-    const tenantId = params![8] as string;
+    const row = extractInsertRow(sql, params);
     const existing = [...fakeFields.values()].find(
-      (f) => f.tenant_id === tenantId && f.object_id === objectId && f.api_name === apiName,
+      (f) => f.tenant_id === row.tenant_id && f.object_id === row.object_id && f.api_name === row.api_name,
     );
     if (existing) return { rows: [] };
-    const row: FakeRow = { id, object_id: objectId, api_name: apiName, tenant_id: tenantId };
-    fakeFields.set(id, row);
-    return { rows: [{ id }] };
+    fakeFields.set(row.id as string, { ...row, id: row.id as string });
+    return { rows: [{ id: row.id }] };
   }
 
   // INSERT INTO relationship_definitions
   if (s.startsWith('INSERT INTO RELATIONSHIP_DEFINITIONS')) {
-    const id = params![0] as string;
-    const tenantId = params![8] as string;
-    const row: FakeRow = { id, tenant_id: tenantId };
-    fakeRelationships.set(id, row);
-    return { rows: [{ id }] };
+    const row = extractInsertRow(sql, params);
+    fakeRelationships.set(row.id as string, { ...row, id: row.id as string });
+    return { rows: [{ id: row.id }] };
+  }
+
+  // SELECT ld ... FROM layout_definitions ld JOIN object_definitions od
+  if (s.includes('FROM LAYOUT_DEFINITIONS') && s.includes('JOIN OBJECT_DEFINITIONS')) {
+    return { rows: [] };
   }
 
   // INSERT INTO layout_definitions
   if (s.startsWith('INSERT INTO LAYOUT_DEFINITIONS')) {
-    return { rows: [{ id: 'layout-1' }] };
+    const row = extractInsertRow(sql, params);
+    return { rows: [{ id: row.id }] };
   }
 
-  // INSERT INTO layout_field_assignments
-  if (s.startsWith('INSERT INTO LAYOUT_FIELD_ASSIGNMENTS')) {
-    return { rows: [{ id: 'lfa-1' }] };
+  // INSERT INTO layout_fields
+  if (s.startsWith('INSERT INTO LAYOUT_FIELDS')) {
+    const row = extractInsertRow(sql, params);
+    return { rows: [{ id: row.id }] };
+  }
+
+  // SELECT ... FROM pipeline_definitions WHERE api_name IN (...)
+  if (s.includes('FROM PIPELINE_DEFINITIONS') && !s.startsWith('INSERT') && s.includes('IN (')) {
+    return { rows: [] };
   }
 
   // INSERT INTO pipeline_definitions
   if (s.startsWith('INSERT INTO PIPELINE_DEFINITIONS')) {
-    return { rows: [{ id: params![0] }] };
+    const row = extractInsertRow(sql, params);
+    return { rows: [{ id: row.id }] };
+  }
+
+  // SELECT sd ... FROM stage_definitions sd JOIN pipeline_definitions pd
+  if (s.includes('FROM STAGE_DEFINITIONS') && s.includes('JOIN PIPELINE_DEFINITIONS')) {
+    return { rows: [] };
   }
 
   // INSERT INTO stage_definitions
   if (s.startsWith('INSERT INTO STAGE_DEFINITIONS')) {
-    return { rows: [{ id: params![0] }] };
+    const row = extractInsertRow(sql, params);
+    return { rows: [{ id: row.id }] };
+  }
+
+  // INSERT INTO stage_gates
+  if (s.startsWith('INSERT INTO STAGE_GATES')) {
+    const row = extractInsertRow(sql, params);
+    return { rows: [{ id: row.id }] };
   }
 
   // INSERT INTO lead_conversion_mappings
   if (s.startsWith('INSERT INTO LEAD_CONVERSION_MAPPINGS')) {
-    return { rows: [{ id: 'lcm-1' }] };
+    const row = extractInsertRow(sql, params);
+    return { rows: [{ id: row.id }] };
   }
 
-  // Default
+  // UPDATE object_definitions (name_field_id / name_template)
+  if (s.startsWith('UPDATE OBJECT_DEFINITIONS')) {
+    return { rows: [] };
+  }
+
   return { rows: [], rowCount: 0 };
 };
 
@@ -203,18 +211,7 @@ const mockConnect = vi.fn(() => ({
   release: mockRelease,
 }));
 
-const mockPoolQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-  const s = sql.replace(/\s+/g, ' ').trim().toUpperCase();
-
-  // Check slug uniqueness: SELECT id FROM tenants WHERE slug = $1
-  if (s.startsWith('SELECT ID FROM TENANTS WHERE SLUG')) {
-    const slug = params![0] as string;
-    const match = [...fakeTenants.values()].find((t) => t.slug === slug);
-    return { rows: match ? [{ id: match.id }] : [], rowCount: match ? 1 : 0 };
-  }
-
-  return { rows: [], rowCount: 0 };
-});
+const mockPoolQuery = vi.fn(async (..._args: unknown[]) => ({ rows: [], rowCount: 0 }));
 
 vi.mock('../../db/client.js', () => ({
   pool: {
