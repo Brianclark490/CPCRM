@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
+import type { Selectable, Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { LayoutDefinitions } from '../db/kysely.types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,32 +92,47 @@ function throwDeleteBlockedError(message: string): never {
 
 // ─── Row → domain model ─────────────────────────────────────────────────────
 
-function rowToLayoutDefinition(row: Record<string, unknown>): LayoutDefinition {
+function rowToLayoutDefinition(row: Selectable<LayoutDefinitions>): LayoutDefinition {
   return {
-    id: row.id as string,
-    objectId: row.object_id as string,
-    name: row.name as string,
-    layoutType: row.layout_type as string,
-    isDefault: row.is_default as boolean,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
+    id: row.id,
+    objectId: row.object_id,
+    name: row.name,
+    layoutType: row.layout_type,
+    isDefault: row.is_default,
+    createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at as unknown as string),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at as unknown as string),
   };
 }
 
-function rowToLayoutFieldWithMetadata(row: Record<string, unknown>): LayoutFieldWithMetadata {
+interface LayoutFieldJoinedRow {
+  id: string;
+  layout_id: string;
+  field_id: string;
+  section: number;
+  section_label: string | null;
+  sort_order: number;
+  width: string | null;
+  field_api_name: string;
+  field_label: string;
+  field_type: string;
+  field_required: boolean;
+  field_options: Record<string, unknown> | null;
+}
+
+function rowToLayoutFieldWithMetadata(row: LayoutFieldJoinedRow): LayoutFieldWithMetadata {
   return {
-    id: row.id as string,
-    layoutId: row.layout_id as string,
-    fieldId: row.field_id as string,
-    section: row.section as number,
-    sectionLabel: (row.section_label as string | null) ?? undefined,
-    sortOrder: row.sort_order as number,
-    width: row.width as string,
-    fieldApiName: row.field_api_name as string,
-    fieldLabel: row.field_label as string,
-    fieldType: row.field_type as string,
-    fieldRequired: row.field_required as boolean,
-    fieldOptions: (row.field_options as Record<string, unknown>) ?? {},
+    id: row.id,
+    layoutId: row.layout_id,
+    fieldId: row.field_id,
+    section: row.section,
+    sectionLabel: row.section_label ?? undefined,
+    sortOrder: row.sort_order,
+    width: row.width ?? 'full',
+    fieldApiName: row.field_api_name,
+    fieldLabel: row.field_label,
+    fieldType: row.field_type,
+    fieldRequired: row.field_required,
+    fieldOptions: row.field_options ?? {},
   };
 }
 
@@ -144,42 +161,48 @@ export function validateLayoutType(layoutType: unknown): string | null {
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 async function assertObjectExists(tenantId: string, objectId: string): Promise<void> {
-  const result = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [objectId, tenantId],
-  );
-  if (result.rows.length === 0) {
+  const row = await db
+    .selectFrom('object_definitions')
+    .select('id')
+    .where('id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (!row) {
     throwNotFoundError('Object definition not found');
   }
 }
 
-async function fetchLayoutFields(layoutId: string): Promise<LayoutFieldWithMetadata[]> {
-  const result = await pool.query(
-    `SELECT lf.*,
-            fd.api_name  AS field_api_name,
-            fd.label     AS field_label,
-            fd.field_type AS field_type,
-            fd.required  AS field_required,
-            fd.options   AS field_options
-     FROM layout_fields lf
-     JOIN field_definitions fd ON fd.id = lf.field_id
-     WHERE lf.layout_id = $1
-     ORDER BY lf.section ASC, lf.sort_order ASC`,
-    [layoutId],
-  );
+async function fetchLayoutFields(tenantId: string, layoutId: string): Promise<LayoutFieldWithMetadata[]> {
+  const rows = await db
+    .selectFrom('layout_fields as lf')
+    .innerJoin('field_definitions as fd', (join) =>
+      join.onRef('fd.id', '=', 'lf.field_id').on('fd.tenant_id', '=', tenantId),
+    )
+    .where('lf.layout_id', '=', layoutId)
+    .where('lf.tenant_id', '=', tenantId)
+    .select([
+      'lf.id',
+      'lf.layout_id',
+      'lf.field_id',
+      'lf.section',
+      'lf.section_label',
+      'lf.sort_order',
+      'lf.width',
+      'fd.api_name as field_api_name',
+      'fd.label as field_label',
+      'fd.field_type as field_type',
+      'fd.required as field_required',
+      'fd.options as field_options',
+    ])
+    .orderBy('lf.section', 'asc')
+    .orderBy('lf.sort_order', 'asc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => rowToLayoutFieldWithMetadata(row));
+  return rows.map((row) => rowToLayoutFieldWithMetadata(row as unknown as LayoutFieldJoinedRow));
 }
 
 // ─── Service functions ───────────────────────────────────────────────────────
 
-/**
- * Creates a new layout definition on the specified object.
- *
- * @throws {Error} NOT_FOUND — parent object does not exist
- * @throws {Error} VALIDATION_ERROR — invalid input
- * @throws {Error} CONFLICT — layout name already exists on this object
- */
 export async function createLayoutDefinition(
   tenantId: string,
   objectId: string,
@@ -187,71 +210,64 @@ export async function createLayoutDefinition(
 ): Promise<LayoutDefinition> {
   await assertObjectExists(tenantId, objectId);
 
-  // Validate
   const nameError = validateLayoutName(params.name);
   if (nameError) throwValidationError(nameError);
 
   const typeError = validateLayoutType(params.layoutType);
   if (typeError) throwValidationError(typeError);
 
-  // Check uniqueness of name within this object and tenant
-  const existing = await pool.query(
-    'SELECT id FROM layout_definitions WHERE object_id = $1 AND name = $2 AND tenant_id = $3',
-    [objectId, params.name.trim(), tenantId],
-  );
-  if (existing.rows.length > 0) {
+  const existing = await db
+    .selectFrom('layout_definitions')
+    .select('id')
+    .where('object_id', '=', objectId)
+    .where('name', '=', params.name.trim())
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (existing) {
     throwConflictError(`A layout with name "${params.name.trim()}" already exists on this object`);
   }
 
   const layoutId = randomUUID();
   const now = new Date();
 
-  const result = await pool.query(
-    `INSERT INTO layout_definitions
-       (id, tenant_id, object_id, name, layout_type, is_default, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING *`,
-    [
-      layoutId,
-      tenantId,
-      objectId,
-      params.name.trim(),
-      params.layoutType.trim(),
-      params.isDefault ?? false,
-      now,
-      now,
-    ],
-  );
+  const row = await db
+    .insertInto('layout_definitions')
+    .values({
+      id: layoutId,
+      tenant_id: tenantId,
+      object_id: objectId,
+      name: params.name.trim(),
+      layout_type: params.layoutType.trim(),
+      is_default: params.isDefault ?? false,
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ layoutId, objectId, name: params.name }, 'Layout definition created');
 
-  return rowToLayoutDefinition(result.rows[0]);
+  return rowToLayoutDefinition(row);
 }
 
-/**
- * Returns all layout definitions for an object, ordered by layout_type and name.
- *
- * @throws {Error} NOT_FOUND — parent object does not exist
- */
 export async function listLayoutDefinitions(
   tenantId: string,
   objectId: string,
 ): Promise<LayoutDefinition[]> {
   await assertObjectExists(tenantId, objectId);
 
-  const result = await pool.query(
-    'SELECT * FROM layout_definitions WHERE object_id = $1 AND tenant_id = $2 ORDER BY layout_type ASC, name ASC',
-    [objectId, tenantId],
-  );
+  const rows = await db
+    .selectFrom('layout_definitions')
+    .selectAll()
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .orderBy('layout_type', 'asc')
+    .orderBy('name', 'asc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => rowToLayoutDefinition(row));
+  return rows.map(rowToLayoutDefinition);
 }
 
-/**
- * Returns a single layout definition by ID with nested field metadata.
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- */
 export async function getLayoutDefinitionById(
   tenantId: string,
   objectId: string,
@@ -259,28 +275,24 @@ export async function getLayoutDefinitionById(
 ): Promise<LayoutDefinitionDetail> {
   await assertObjectExists(tenantId, objectId);
 
-  const layoutResult = await pool.query(
-    'SELECT * FROM layout_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [layoutId, objectId, tenantId],
-  );
+  const row = await db
+    .selectFrom('layout_definitions')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (layoutResult.rows.length === 0) {
+  if (!row) {
     throwNotFoundError('Layout definition not found');
   }
 
-  const layout = rowToLayoutDefinition(layoutResult.rows[0]);
-  const fields = await fetchLayoutFields(layoutId);
+  const layout = rowToLayoutDefinition(row);
+  const fields = await fetchLayoutFields(tenantId, layoutId);
 
   return { ...layout, fields };
 }
 
-/**
- * Updates a layout definition's metadata (name, layout_type).
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- * @throws {Error} VALIDATION_ERROR — invalid input
- * @throws {Error} CONFLICT — layout name already exists on this object
- */
 export async function updateLayoutDefinition(
   tenantId: string,
   objectId: string,
@@ -289,26 +301,31 @@ export async function updateLayoutDefinition(
 ): Promise<LayoutDefinition> {
   await assertObjectExists(tenantId, objectId);
 
-  const existing = await pool.query(
-    'SELECT * FROM layout_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [layoutId, objectId, tenantId],
-  );
+  const existing = await db
+    .selectFrom('layout_definitions')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existing) {
     throwNotFoundError('Layout definition not found');
   }
 
-  // Validate changed fields
   if (params.name !== undefined) {
     const nameError = validateLayoutName(params.name);
     if (nameError) throwValidationError(nameError);
 
-    // Check uniqueness of new name (excluding this layout)
-    const dup = await pool.query(
-      'SELECT id FROM layout_definitions WHERE object_id = $1 AND name = $2 AND id != $3 AND tenant_id = $4',
-      [objectId, params.name.trim(), layoutId, tenantId],
-    );
-    if (dup.rows.length > 0) {
+    const dup = await db
+      .selectFrom('layout_definitions')
+      .select('id')
+      .where('object_id', '=', objectId)
+      .where('name', '=', params.name.trim())
+      .where('id', '!=', layoutId)
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirst();
+    if (dup) {
       throwConflictError(`A layout with name "${params.name.trim()}" already exists on this object`);
     }
   }
@@ -318,49 +335,34 @@ export async function updateLayoutDefinition(
     if (typeError) throwValidationError(typeError);
   }
 
-  // Build dynamic update
-  const updates: string[] = [];
-  const values: unknown[] = [];
-  let paramIndex = 1;
-
+  const patch: Updateable<LayoutDefinitions> = {};
   if ('name' in params) {
-    updates.push(`name = $${paramIndex++}`);
-    values.push(params.name!.trim());
+    patch.name = params.name!.trim();
   }
   if ('layoutType' in params) {
-    updates.push(`layout_type = $${paramIndex++}`);
-    values.push(params.layoutType!.trim());
+    patch.layout_type = params.layoutType!.trim();
   }
 
-  if (updates.length === 0) {
-    return rowToLayoutDefinition(existing.rows[0]);
+  if (Object.keys(patch).length === 0) {
+    return rowToLayoutDefinition(existing);
   }
 
-  const now = new Date();
-  updates.push(`updated_at = $${paramIndex++}`);
-  values.push(now);
+  patch.updated_at = new Date();
 
-  values.push(layoutId);
-  values.push(objectId);
-
-  const result = await pool.query(
-    `UPDATE layout_definitions SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND object_id = $${paramIndex} RETURNING *`,
-    values,
-  );
+  const row = await db
+    .updateTable('layout_definitions')
+    .set(patch)
+    .where('id', '=', layoutId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ layoutId, objectId }, 'Layout definition updated');
 
-  return rowToLayoutDefinition(result.rows[0]);
+  return rowToLayoutDefinition(row);
 }
 
-/**
- * Sets the layout field arrangement (full replacement).
- * Deletes all existing layout_fields for this layout, then inserts new ones
- * based on the provided sections.
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- * @throws {Error} VALIDATION_ERROR — invalid section/field input
- */
 export async function setLayoutFields(
   tenantId: string,
   objectId: string,
@@ -369,21 +371,22 @@ export async function setLayoutFields(
 ): Promise<LayoutDefinitionDetail> {
   await assertObjectExists(tenantId, objectId);
 
-  const layoutResult = await pool.query(
-    'SELECT * FROM layout_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [layoutId, objectId, tenantId],
-  );
+  const layoutRow = await db
+    .selectFrom('layout_definitions')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (layoutResult.rows.length === 0) {
+  if (!layoutRow) {
     throwNotFoundError('Layout definition not found');
   }
 
-  // Validate sections input
   if (!Array.isArray(sections)) {
     throwValidationError('sections must be an array');
   }
 
-  // Collect all field IDs and validate they belong to this object
   const allFieldIds: string[] = [];
   for (const section of sections) {
     if (!Array.isArray(section.fields)) {
@@ -399,12 +402,13 @@ export async function setLayoutFields(
   }
 
   if (allFieldIds.length > 0) {
-    // Verify all field IDs belong to this object
-    const existingFields = await pool.query(
-      'SELECT id FROM field_definitions WHERE object_id = $1 AND tenant_id = $2',
-      [objectId, tenantId],
-    );
-    const existingIds = new Set(existingFields.rows.map((r: Record<string, unknown>) => r.id as string));
+    const existingFields = await db
+      .selectFrom('field_definitions')
+      .select('id')
+      .where('object_id', '=', objectId)
+      .where('tenant_id', '=', tenantId)
+      .execute();
+    const existingIds = new Set(existingFields.map((r) => r.id));
 
     for (const fieldId of allFieldIds) {
       if (!existingIds.has(fieldId)) {
@@ -412,20 +416,18 @@ export async function setLayoutFields(
       }
     }
 
-    // Check for duplicate field IDs
     const uniqueFieldIds = new Set(allFieldIds);
     if (uniqueFieldIds.size !== allFieldIds.length) {
       throwValidationError('Duplicate field IDs are not allowed in a layout');
     }
   }
 
-  // Delete existing layout fields
-  await pool.query(
-    'DELETE FROM layout_fields WHERE layout_id = $1',
-    [layoutId],
-  );
+  await db
+    .deleteFrom('layout_fields')
+    .where('layout_id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
-  // Insert new layout fields
   for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
     const section = sections[sectionIndex];
     const sectionLabel = section.label?.trim() ?? null;
@@ -434,44 +436,38 @@ export async function setLayoutFields(
       const field = section.fields[fieldIndex];
       const fieldId = field.field_id ?? field.fieldId;
 
-      await pool.query(
-        `INSERT INTO layout_fields (id, layout_id, field_id, section, section_label, sort_order, width)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          randomUUID(),
-          layoutId,
-          fieldId,
-          sectionIndex,
-          sectionLabel,
-          fieldIndex + 1,
-          field.width ?? 'full',
-        ],
-      );
+      await db
+        .insertInto('layout_fields')
+        .values({
+          id: randomUUID(),
+          tenant_id: tenantId,
+          layout_id: layoutId,
+          field_id: fieldId!,
+          section: sectionIndex,
+          section_label: sectionLabel,
+          sort_order: fieldIndex + 1,
+          width: field.width ?? 'full',
+        })
+        .execute();
     }
   }
 
-  // Update the layout's updated_at timestamp
   const now = new Date();
-  await pool.query(
-    'UPDATE layout_definitions SET updated_at = $1 WHERE id = $2',
-    [now, layoutId],
-  );
+  await db
+    .updateTable('layout_definitions')
+    .set({ updated_at: now })
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
   logger.info({ layoutId, objectId, sectionCount: sections.length }, 'Layout fields updated');
 
-  // Return the full layout with field metadata
-  const layout = rowToLayoutDefinition({ ...layoutResult.rows[0], updated_at: now.toISOString() });
-  const fields = await fetchLayoutFields(layoutId);
+  const layout = rowToLayoutDefinition({ ...layoutRow, updated_at: now });
+  const fields = await fetchLayoutFields(tenantId, layoutId);
 
   return { ...layout, fields };
 }
 
-/**
- * Deletes a layout definition. Default layouts cannot be deleted.
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- * @throws {Error} DELETE_BLOCKED — default layout
- */
 export async function deleteLayoutDefinition(
   tenantId: string,
   objectId: string,
@@ -479,22 +475,27 @@ export async function deleteLayoutDefinition(
 ): Promise<void> {
   await assertObjectExists(tenantId, objectId);
 
-  const existing = await pool.query(
-    'SELECT * FROM layout_definitions WHERE id = $1 AND object_id = $2 AND tenant_id = $3',
-    [layoutId, objectId, tenantId],
-  );
+  const existing = await db
+    .selectFrom('layout_definitions')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('object_id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existing) {
     throwNotFoundError('Layout definition not found');
   }
 
-  const row = existing.rows[0] as Record<string, unknown>;
-
-  if (row.is_default === true) {
+  if (existing.is_default === true) {
     throwDeleteBlockedError('Cannot delete default layouts');
   }
 
-  await pool.query('DELETE FROM layout_definitions WHERE id = $1', [layoutId]);
+  await db
+    .deleteFrom('layout_definitions')
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
   logger.info({ layoutId, objectId }, 'Layout definition deleted');
 }

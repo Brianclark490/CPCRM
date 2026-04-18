@@ -1,6 +1,9 @@
 import { randomUUID } from 'crypto';
+import { sql } from 'kysely';
+import type { Selectable, Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
-import { pool } from '../db/client.js';
+import { db } from '../db/kysely.js';
+import type { PageLayouts, PageLayoutVersions } from '../db/kysely.types.js';
 import { VALID_COMPONENT_TYPES } from '../lib/componentRegistry.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -126,33 +129,35 @@ function throwDeleteBlockedError(message: string): never {
 
 // ─── Row → domain model ─────────────────────────────────────────────────────
 
-function rowToPageLayout(row: Record<string, unknown>): PageLayout {
+function rowToPageLayout(row: Selectable<PageLayouts>): PageLayout {
   return {
-    id: row.id as string,
-    tenantId: row.tenant_id as string,
-    objectId: row.object_id as string,
-    name: row.name as string,
-    role: (row.role as string | null) ?? null,
-    isDefault: row.is_default as boolean,
-    layout: row.layout as PageLayoutJson,
-    publishedLayout: (row.published_layout as PageLayoutJson | null) ?? null,
-    version: row.version as number,
-    status: row.status as string,
-    createdAt: new Date(row.created_at as string),
-    updatedAt: new Date(row.updated_at as string),
-    publishedAt: row.published_at ? new Date(row.published_at as string) : null,
+    id: row.id,
+    tenantId: row.tenant_id,
+    objectId: row.object_id,
+    name: row.name,
+    role: row.role,
+    isDefault: row.is_default,
+    layout: row.layout as unknown as PageLayoutJson,
+    publishedLayout: (row.published_layout as unknown as PageLayoutJson) ?? null,
+    version: row.version,
+    status: row.status,
+    createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at as unknown as string),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at as unknown as string),
+    publishedAt: row.published_at
+      ? (row.published_at instanceof Date ? row.published_at : new Date(row.published_at as unknown as string))
+      : null,
   };
 }
 
-function rowToPageLayoutVersion(row: Record<string, unknown>): PageLayoutVersion {
+function rowToPageLayoutVersion(row: Selectable<PageLayoutVersions>): PageLayoutVersion {
   return {
-    id: row.id as string,
-    layoutId: row.layout_id as string,
-    tenantId: row.tenant_id as string,
-    version: row.version as number,
-    layout: row.layout as PageLayoutJson,
-    publishedBy: (row.published_by as string | null) ?? null,
-    publishedAt: new Date(row.published_at as string),
+    id: row.id,
+    layoutId: row.layout_id,
+    tenantId: row.tenant_id,
+    version: row.version,
+    layout: row.layout as unknown as PageLayoutJson,
+    publishedBy: row.published_by,
+    publishedAt: row.published_at instanceof Date ? row.published_at : new Date(row.published_at as unknown as string),
   };
 }
 
@@ -208,7 +213,6 @@ export function validateLayoutJson(layout: unknown): string | null {
 
   const l = layout as Record<string, unknown>;
 
-  // Validate header
   if (typeof l.header !== 'object' || l.header === null) {
     return 'layout.header is required and must be an object';
   }
@@ -230,7 +234,6 @@ export function validateLayoutJson(layout: unknown): string | null {
     return 'layout.header.actions must be an array of strings';
   }
 
-  // Validate tabs
   if (!Array.isArray(l.tabs)) {
     return 'layout.tabs is required and must be an array';
   }
@@ -300,24 +303,19 @@ export function validateLayoutJson(layout: unknown): string | null {
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 async function assertObjectExists(tenantId: string, objectId: string): Promise<void> {
-  const result = await pool.query(
-    'SELECT id FROM object_definitions WHERE id = $1 AND tenant_id = $2',
-    [objectId, tenantId],
-  );
-  if (result.rows.length === 0) {
+  const row = await db
+    .selectFrom('object_definitions')
+    .select('id')
+    .where('id', '=', objectId)
+    .where('tenant_id', '=', tenantId)
+    .executeTakeFirst();
+  if (!row) {
     throwNotFoundError('Object definition not found');
   }
 }
 
 // ─── Service functions ───────────────────────────────────────────────────────
 
-/**
- * Creates a new page layout on the specified object.
- *
- * @throws {Error} NOT_FOUND — parent object does not exist
- * @throws {Error} VALIDATION_ERROR — invalid input
- * @throws {Error} CONFLICT — layout already exists for this object/role combination
- */
 export async function createPageLayout(
   tenantId: string,
   objectId: string,
@@ -331,14 +329,22 @@ export async function createPageLayout(
   const layoutError = validateLayoutJson(params.layout);
   if (layoutError) throwValidationError(layoutError);
 
-  // Check uniqueness constraint (tenant_id, object_id, role)
   const role = params.role ?? null;
-  const existing = await pool.query(
-    `SELECT id FROM page_layouts
-     WHERE tenant_id = $1 AND object_id = $2 AND ${role === null ? 'role IS NULL' : 'role = $3'}`,
-    role === null ? [tenantId, objectId] : [tenantId, objectId, role],
-  );
-  if (existing.rows.length > 0) {
+
+  let existingQuery = db
+    .selectFrom('page_layouts')
+    .select('id')
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId);
+
+  if (role === null) {
+    existingQuery = existingQuery.where('role', 'is', null);
+  } else {
+    existingQuery = existingQuery.where('role', '=', role);
+  }
+
+  const existing = await existingQuery.executeTakeFirst();
+  if (existing) {
     throwConflictError(
       role
         ? `A page layout already exists for this object with role "${role}"`
@@ -349,55 +355,46 @@ export async function createPageLayout(
   const layoutId = randomUUID();
   const now = new Date();
 
-  const result = await pool.query(
-    `INSERT INTO page_layouts
-       (id, tenant_id, object_id, name, role, is_default, layout, version, status, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-     RETURNING *`,
-    [
-      layoutId,
-      tenantId,
-      objectId,
-      params.name.trim(),
+  const row = await db
+    .insertInto('page_layouts')
+    .values({
+      id: layoutId,
+      tenant_id: tenantId,
+      object_id: objectId,
+      name: params.name.trim(),
       role,
-      params.isDefault ?? false,
-      JSON.stringify(params.layout),
-      1,
-      'draft',
-      now,
-      now,
-    ],
-  );
+      is_default: params.isDefault ?? false,
+      layout: JSON.stringify(params.layout),
+      version: 1,
+      status: 'draft',
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ layoutId, objectId, name: params.name }, 'Page layout created');
 
-  return rowToPageLayout(result.rows[0]);
+  return rowToPageLayout(row);
 }
 
-/**
- * Returns all page layouts for an object, ordered by name.
- *
- * @throws {Error} NOT_FOUND — parent object does not exist
- */
 export async function listPageLayouts(
   tenantId: string,
   objectId: string,
 ): Promise<PageLayout[]> {
   await assertObjectExists(tenantId, objectId);
 
-  const result = await pool.query(
-    'SELECT * FROM page_layouts WHERE tenant_id = $1 AND object_id = $2 ORDER BY name ASC',
-    [tenantId, objectId],
-  );
+  const rows = await db
+    .selectFrom('page_layouts')
+    .selectAll()
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .orderBy('name', 'asc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => rowToPageLayout(row));
+  return rows.map(rowToPageLayout);
 }
 
-/**
- * Returns a single page layout by ID.
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- */
 export async function getPageLayoutById(
   tenantId: string,
   objectId: string,
@@ -405,25 +402,21 @@ export async function getPageLayoutById(
 ): Promise<PageLayout> {
   await assertObjectExists(tenantId, objectId);
 
-  const result = await pool.query(
-    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
-    [layoutId, tenantId, objectId],
-  );
+  const row = await db
+    .selectFrom('page_layouts')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .executeTakeFirst();
 
-  if (result.rows.length === 0) {
+  if (!row) {
     throwNotFoundError('Page layout not found');
   }
 
-  return rowToPageLayout(result.rows[0]);
+  return rowToPageLayout(row);
 }
 
-/**
- * Updates a page layout's metadata and/or draft layout.
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- * @throws {Error} VALIDATION_ERROR — invalid input
- * @throws {Error} CONFLICT — role conflict with another layout
- */
 export async function updatePageLayout(
   tenantId: string,
   objectId: string,
@@ -432,12 +425,15 @@ export async function updatePageLayout(
 ): Promise<PageLayout> {
   await assertObjectExists(tenantId, objectId);
 
-  const existing = await pool.query(
-    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
-    [layoutId, tenantId, objectId],
-  );
+  const existing = await db
+    .selectFrom('page_layouts')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existing) {
     throwNotFoundError('Page layout not found');
   }
 
@@ -451,18 +447,24 @@ export async function updatePageLayout(
     if (layoutError) throwValidationError(layoutError);
   }
 
-  // Check role uniqueness if changing role
   if ('role' in params) {
     const newRole = params.role ?? null;
-    const dup = await pool.query(
-      `SELECT id FROM page_layouts
-       WHERE tenant_id = $1 AND object_id = $2 AND id != $3
-         AND ${newRole === null ? 'role IS NULL' : 'role = $4'}`,
-      newRole === null
-        ? [tenantId, objectId, layoutId]
-        : [tenantId, objectId, layoutId, newRole],
-    );
-    if (dup.rows.length > 0) {
+
+    let dupQuery = db
+      .selectFrom('page_layouts')
+      .select('id')
+      .where('tenant_id', '=', tenantId)
+      .where('object_id', '=', objectId)
+      .where('id', '!=', layoutId);
+
+    if (newRole === null) {
+      dupQuery = dupQuery.where('role', 'is', null);
+    } else {
+      dupQuery = dupQuery.where('role', '=', newRole);
+    }
+
+    const dup = await dupQuery.executeTakeFirst();
+    if (dup) {
       throwConflictError(
         newRole
           ? `A page layout already exists for this object with role "${newRole}"`
@@ -471,57 +473,39 @@ export async function updatePageLayout(
     }
   }
 
-  // Build dynamic update
-  const updates: string[] = [];
-  const values: unknown[] = [];
-  let paramIndex = 1;
-
+  const patch: Updateable<PageLayouts> = {};
   if ('name' in params) {
-    updates.push(`name = $${paramIndex++}`);
-    values.push(params.name!.trim());
+    patch.name = params.name!.trim();
   }
   if ('role' in params) {
-    updates.push(`role = $${paramIndex++}`);
-    values.push(params.role ?? null);
+    patch.role = params.role ?? null;
   }
   if ('layout' in params) {
-    updates.push(`layout = $${paramIndex++}`);
-    values.push(JSON.stringify(params.layout));
+    patch.layout = JSON.stringify(params.layout);
   }
   if ('isDefault' in params) {
-    updates.push(`is_default = $${paramIndex++}`);
-    values.push(params.isDefault);
+    patch.is_default = params.isDefault;
   }
 
-  if (updates.length === 0) {
-    return rowToPageLayout(existing.rows[0]);
+  if (Object.keys(patch).length === 0) {
+    return rowToPageLayout(existing);
   }
 
-  const now = new Date();
-  updates.push(`updated_at = $${paramIndex++}`);
-  values.push(now);
+  patch.updated_at = new Date();
 
-  values.push(layoutId);
-  const layoutIdParam = paramIndex++;
-  values.push(tenantId);
-  const tenantIdParam = paramIndex;
-
-  const result = await pool.query(
-    `UPDATE page_layouts SET ${updates.join(', ')} WHERE id = $${layoutIdParam} AND tenant_id = $${tenantIdParam} RETURNING *`,
-    values,
-  );
+  const row = await db
+    .updateTable('page_layouts')
+    .set(patch)
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ layoutId, objectId }, 'Page layout updated');
 
-  return rowToPageLayout(result.rows[0]);
+  return rowToPageLayout(row);
 }
 
-/**
- * Publishes a page layout — copies the draft layout to published_layout,
- * increments the version, and creates a version snapshot.
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- */
 export async function publishPageLayout(
   tenantId: string,
   objectId: string,
@@ -530,74 +514,56 @@ export async function publishPageLayout(
 ): Promise<PageLayout> {
   await assertObjectExists(tenantId, objectId);
 
-  const existing = await pool.query(
-    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
-    [layoutId, tenantId, objectId],
-  );
+  const existingRow = await db
+    .selectFrom('page_layouts')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existingRow) {
     throwNotFoundError('Page layout not found');
   }
 
-  const row = existing.rows[0] as Record<string, unknown>;
-  const currentVersion = row.version as number;
+  const currentVersion = existingRow.version;
   const newVersion = currentVersion + 1;
   const now = new Date();
 
-  // Wrap the layout update and version snapshot in a transaction so both
-  // succeed or neither does — prevents a partial state where the layout is
-  // marked as published but no version record exists.
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return db.transaction().execute(async (trx) => {
+    const row = await trx
+      .updateTable('page_layouts')
+      .set({
+        published_layout: sql`layout`,
+        version: newVersion,
+        status: 'published',
+        published_at: now,
+        updated_at: now,
+      })
+      .where('id', '=', layoutId)
+      .where('tenant_id', '=', tenantId)
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-    // Update the page layout: copy layout → published_layout
-    const result = await client.query(
-      `UPDATE page_layouts
-       SET published_layout = layout,
-           version = $1,
-           status = 'published',
-           published_at = $2,
-           updated_at = $2
-       WHERE id = $3 AND tenant_id = $4
-       RETURNING *`,
-      [newVersion, now, layoutId, tenantId],
-    );
-
-    // Create version snapshot
-    await client.query(
-      `INSERT INTO page_layout_versions
-         (id, layout_id, tenant_id, version, layout, published_by, published_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        randomUUID(),
-        layoutId,
-        tenantId,
-        newVersion,
-        row.layout,
-        publishedBy,
-        now,
-      ],
-    );
-
-    await client.query('COMMIT');
+    await trx
+      .insertInto('page_layout_versions')
+      .values({
+        id: randomUUID(),
+        layout_id: layoutId,
+        tenant_id: tenantId,
+        version: newVersion,
+        layout: row.layout,
+        published_by: publishedBy,
+        published_at: now,
+      })
+      .execute();
 
     logger.info({ layoutId, objectId, version: newVersion, publishedBy }, 'Page layout published');
 
-    return rowToPageLayout(result.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    return rowToPageLayout(row);
+  });
 }
 
-/**
- * Returns all version snapshots for a page layout, newest first.
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- */
 export async function listPageLayoutVersions(
   tenantId: string,
   objectId: string,
@@ -605,29 +571,28 @@ export async function listPageLayoutVersions(
 ): Promise<PageLayoutVersion[]> {
   await assertObjectExists(tenantId, objectId);
 
-  // Verify the layout exists
-  const layoutResult = await pool.query(
-    'SELECT id FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
-    [layoutId, tenantId, objectId],
-  );
-  if (layoutResult.rows.length === 0) {
+  const layoutRow = await db
+    .selectFrom('page_layouts')
+    .select('id')
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .executeTakeFirst();
+  if (!layoutRow) {
     throwNotFoundError('Page layout not found');
   }
 
-  const result = await pool.query(
-    'SELECT * FROM page_layout_versions WHERE layout_id = $1 AND tenant_id = $2 ORDER BY version DESC',
-    [layoutId, tenantId],
-  );
+  const rows = await db
+    .selectFrom('page_layout_versions')
+    .selectAll()
+    .where('layout_id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .orderBy('version', 'desc')
+    .execute();
 
-  return result.rows.map((row: Record<string, unknown>) => rowToPageLayoutVersion(row));
+  return rows.map(rowToPageLayoutVersion);
 }
 
-/**
- * Deletes a page layout. Default layouts cannot be deleted.
- *
- * @throws {Error} NOT_FOUND — layout or parent object does not exist
- * @throws {Error} DELETE_BLOCKED — default layout
- */
 export async function deletePageLayout(
   tenantId: string,
   objectId: string,
@@ -635,31 +600,31 @@ export async function deletePageLayout(
 ): Promise<void> {
   await assertObjectExists(tenantId, objectId);
 
-  const existing = await pool.query(
-    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
-    [layoutId, tenantId, objectId],
-  );
+  const existing = await db
+    .selectFrom('page_layouts')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .executeTakeFirst();
 
-  if (existing.rows.length === 0) {
+  if (!existing) {
     throwNotFoundError('Page layout not found');
   }
 
-  const row = existing.rows[0] as Record<string, unknown>;
-
-  if (row.is_default === true) {
+  if (existing.is_default === true) {
     throwDeleteBlockedError('Cannot delete default page layouts');
   }
 
-  await pool.query('DELETE FROM page_layouts WHERE id = $1 AND tenant_id = $2', [layoutId, tenantId]);
+  await db
+    .deleteFrom('page_layouts')
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .execute();
 
   logger.info({ layoutId, objectId }, 'Page layout deleted');
 }
 
-/**
- * Copies the layout JSON from a source page layout into the target layout's draft.
- *
- * @throws {Error} NOT_FOUND — target layout, source layout, or parent object does not exist
- */
 export async function copyLayout(
   tenantId: string,
   objectId: string,
@@ -668,46 +633,46 @@ export async function copyLayout(
 ): Promise<PageLayout> {
   await assertObjectExists(tenantId, objectId);
 
-  // Fetch source layout
-  const sourceResult = await pool.query(
-    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
-    [sourceLayoutId, tenantId, objectId],
-  );
-  if (sourceResult.rows.length === 0) {
+  const sourceRow = await db
+    .selectFrom('page_layouts')
+    .selectAll()
+    .where('id', '=', sourceLayoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .executeTakeFirst();
+  if (!sourceRow) {
     throwNotFoundError('Source page layout not found');
   }
 
-  // Fetch target layout
-  const targetResult = await pool.query(
-    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
-    [targetLayoutId, tenantId, objectId],
-  );
-  if (targetResult.rows.length === 0) {
+  const targetRow = await db
+    .selectFrom('page_layouts')
+    .selectAll()
+    .where('id', '=', targetLayoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .executeTakeFirst();
+  if (!targetRow) {
     throwNotFoundError('Target page layout not found');
   }
 
-  const sourceRow = sourceResult.rows[0] as Record<string, unknown>;
   const now = new Date();
 
-  // Copy the source layout JSON into the target's draft
-  const result = await pool.query(
-    `UPDATE page_layouts
-     SET layout = $1, updated_at = $2
-     WHERE id = $3 AND tenant_id = $4
-     RETURNING *`,
-    [sourceRow.layout, now, targetLayoutId, tenantId],
-  );
+  const row = await db
+    .updateTable('page_layouts')
+    .set({
+      layout: sourceRow.layout,
+      updated_at: now,
+    })
+    .where('id', '=', targetLayoutId)
+    .where('tenant_id', '=', tenantId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ targetLayoutId, sourceLayoutId, objectId }, 'Page layout copied');
 
-  return rowToPageLayout(result.rows[0]);
+  return rowToPageLayout(row);
 }
 
-/**
- * Reverts a page layout's draft to a specific version from page_layout_versions.
- *
- * @throws {Error} NOT_FOUND — layout, version snapshot, or parent object does not exist
- */
 export async function revertLayout(
   tenantId: string,
   objectId: string,
@@ -716,37 +681,42 @@ export async function revertLayout(
 ): Promise<PageLayout> {
   await assertObjectExists(tenantId, objectId);
 
-  // Verify the layout exists
-  const layoutResult = await pool.query(
-    'SELECT * FROM page_layouts WHERE id = $1 AND tenant_id = $2 AND object_id = $3',
-    [layoutId, tenantId, objectId],
-  );
-  if (layoutResult.rows.length === 0) {
+  const layoutRow = await db
+    .selectFrom('page_layouts')
+    .selectAll()
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('object_id', '=', objectId)
+    .executeTakeFirst();
+  if (!layoutRow) {
     throwNotFoundError('Page layout not found');
   }
 
-  // Find the version snapshot
-  const versionResult = await pool.query(
-    'SELECT * FROM page_layout_versions WHERE layout_id = $1 AND tenant_id = $2 AND version = $3',
-    [layoutId, tenantId, version],
-  );
-  if (versionResult.rows.length === 0) {
+  const versionRow = await db
+    .selectFrom('page_layout_versions')
+    .selectAll()
+    .where('layout_id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .where('version', '=', version)
+    .executeTakeFirst();
+  if (!versionRow) {
     throwNotFoundError(`Version ${version} not found for this layout`);
   }
 
-  const versionRow = versionResult.rows[0] as Record<string, unknown>;
   const now = new Date();
 
-  // Restore the version's layout JSON into the draft
-  const result = await pool.query(
-    `UPDATE page_layouts
-     SET layout = $1, updated_at = $2
-     WHERE id = $3 AND tenant_id = $4
-     RETURNING *`,
-    [versionRow.layout, now, layoutId, tenantId],
-  );
+  const row = await db
+    .updateTable('page_layouts')
+    .set({
+      layout: versionRow.layout,
+      updated_at: now,
+    })
+    .where('id', '=', layoutId)
+    .where('tenant_id', '=', tenantId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   logger.info({ layoutId, objectId, version }, 'Page layout reverted');
 
-  return rowToPageLayout(result.rows[0]);
+  return rowToPageLayout(row);
 }
