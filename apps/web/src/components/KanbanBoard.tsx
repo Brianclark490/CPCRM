@@ -1,6 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@descope/react-sdk';
 import { ApiError, unwrapList, useApiClient } from '../lib/apiClient.js';
+import { pipelinesKeys, recordsKeys } from '../lib/queryKeys.js';
+import {
+  usePipeline,
+  type Pipeline as PipelineDefinition,
+  type PipelineStage as StageDefinition,
+} from '../features/pipelines/hooks/queries/usePipeline.js';
+import {
+  useRecords,
+  type RecordItem,
+  type RecordsResponse,
+} from '../features/records/hooks/queries/useRecords.js';
 import { useTenantLocale } from '../useTenantLocale.js';
 import { KanbanCard } from './KanbanCard.js';
 import type { KanbanCardRecord } from './KanbanCard.js';
@@ -15,43 +27,6 @@ import type { OverdueRecord } from './OverdueDealsPanel.js';
 import styles from './KanbanBoard.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface StageDefinition {
-  id: string;
-  name: string;
-  apiName: string;
-  sortOrder: number;
-  stageType: string;
-  colour: string;
-  defaultProbability?: number;
-  expectedDays?: number;
-}
-
-interface PipelineDefinition {
-  id: string;
-  name: string;
-  objectId: string;
-  stages: StageDefinition[];
-}
-
-interface RecordItem {
-  id: string;
-  name: string;
-  fieldValues: Record<string, unknown>;
-  ownerId: string;
-  pipelineId?: string;
-  currentStageId?: string;
-  stageEnteredAt?: string;
-  linkedParent?: { objectApiName: string; recordId: string; recordName: string };
-  createdAt: string;
-}
-
-interface RecordsResponse {
-  data: RecordItem[];
-  total: number;
-  page: number;
-  limit: number;
-}
 
 interface MoveStageResponse {
   id: string;
@@ -85,6 +60,8 @@ interface KanbanBoardProps {
   apiName: string;
   objectId: string;
 }
+
+const RECORDS_QUERY_PARAMS = { limit: 100 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -177,12 +154,8 @@ function applyFilters(
 export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const { sessionToken } = useSession();
   const api = useApiClient();
+  const queryClient = useQueryClient();
   const { formatCurrencyCompact } = useTenantLocale();
-
-  const [pipeline, setPipeline] = useState<PipelineDefinition | null>(null);
-  const [allRecords, setAllRecords] = useState<RecordItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<KanbanFilters>(EMPTY_FILTERS);
   const [draggingRecordId, setDraggingRecordId] = useState<string | null>(null);
@@ -220,99 +193,80 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     });
   };
 
-  // ── Fetch pipeline + records ─────────────────────────────
-  useEffect(() => {
-    if (!sessionToken || !objectId || !apiName) return;
+  // ── Fetch pipeline + records via TanStack Query ──────────
+  //
+  // 1. List pipelines and find the one bound to this object. The
+  //    `/api/v1/admin/pipelines` endpoint returns a paginated envelope, so
+  //    the list is unwrapped before we match on `objectId`.
+  // 2. `usePipeline(pipelineId)` fetches the stage detail once the id is
+  //    known.
+  // 3. `useRecords(apiName, { limit: 100 })` fetches the records for this
+  //    object with `keepPreviousData` so the board doesn't flicker between
+  //    cached + refetched results.
+  const pipelineListQuery = useQuery({
+    queryKey: pipelinesKeys.list(),
+    queryFn: async () => {
+      const payload = await api.get<unknown>('/api/v1/admin/pipelines');
+      return unwrapList<
+        PipelineDefinition & { objectId?: string; object_id?: string }
+      >(payload);
+    },
+    enabled: Boolean(sessionToken),
+  });
 
-    let cancelled = false;
+  const matchedPipelineId = useMemo(() => {
+    const list = pipelineListQuery.data;
+    if (!list) return undefined;
+    return list.find((p) => (p.objectId ?? p.object_id) === objectId)?.id;
+  }, [pipelineListQuery.data, objectId]);
 
-    const loadAll = async () => {
-      try {
-        // 1. Find pipeline for this object. The admin/pipelines endpoint
-        // returns a paginated `{ data, pagination }` envelope, so unwrap
-        // via unwrapList (which also tolerates a bare array for future-
-        // proofing against endpoint shape changes).
-        let pipelines: Array<
-          PipelineDefinition & { objectId?: string; object_id?: string }
-        >;
-        try {
-          const payload = await api.get<unknown>('/api/v1/admin/pipelines');
-          pipelines = unwrapList<
-            PipelineDefinition & { objectId?: string; object_id?: string }
-          >(payload);
-        } catch {
-          if (!cancelled) {
-            setError('Failed to load pipeline configuration.');
-            setLoading(false);
-          }
-          return;
-        }
+  const pipelineDetailQuery = usePipeline(matchedPipelineId);
+  const recordsQuery = useRecords(apiName, RECORDS_QUERY_PARAMS);
 
-        if (cancelled) return;
+  const pipeline = pipelineDetailQuery.data ?? null;
+  const allRecords = useMemo<RecordItem[]>(
+    () => recordsQuery.data?.data ?? [],
+    [recordsQuery.data],
+  );
 
-        const match = pipelines.find(
-          (p) => (p.objectId ?? p.object_id) === objectId,
-        );
+  const loading =
+    pipelineListQuery.isLoading ||
+    (matchedPipelineId !== undefined &&
+      (pipelineDetailQuery.isLoading || recordsQuery.isLoading));
 
-        if (!match) {
-          setPipeline(null);
-          setLoading(false);
-          return;
-        }
+  // Surface records/detail errors only once we know there *is* a pipeline
+  // for this object. Otherwise the "no pipeline configured" path would be
+  // shadowed by a spurious records-fetch failure.
+  const error: string | null = pipelineListQuery.isError
+    ? 'Failed to load pipeline configuration.'
+    : matchedPipelineId && pipelineDetailQuery.isError
+      ? 'Failed to load pipeline stages.'
+      : matchedPipelineId && recordsQuery.isError
+        ? recordsQuery.error instanceof ApiError &&
+          recordsQuery.error.isNetwork
+          ? 'Failed to connect to the server.'
+          : 'Failed to load records for the pipeline.'
+        : null;
 
-        // 2. Fetch pipeline detail AND records in parallel
-        const [detailResult, recordsResult] = await Promise.allSettled([
-          api.get<PipelineDefinition>(`/api/v1/admin/pipelines/${match.id}`),
-          api.get<RecordsResponse>(
-            `/api/v1/objects/${apiName}/records?limit=100`,
-          ),
-        ]);
-
-        if (cancelled) return;
-
-        if (detailResult.status === 'rejected') {
-          setError('Failed to load pipeline stages.');
-          setLoading(false);
-          return;
-        }
-
-        const detail = detailResult.value;
-
-        let records: RecordItem[] = [];
-        if (recordsResult.status === 'fulfilled') {
-          records = Array.isArray(recordsResult.value.data)
-            ? recordsResult.value.data
-            : [];
-        }
-
-        // Set both pipeline and records in the same render batch
-        setPipeline(detail);
-        setAllRecords(records);
-
-        if (recordsResult.status === 'rejected') {
-          setError('Failed to load records for the pipeline.');
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof ApiError && err.isNetwork
-              ? 'Failed to connect to the server.'
-              : 'Failed to load pipeline configuration.',
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void loadAll();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionToken, api, objectId, apiName]);
+  // Apply a local patch to one record in the cached records list so drag-
+  // and-drop updates reflect immediately without a full refetch.
+  const patchRecord = useCallback(
+    (recordId: string, patch: Partial<RecordItem>) => {
+      queryClient.setQueryData<RecordsResponse>(
+        recordsKeys.list(apiName, RECORDS_QUERY_PARAMS),
+        (prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            data: prev.data.map((r) =>
+              r.id === recordId ? { ...r, ...patch } : r,
+            ),
+          };
+        },
+      );
+    },
+    [queryClient, apiName],
+  );
 
   // ── Fetch pipeline analytics ──────────────────────────────
   const loadAnalytics = useCallback(async () => {
@@ -391,20 +345,12 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
       if (response.ok) {
         const updated = (await response.json()) as MoveStageResponse;
-        // Update local state
-        setAllRecords((prev) =>
-          prev.map((r) =>
-            r.id === recordId
-              ? {
-                  ...r,
-                  pipelineId: updated.pipelineId,
-                  currentStageId: updated.currentStageId,
-                  stageEnteredAt: updated.stageEnteredAt,
-                  fieldValues: updated.fieldValues,
-                }
-              : r,
-          ),
-        );
+        patchRecord(recordId, {
+          pipelineId: updated.pipelineId,
+          currentStageId: updated.currentStageId,
+          stageEnteredAt: updated.stageEnteredAt,
+          fieldValues: updated.fieldValues,
+        });
         // Refresh analytics after stage change
         void loadAnalytics();
         return true;
@@ -511,13 +457,10 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
       }
 
       // Update local record field values
-      setAllRecords((prev) =>
-        prev.map((r) =>
-          r.id === gateModal.recordId
-            ? { ...r, fieldValues: { ...r.fieldValues, ...fieldValues } }
-            : r,
-        ),
-      );
+      const existing = allRecords.find((r) => r.id === gateModal.recordId);
+      patchRecord(gateModal.recordId, {
+        fieldValues: { ...(existing?.fieldValues ?? {}), ...fieldValues },
+      });
 
       // Now retry the move
       const success = await performMoveStage(
