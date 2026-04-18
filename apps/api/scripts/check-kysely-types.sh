@@ -12,7 +12,7 @@
 #
 # Run locally (against a throwaway DB):
 #   docker run --rm -d --name cpcrm-types-check \
-#     -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:14
+#     -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
 #   DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
 #     ./apps/api/scripts/check-kysely-types.sh
 #   docker stop cpcrm-types-check
