@@ -85,6 +85,41 @@ If a PR must merge with an unavoidable high/critical advisory:
 CodeQL runs on every PR via GitHub's default code-scanning setup. PRs that
 introduce new high or critical alerts must be resolved before merging.
 
+## Database migrations
+
+The API runs against PostgreSQL and uses [Kysely](https://kysely.dev/) for
+type-safe queries. The Kysely table types live in
+`apps/api/src/db/kysely.types.ts` and are **generated from the live database
+schema** by [`kysely-codegen`](https://github.com/RobinBlomberg/kysely-codegen)
+— they must always reflect the SQL migrations in
+`apps/api/src/db/migrations/`.
+
+### Adding a new migration
+
+1. Create the next `NNN_description.sql` file in `apps/api/src/db/migrations/`.
+2. Apply it locally, then regenerate the Kysely types:
+
+   ```bash
+   cd apps/api
+   # Apply migrations to your local DB
+   DATABASE_URL=postgres://...  npm run db:migrate
+   # Regenerate Kysely types from that DB
+   DATABASE_URL=postgres://...  npm run db:types
+   ```
+
+3. Commit **both** the new SQL migration and the regenerated
+   `apps/api/src/db/kysely.types.ts` in the same PR.
+
+### CI enforcement
+
+The `Kysely types are in sync with migrations` CI job spins up a throwaway
+Postgres, applies every committed migration, runs `kysely-codegen`, and
+diffs the result against the committed `kysely.types.ts`. If they differ,
+the build fails with instructions for how to regenerate the file.
+
+CI is the backstop, not the primary workflow — please regenerate types as
+part of writing the migration so reviewers see the intended schema diff.
+
 ## Pull Request Checklist
 
 Before requesting a review:
