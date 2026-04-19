@@ -31,6 +31,13 @@ export interface MoveStageResponse {
 export interface MoveStageVariables {
   recordId: RecordId;
   targetStageId: string;
+  /**
+   * API name (or name) of the target stage.  When supplied and the record
+   * already carries a `fieldValues.stage` field, the optimistic patch rewrites
+   * it so `KanbanBoard`'s column resolver — which prefers `fieldValues.stage`
+   * over `currentStageId` — visibly moves the card before the round-trip.
+   */
+  targetStageApiName?: string;
 }
 
 /** Server payload returned on a 422 gate-validation failure. */
@@ -40,18 +47,30 @@ interface GateFailureBody {
   failures?: GateFailure[];
 }
 
+/**
+ * Snapshot of the single record being mutated. Rolling back at the record
+ * level — rather than replacing the whole list with a pre-mutate copy — keeps
+ * concurrent successful moves on *other* records intact when this one fails.
+ */
 interface MoveStageContext {
-  previousRecords: RecordsResponse | undefined;
+  previous:
+    | {
+        currentStageId: string | undefined;
+        stageEnteredAt: string | undefined;
+        fieldValues: Record<string, unknown> | undefined;
+      }
+    | null;
 }
 
 export interface UseMoveStageOptions {
   apiName: ObjectApiName;
   /**
-   * Filters/pagination used by the records list this hook mutates. Must match
-   * the params passed to the corresponding `useRecords` call so the optimistic
-   * update targets the right cache entry.
+   * Filters/pagination used by the records list this hook mutates. Required:
+   * the optimistic patch + rollback target exactly `recordsKeys.list(apiName,
+   * listParams)`, so callers must pass the same params they gave `useRecords`
+   * or the update will silently miss the cache entry.
    */
-  listParams?: ListParams;
+  listParams: ListParams;
   /**
    * Pipeline id whose analytics key should be invalidated on settle.  When
    * absent, analytics invalidation is skipped — callers that haven't resolved
@@ -76,18 +95,40 @@ function extractGateFailures(error: unknown): GateFailure[] | null {
   return body.failures;
 }
 
+/**
+ * Replace a single record in the cached list via `queryClient.setQueryData`.
+ * Leaves every other record untouched so concurrent mutations on siblings
+ * aren't clobbered.
+ */
+function patchOneRecord(
+  queryClient: ReturnType<typeof useQueryClient>,
+  key: readonly unknown[],
+  recordId: RecordId,
+  apply: (record: RecordItem) => RecordItem,
+): void {
+  queryClient.setQueryData<RecordsResponse>(key, (prev) => {
+    if (!prev) return prev;
+    return {
+      ...prev,
+      data: prev.data.map((r) => (r.id === recordId ? apply(r) : r)),
+    };
+  });
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
  * Move a record to a new pipeline stage with optimistic UI and 422 rollback.
  *
  * Flow:
- *   1. `onMutate` snapshots the records list and optimistically patches
- *      `currentStageId` + `stageEnteredAt` on the affected record so the card
- *      visibly jumps to the target column before the network round-trip.
- *   2. `onError` restores the snapshot.  When the error is a 422 gate-
- *      validation failure the parsed `failures` are forwarded to
- *      `onGateFailure` so the caller can open its modal.
+ *   1. `onMutate` snapshots the affected record's prior stage fields and
+ *      optimistically patches `currentStageId`, `stageEnteredAt`, and — when
+ *      the record has one — `fieldValues.stage`, so the card visibly jumps to
+ *      the target column before the network round-trip.
+ *   2. `onError` restores just that record's pre-mutate fields — not the
+ *      whole list — so concurrent successful moves on siblings aren't
+ *      clobbered. When the error is a 422 gate-validation failure the parsed
+ *      `failures` are forwarded to `onGateFailure`.
  *   3. `onSuccess` merges the authoritative response (including server-
  *      computed `fieldValues` like `probability`) back into the cache.
  *   4. `onSettled` invalidates the pipeline analytics key so summary /
@@ -118,32 +159,50 @@ export function useMoveStage(
         { body: { target_stage_id: targetStageId } },
       ),
 
-    onMutate: async ({ recordId, targetStageId }) => {
+    onMutate: async ({ recordId, targetStageId, targetStageApiName }) => {
       // Cancel in-flight refetches so they don't overwrite the optimistic patch.
       await queryClient.cancelQueries({ queryKey: recordsListKey });
 
-      const previousRecords =
+      const currentList =
         queryClient.getQueryData<RecordsResponse>(recordsListKey);
-      const now = new Date().toISOString();
+      const existing = currentList?.data.find((r) => r.id === recordId);
 
-      queryClient.setQueryData<RecordsResponse>(recordsListKey, (prev) => {
-        if (!prev) return prev;
+      const previous: MoveStageContext['previous'] = existing
+        ? {
+            currentStageId: existing.currentStageId,
+            stageEnteredAt: existing.stageEnteredAt,
+            fieldValues: existing.fieldValues,
+          }
+        : null;
+
+      const now = new Date().toISOString();
+      patchOneRecord(queryClient, recordsListKey, recordId, (r) => {
+        const hasStageField =
+          r.fieldValues && typeof r.fieldValues.stage === 'string';
+        const fieldValues =
+          hasStageField && targetStageApiName
+            ? { ...r.fieldValues, stage: targetStageApiName }
+            : r.fieldValues;
         return {
-          ...prev,
-          data: prev.data.map((r: RecordItem) =>
-            r.id === recordId
-              ? { ...r, currentStageId: targetStageId, stageEnteredAt: now }
-              : r,
-          ),
+          ...r,
+          currentStageId: targetStageId,
+          stageEnteredAt: now,
+          fieldValues,
         };
       });
 
-      return { previousRecords };
+      return { previous };
     },
 
     onError: (error, vars, context) => {
-      if (context?.previousRecords !== undefined) {
-        queryClient.setQueryData(recordsListKey, context.previousRecords);
+      if (context?.previous) {
+        const { previous } = context;
+        patchOneRecord(queryClient, recordsListKey, vars.recordId, (r) => ({
+          ...r,
+          currentStageId: previous.currentStageId,
+          stageEnteredAt: previous.stageEnteredAt,
+          fieldValues: previous.fieldValues ?? {},
+        }));
       }
       const failures = extractGateFailures(error);
       if (failures && onGateFailure) {
@@ -152,23 +211,13 @@ export function useMoveStage(
     },
 
     onSuccess: (data) => {
-      queryClient.setQueryData<RecordsResponse>(recordsListKey, (prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          data: prev.data.map((r: RecordItem) =>
-            r.id === data.id
-              ? {
-                  ...r,
-                  pipelineId: data.pipelineId,
-                  currentStageId: data.currentStageId,
-                  stageEnteredAt: data.stageEnteredAt,
-                  fieldValues: data.fieldValues,
-                }
-              : r,
-          ),
-        };
-      });
+      patchOneRecord(queryClient, recordsListKey, data.id, (r) => ({
+        ...r,
+        pipelineId: data.pipelineId,
+        currentStageId: data.currentStageId,
+        stageEnteredAt: data.stageEnteredAt,
+        fieldValues: data.fieldValues,
+      }));
     },
 
     onSettled: () => {

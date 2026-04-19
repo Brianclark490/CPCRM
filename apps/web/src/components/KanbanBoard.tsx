@@ -333,9 +333,14 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const performMoveStage = useCallback(
     async (recordId: string, targetStageId: string): Promise<boolean> => {
       if (!sessionToken) return false;
+      const targetStage = pipeline?.stages.find((s) => s.id === targetStageId);
       try {
         await moveStage.mutateAsync(
-          { recordId, targetStageId },
+          {
+            recordId,
+            targetStageId,
+            targetStageApiName: targetStage?.apiName,
+          },
           { onSuccess: () => void loadAnalytics() },
         );
         return true;
@@ -345,7 +350,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
         return false;
       }
     },
-    [sessionToken, moveStage, loadAnalytics],
+    [sessionToken, pipeline, moveStage, loadAnalytics],
   );
 
   const handleDrop = (e: React.DragEvent, targetStageId: string) => {

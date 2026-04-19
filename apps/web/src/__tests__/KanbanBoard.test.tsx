@@ -632,12 +632,14 @@ describe('KanbanBoard', () => {
     expect(prospectingColumn).toHaveTextContent('Big Deal');
 
     // Hold the move-stage response until we flip this deferred. Every other
-    // request keeps working through the original mock so analytics panels
-    // don't flap while we inspect the optimistic state.
+    // request falls back to the default mock so analytics panels (summary,
+    // velocity, overdue) still get their expected shapes and don't crash the
+    // component when `loadAnalytics()` fires in the success path.
     let resolveMove: (value: Response) => void = () => {};
     const movePromise = new Promise<Response>((r) => {
       resolveMove = r;
     });
+    const defaultImpl = fetchMock.getMockImplementation();
     fetchMock.mockImplementation((url: string, options?: RequestInit) => {
       if (
         typeof url === 'string' &&
@@ -646,25 +648,10 @@ describe('KanbanBoard', () => {
       ) {
         return movePromise;
       }
-      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => mockPipeline,
-        } as Response);
-      }
-      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
-        } as Response);
-      }
-      if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => mockRecords,
-        } as Response);
-      }
-      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+      return defaultImpl?.(url, options) ?? Promise.resolve({
+        ok: false,
+        json: async () => ({}),
+      } as Response);
     });
 
     const card = screen.getByTestId('kanban-card-rec-1');
@@ -681,7 +668,9 @@ describe('KanbanBoard', () => {
     });
     expect(prospectingColumn).not.toHaveTextContent('Big Deal');
 
-    // Release the server response so the test finishes cleanly
+    // Release the server response and wait for the success path (including
+    // the `loadAnalytics()` refresh) to settle before the test exits, so we
+    // don't leak pending promises into later tests.
     resolveMove({
       ok: true,
       json: async () => ({
@@ -692,6 +681,17 @@ describe('KanbanBoard', () => {
         fieldValues: { value: 100000, close_date: '2026-06-15', probability: 30 },
       }),
     } as Response);
+
+    await waitFor(() => {
+      const moveCalls = fetchMock.mock.calls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && (call[0] as string).includes('/move-stage'),
+      );
+      expect(moveCalls.length).toBeGreaterThanOrEqual(1);
+      // Card stays in Qualification and no gate dialog appeared.
+      expect(qualColumn).toHaveTextContent('Big Deal');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 
   it('rolls back optimistic move when server returns 422', async () => {
@@ -706,6 +706,10 @@ describe('KanbanBoard', () => {
     const qualColumn = screen.getByTestId('kanban-column-qualification');
     expect(prospectingColumn).toHaveTextContent('Big Deal');
 
+    // Only override the move-stage POST; every other request (including
+    // analytics endpoints that fire after settle) keeps using the default
+    // mock so the board renders without surprise shape mismatches.
+    const defaultImpl = fetchMock.getMockImplementation();
     fetchMock.mockImplementation((url: string, options?: RequestInit) => {
       if (
         typeof url === 'string' &&
@@ -732,19 +736,10 @@ describe('KanbanBoard', () => {
           }),
         } as Response);
       }
-      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
-        return Promise.resolve({ ok: true, json: async () => mockPipeline } as Response);
-      }
-      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
-        } as Response);
-      }
-      if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
-        return Promise.resolve({ ok: true, json: async () => mockRecords } as Response);
-      }
-      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+      return defaultImpl?.(url, options) ?? Promise.resolve({
+        ok: false,
+        json: async () => ({}),
+      } as Response);
     });
 
     const card = screen.getByTestId('kanban-card-rec-1');
