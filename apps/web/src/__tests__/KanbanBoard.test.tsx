@@ -618,6 +618,153 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Deal Value is required')).toBeInTheDocument();
   });
 
+  it('optimistically moves card to target column before server responds', async () => {
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    // Big Deal starts in Prospecting
+    const prospectingColumn = screen.getByTestId('kanban-column-prospecting');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+    expect(prospectingColumn).toHaveTextContent('Big Deal');
+
+    // Hold the move-stage response until we flip this deferred. Every other
+    // request keeps working through the original mock so analytics panels
+    // don't flap while we inspect the optimistic state.
+    let resolveMove: (value: Response) => void = () => {};
+    const movePromise = new Promise<Response>((r) => {
+      resolveMove = r;
+    });
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return movePromise;
+      }
+      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockPipeline,
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockRecords,
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    fireEvent.dragStart(card, {
+      dataTransfer: { effectAllowed: 'move', setData: vi.fn(), getData: () => 'rec-1' },
+    });
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
+    });
+
+    // Optimistic update: card should appear in Qualification while the POST is pending
+    await waitFor(() => {
+      expect(qualColumn).toHaveTextContent('Big Deal');
+    });
+    expect(prospectingColumn).not.toHaveTextContent('Big Deal');
+
+    // Release the server response so the test finishes cleanly
+    resolveMove({
+      ok: true,
+      json: async () => ({
+        id: 'rec-1',
+        pipelineId: 'pipe-1',
+        currentStageId: 'stage-2',
+        stageEnteredAt: new Date().toISOString(),
+        fieldValues: { value: 100000, close_date: '2026-06-15', probability: 30 },
+      }),
+    } as Response);
+  });
+
+  it('rolls back optimistic move when server returns 422', async () => {
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    const prospectingColumn = screen.getByTestId('kanban-column-prospecting');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+    expect(prospectingColumn).toHaveTextContent('Big Deal');
+
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          json: async () => ({
+            error: 'Cannot move to Qualification — missing required fields',
+            code: 'GATE_VALIDATION_FAILED',
+            failures: [
+              {
+                field: 'value',
+                label: 'Deal Value',
+                gate: 'required',
+                message: 'Deal Value is required',
+                fieldType: 'currency',
+                currentValue: null,
+                options: {},
+              },
+            ],
+          }),
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
+        return Promise.resolve({ ok: true, json: async () => mockPipeline } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
+        } as Response);
+      }
+      if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
+        return Promise.resolve({ ok: true, json: async () => mockRecords } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    fireEvent.dragStart(card, {
+      dataTransfer: { effectAllowed: 'move', setData: vi.fn(), getData: () => 'rec-1' },
+    });
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
+    });
+
+    // Gate modal opens ⇒ server responded with 422 ⇒ rollback has run
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    // After rollback the card is back in Prospecting — not lingering in Qualification.
+    expect(prospectingColumn).toHaveTextContent('Big Deal');
+    expect(qualColumn).not.toHaveTextContent('Big Deal');
+  });
+
   it('places records using fieldValues.stage when present', async () => {
     const stageRecords = {
       data: [
