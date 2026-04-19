@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { RecordListPage } from '../pages/RecordListPage.js';
+import { renderWithQuery } from './utils/renderWithQuery.js';
 
 vi.mock('@descope/react-sdk', () => ({
   useSession: vi.fn(),
@@ -11,7 +12,7 @@ vi.mock('@descope/react-sdk', () => ({
 const { useSession } = await import('@descope/react-sdk');
 
 function renderPage(apiName = 'opportunity', initialView?: 'list' | 'pipeline') {
-  return render(
+  return renderWithQuery(
     <MemoryRouter initialEntries={[`/objects/${apiName}`]}>
       <Routes>
         <Route

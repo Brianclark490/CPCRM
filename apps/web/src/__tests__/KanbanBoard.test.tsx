@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { KanbanBoard } from '../components/KanbanBoard.js';
+import { renderWithQuery } from './utils/renderWithQuery.js';
 
 vi.mock('@descope/react-sdk', () => ({
   useSession: vi.fn(),
@@ -181,7 +182,7 @@ function mockFetch() {
 }
 
 function renderBoard() {
-  return render(
+  return renderWithQuery(
     <MemoryRouter initialEntries={['/objects/opportunity']}>
       <Routes>
         <Route

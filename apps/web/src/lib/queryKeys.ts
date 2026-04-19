@@ -98,10 +98,12 @@ export const fieldDefinitionsKeys = {
  *
  * Hierarchy:
  *   ['pipelines']                              — invalidate everything
+ *   ['pipelines', 'list']                      — the list of all pipelines
  *   ['pipelines', 'detail', pipelineId]        — one pipeline's full payload
  */
 export const pipelinesKeys = {
   all: () => ['pipelines'] as const,
+  list: () => ['pipelines', 'list'] as const,
   detail: (pipelineId: PipelineId) => ['pipelines', 'detail', pipelineId] as const,
 } as const;
 
