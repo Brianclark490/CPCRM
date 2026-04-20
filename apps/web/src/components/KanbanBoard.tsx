@@ -364,7 +364,11 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     if (!record) return;
 
     // Compute effective current stage using the same resolution logic as
-    // the column placement so that dropping onto the same column is a no-op
+    // the column placement. Priority mirrors the server's source of truth
+    // (records.current_stage_id) so dropping a card onto the column it's
+    // actually in doesn't fire a request the server rejects as 400 "already
+    // in this stage" — which happens when a stale fieldValues.stage shows
+    // the card in a different column than current_stage_id points at.
     const sortedStages = pipeline.stages.slice().sort((a, b) => a.sortOrder - b.sortOrder);
     const localStageIds = new Set(sortedStages.map((s) => s.id));
     const localStageByName = new Map<string, string>();
@@ -374,14 +378,15 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     }
 
     let effectiveCurrentStageId: string | undefined;
-    // Match fieldValues.stage first (same priority as column placement)
-    const dropFv = record.fieldValues ?? {};
-    const stageField = dropFv.stage;
-    if (typeof stageField === 'string' && stageField.trim()) {
-      effectiveCurrentStageId = localStageByName.get(stageField.trim().toLowerCase());
-    }
-    if (!effectiveCurrentStageId && record.currentStageId && localStageIds.has(record.currentStageId)) {
+    if (record.currentStageId && localStageIds.has(record.currentStageId)) {
       effectiveCurrentStageId = record.currentStageId;
+    }
+    if (!effectiveCurrentStageId) {
+      const dropFv = record.fieldValues ?? {};
+      const stageField = dropFv.stage;
+      if (typeof stageField === 'string' && stageField.trim()) {
+        effectiveCurrentStageId = localStageByName.get(stageField.trim().toLowerCase());
+      }
     }
     if (!effectiveCurrentStageId) {
       effectiveCurrentStageId = sortedStages.find((s) => s.stageType === 'open')?.id;
@@ -471,15 +476,24 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   /**
    * Resolve which pipeline stage a record belongs to.
    *
-   * Priority:
-   *   1. fieldValues.stage matches a stage name or api_name → use that stage
-   *      (this keeps the pipeline view in sync with the stage dropdown shown
-   *       in the list view)
-   *   2. currentStageId matches a known stage in this pipeline → use it
-   *   3. Fall back to the first open stage
+   * Priority matches the server's source of truth so visual placement and
+   * move-stage requests agree:
+   *   1. `currentStageId` matches a known stage in this pipeline → use it.
+   *      The server stores this in `records.current_stage_id` and rejects
+   *      no-op moves based on it — if we placed the card by a stale
+   *      `fieldValues.stage` and the user dragged to the DB's actual
+   *      current column, the server would return 400 "already in this stage".
+   *   2. `fieldValues.stage` matches a stage name / api_name (for records
+   *      without an assigned stage id yet — e.g. freshly imported rows).
+   *   3. Fall back to the first open stage.
    */
   function resolveStageForRecord(record: RecordItem): StageDefinition | null {
-    // 1. Match fieldValues.stage against stage names / api_names
+    // 1. Explicit pipeline assignment — authoritative.
+    if (record.currentStageId && stageIds.has(record.currentStageId)) {
+      return stages.find((s) => s.id === record.currentStageId) ?? null;
+    }
+
+    // 2. Legacy fallback: match fieldValues.stage against stage names / api_names.
     const fv = record.fieldValues ?? {};
     const stageFieldValue = fv.stage;
     if (typeof stageFieldValue === 'string' && stageFieldValue.trim()) {
@@ -487,12 +501,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
       if (matched) return matched;
     }
 
-    // 2. Explicit pipeline assignment
-    if (record.currentStageId && stageIds.has(record.currentStageId)) {
-      return stages.find((s) => s.id === record.currentStageId) ?? null;
-    }
-
-    // 3. Fall back to the first open stage
+    // 3. Fall back to the first open stage.
     return firstOpenStage ?? null;
   }
 

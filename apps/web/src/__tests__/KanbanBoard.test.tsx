@@ -854,6 +854,71 @@ describe('KanbanBoard', () => {
     expect(prospectingColumn).toHaveTextContent('Lowercase Stage');
   });
 
+  it('places records by currentStageId when it disagrees with fieldValues.stage', async () => {
+    // Regression: the server treats `records.current_stage_id` as the source
+    // of truth and rejects move-stage requests whose target matches it with
+    // 400 "already in this stage". If the UI placed a card by a stale
+    // `fieldValues.stage` (left over from a previous move or a manual edit),
+    // dragging the card to its actual DB column would fire a doomed request.
+    const mismatchedRecords = {
+      data: [
+        {
+          id: 'rec-mismatch',
+          name: 'Mismatched Deal',
+          fieldValues: { value: 42000, stage: 'Prospecting' },
+          ownerId: 'user-1',
+          pipelineId: 'pipe-1',
+          currentStageId: 'stage-2',
+          stageEnteredAt: '2026-04-01T00:00:00Z',
+          createdAt: '2026-03-20T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 100,
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
+          return Promise.resolve({ ok: true, json: async () => mockPipeline } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
+          return Promise.resolve({ ok: true, json: async () => mismatchedRecords } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
+          return Promise.resolve({ ok: true, json: async () => mockSummary } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/velocity')) {
+          return Promise.resolve({ ok: true, json: async () => mockVelocity } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/overdue')) {
+          return Promise.resolve({ ok: true, json: async () => [] } as Response);
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }),
+    );
+
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Mismatched Deal')).toBeInTheDocument();
+    });
+
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+    expect(qualColumn).toHaveTextContent('Mismatched Deal');
+
+    const prospectingColumn = screen.getByTestId('kanban-column-prospecting');
+    expect(prospectingColumn).not.toHaveTextContent('Mismatched Deal');
+  });
+
   it('renders the summary toggle button', async () => {
     mockFetch();
     renderBoard();
