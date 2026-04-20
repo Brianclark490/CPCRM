@@ -473,7 +473,13 @@ export async function handleMoveStage(
 
     if (code === 'VALIDATION_ERROR') {
       const fieldErrors = (err as Error & { fieldErrors?: Record<string, string> }).fieldErrors;
-      res.status(400).json({ error: (err as Error).message, code: 'VALIDATION_ERROR', ...(fieldErrors && { fieldErrors }) });
+      const details = (err as Error & { details?: Record<string, unknown> }).details;
+      res.status(400).json({
+        error: (err as Error).message,
+        code: 'VALIDATION_ERROR',
+        ...(fieldErrors && { fieldErrors }),
+        ...(details && details),
+      });
       return;
     }
 
