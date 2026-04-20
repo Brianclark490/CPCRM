@@ -73,6 +73,7 @@ export interface FieldRef {
 export interface RelationshipRef {
   id: string;
   label: string;
+  displayLabel: string;
   apiName: string;
   relationshipType: string;
   targetObjectLabel: string;

@@ -21,9 +21,11 @@ export interface RelationshipApiItem {
   reverseLabel?: string;
   required: boolean;
   targetObjectLabel: string;
+  targetObjectPluralLabel: string;
   targetObjectApiName: string;
   sourceObjectApiName: string;
   sourceObjectLabel: string;
+  sourceObjectPluralLabel: string;
 }
 
 export interface RelatedObjectFields {
