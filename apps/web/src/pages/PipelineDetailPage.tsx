@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useSession } from '@descope/react-sdk';
 import { useApiClient, unwrapList } from '../lib/apiClient.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
@@ -131,6 +131,7 @@ const XIcon = () => (
 
 export function PipelineDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { sessionToken } = useSession();
   const api = useApiClient();
 
@@ -138,6 +139,13 @@ export function PipelineDetailPage() {
   const [pipeline, setPipeline] = useState<PipelineDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Pipeline-level settings (Set as default / Delete)
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [showDeletePipelineConfirm, setShowDeletePipelineConfirm] = useState(false);
+  const [deletingPipeline, setDeletingPipeline] = useState(false);
+  const [deletePipelineError, setDeletePipelineError] = useState<string | null>(null);
 
   // Selected stage
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
@@ -406,6 +414,59 @@ export function PipelineDetailPage() {
     }
   };
 
+  // ── Pipeline-level settings ────────────────────────────────
+
+  const handleSetDefault = async () => {
+    if (!sessionToken || !pipeline) return;
+    if (pipeline.isDefault) return;
+
+    setSettingsSaving(true);
+    setSettingsError(null);
+
+    try {
+      const response = await api.request(`/api/v1/admin/pipelines/${pipeline.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isDefault: true }),
+      });
+
+      if (response.ok) {
+        await fetchPipeline();
+      } else {
+        const data = (await response.json()) as ApiError;
+        setSettingsError(data.error ?? 'Failed to update pipeline.');
+      }
+    } catch {
+      setSettingsError('Failed to connect to the server.');
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const handleDeletePipeline = async () => {
+    if (!sessionToken || !pipeline) return;
+
+    setDeletingPipeline(true);
+    setDeletePipelineError(null);
+
+    try {
+      const response = await api.request(`/api/v1/admin/pipelines/${pipeline.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok || response.status === 204) {
+        navigate('/admin/pipelines');
+      } else {
+        const data = (await response.json()) as ApiError;
+        setDeletePipelineError(data.error ?? 'Failed to delete pipeline.');
+      }
+    } catch {
+      setDeletePipelineError('Failed to connect to the server.');
+    } finally {
+      setDeletingPipeline(false);
+    }
+  };
+
   // ── Reorder stages ─────────────────────────────────────────
 
   const handleReorder = async (stageId: string, direction: 'left' | 'right') => {
@@ -565,9 +626,84 @@ export function PipelineDetailPage() {
             <div className={styles.pipelineDescription}>{pipeline.description}</div>
           )}
         </div>
-        {pipeline.isSystem && (
-          <span className={styles.systemBadge}>System</span>
-        )}
+        <div className={styles.pipelineHeaderSide}>
+          <div className={styles.pipelineBadges}>
+            {pipeline.isDefault && (
+              <span className={styles.defaultBadge} data-testid="default-badge">
+                Default
+              </span>
+            )}
+            {pipeline.isSystem && (
+              <span className={styles.systemBadge}>System</span>
+            )}
+          </div>
+          <div className={styles.pipelineActions}>
+            {!pipeline.isDefault && (
+              <PrimaryButton
+                size="sm"
+                variant="outline"
+                onClick={() => void handleSetDefault()}
+                disabled={settingsSaving}
+              >
+                {settingsSaving ? 'Saving…' : 'Set as default'}
+              </PrimaryButton>
+            )}
+            {(() => {
+              // While `handleSetDefault` is in flight, `pipeline.isDefault`
+              // still reflects the pre-promotion state locally even though
+              // the server may have already flipped it. Disabling delete
+              // during that window prevents a user from racing the promote
+              // → delete and stranding the object without a default.
+              const deleteDisabledReason = pipeline.isSystem
+                ? 'System pipelines cannot be deleted'
+                : pipeline.isDefault
+                  ? 'Promote another pipeline to default before deleting this one'
+                  : settingsSaving
+                    ? 'Finishing default-pipeline change…'
+                    : null;
+              const isDisabled = deleteDisabledReason !== null;
+              // Disabled <button> elements don't show native title tooltips
+              // and aren't focusable, so we put the tooltip on a wrapping
+              // <span> and expose the reason to screen readers via
+              // aria-describedby + visually-hidden text.
+              return (
+                <span
+                  className={styles.dangerButtonWrap}
+                  title={deleteDisabledReason ?? undefined}
+                >
+                  <button
+                    type="button"
+                    className={styles.dangerButton}
+                    onClick={() => {
+                      setDeletePipelineError(null);
+                      setShowDeletePipelineConfirm(true);
+                    }}
+                    disabled={isDisabled}
+                    aria-describedby={
+                      isDisabled ? 'delete-pipeline-reason' : undefined
+                    }
+                  >
+                    <TrashIcon />
+                    Delete pipeline
+                  </button>
+                  {isDisabled && (
+                    <span
+                      id="delete-pipeline-reason"
+                      className={styles.srOnly}
+                    >
+                      {deleteDisabledReason}
+                    </span>
+                  )}
+                </span>
+              );
+            })()}
+          </div>
+          {settingsError && (
+            <p className={styles.settingsError} role="alert">
+              {settingsError}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Section: Stages */}
@@ -1097,6 +1233,52 @@ export function PipelineDetailPage() {
                 disabled={deletingStage}
               >
                 {deletingStage ? 'Deleting…' : 'Delete'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Pipeline Confirmation Modal ────────────────── */}
+      {showDeletePipelineConfirm && (
+        <div
+          className={styles.overlay}
+          onClick={() => {
+            if (!deletingPipeline) setShowDeletePipelineConfirm(false);
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm delete pipeline"
+        >
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 className={styles.modalTitle}>Delete pipeline</h2>
+            <p className={styles.confirmText}>
+              Are you sure you want to delete{' '}
+              <span className={styles.confirmName}>{pipeline.name}</span>? This action
+              cannot be undone. Pipelines with existing records cannot be deleted.
+            </p>
+
+            {deletePipelineError && (
+              <p className={styles.errorAlert} role="alert">
+                {deletePipelineError}
+              </p>
+            )}
+
+            <div className={styles.actions}>
+              <PrimaryButton
+                type="button"
+                variant="outline"
+                onClick={() => setShowDeletePipelineConfirm(false)}
+                disabled={deletingPipeline}
+              >
+                Cancel
+              </PrimaryButton>
+              <PrimaryButton
+                type="button"
+                onClick={() => void handleDeletePipeline()}
+                disabled={deletingPipeline}
+              >
+                {deletingPipeline ? 'Deleting…' : 'Delete'}
               </PrimaryButton>
             </div>
           </div>

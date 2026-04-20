@@ -432,52 +432,95 @@ export async function updatePipeline(
   id: string,
   params: UpdatePipelineParams,
 ): Promise<PipelineDefinition> {
-  const existing = await db
-    .selectFrom('pipeline_definitions')
-    .selectAll()
-    .where('id', '=', id)
-    .where('tenant_id', '=', tenantId)
-    .executeTakeFirst();
-
-  if (!existing) {
-    throwNotFoundError('Pipeline not found');
+  try {
+    return await runUpdatePipeline(tenantId, id, params);
+  } catch (err: unknown) {
+    // The partial unique index `pipeline_definitions_single_default_per_object`
+    // can fire under concurrent promotions (two tenants-users promoting
+    // different pipelines to default for the same object). Postgres raises
+    // SQLSTATE 23505; surface it as CONFLICT so the route returns 409
+    // instead of a generic 500.
+    const pgErr = err as { code?: string; constraint?: string };
+    if (
+      pgErr?.code === '23505' &&
+      pgErr?.constraint === 'pipeline_definitions_single_default_per_object'
+    ) {
+      throwConflictError(
+        'Another pipeline was just promoted to default for this object. Please reload and try again.',
+      );
+    }
+    throw err;
   }
+}
 
-  if (params.name !== undefined) {
-    const nameError = validatePipelineName(params.name);
-    if (nameError) throwValidationError(nameError);
-  }
+async function runUpdatePipeline(
+  tenantId: string,
+  id: string,
+  params: UpdatePipelineParams,
+): Promise<PipelineDefinition> {
+  return db.transaction().execute(async (trx) => {
+    const existing = await trx
+      .selectFrom('pipeline_definitions')
+      .selectAll()
+      .where('id', '=', id)
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirst();
 
-  // Build dynamic update set
-  const set: Record<string, unknown> = {};
+    if (!existing) {
+      throwNotFoundError('Pipeline not found');
+    }
 
-  if ('name' in params) {
-    set.name = params.name!.trim();
-  }
-  if ('description' in params) {
-    set.description = params.description?.trim() ?? null;
-  }
-  if ('isDefault' in params) {
-    set.is_default = params.isDefault;
-  }
+    if (params.name !== undefined) {
+      const nameError = validatePipelineName(params.name);
+      if (nameError) throwValidationError(nameError);
+    }
 
-  if (Object.keys(set).length === 0) {
-    return rowToPipeline(existing as unknown as Record<string, unknown>);
-  }
+    // Build dynamic update set
+    const set: Record<string, unknown> = {};
 
-  set.updated_at = new Date();
+    if ('name' in params) {
+      set.name = params.name!.trim();
+    }
+    if ('description' in params) {
+      set.description = params.description?.trim() ?? null;
+    }
+    if ('isDefault' in params) {
+      set.is_default = params.isDefault;
+    }
 
-  const updated = await db
-    .updateTable('pipeline_definitions')
-    .set(set)
-    .where('id', '=', id)
-    .where('tenant_id', '=', tenantId)
-    .returningAll()
-    .executeTakeFirstOrThrow();
+    if (Object.keys(set).length === 0) {
+      return rowToPipeline(existing as unknown as Record<string, unknown>);
+    }
 
-  logger.info({ pipelineId: id }, 'Pipeline updated');
+    set.updated_at = new Date();
 
-  return rowToPipeline(updated as unknown as Record<string, unknown>);
+    // Enforce single-default-per-object invariant atomically. When we are
+    // promoting this pipeline to default, demote every other pipeline for
+    // the same object first. This prevents the dual-default corruption
+    // that produced stranded records in the stage-move flow.
+    if (params.isDefault === true) {
+      await trx
+        .updateTable('pipeline_definitions')
+        .set({ is_default: false, updated_at: new Date() })
+        .where('tenant_id', '=', tenantId)
+        .where('object_id', '=', existing.object_id)
+        .where('id', '!=', id)
+        .where('is_default', '=', true)
+        .execute();
+    }
+
+    const updated = await trx
+      .updateTable('pipeline_definitions')
+      .set(set)
+      .where('id', '=', id)
+      .where('tenant_id', '=', tenantId)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    logger.info({ pipelineId: id }, 'Pipeline updated');
+
+    return rowToPipeline(updated as unknown as Record<string, unknown>);
+  });
 }
 
 /**

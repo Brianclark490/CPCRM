@@ -180,6 +180,7 @@ export async function handleGetPipeline(
  *   400  – validation error
  *   401  – missing or invalid Bearer token
  *   404  – pipeline not found
+ *   409  – concurrent default-promotion conflict (partial unique index)
  *   500  – unexpected server error
  */
 export async function handleUpdatePipeline(
@@ -214,6 +215,11 @@ export async function handleUpdatePipeline(
 
     if (code === 'NOT_FOUND') {
       res.status(404).json({ error: (err as Error).message, code: 'NOT_FOUND' });
+      return;
+    }
+
+    if (code === 'CONFLICT') {
+      res.status(409).json({ error: (err as Error).message, code: 'CONFLICT' });
       return;
     }
 

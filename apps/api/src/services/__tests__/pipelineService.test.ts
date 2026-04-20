@@ -154,7 +154,39 @@ const {
       return { rows };
     }
 
-    // UPDATE pipeline_definitions
+    // Bulk demote: UPDATE pipeline_definitions SET is_default = false ...
+    // WHERE tenant_id = $? AND object_id = $? AND id != $? AND is_default = true.
+    // (Emitted by updatePipeline when promoting a new default for the
+    // same (tenant_id, object_id).) The fake rows seeded by
+    // createPipeline don't carry tenant_id, so match on object_id + id
+    // only — the test scope has a single tenant.
+    if (
+      s.startsWith('UPDATE PIPELINE_DEFINITIONS') &&
+      s.includes('OBJECT_ID') &&
+      s.includes('ID !=')
+    ) {
+      // params = [is_default, updated_at, tenant_id, object_id, id]
+      const objectId = params![3] as string;
+      const skipId = params![4] as string;
+      let affected = 0;
+      for (const [key, row] of fakePipelines.entries()) {
+        if (
+          row.object_id === objectId &&
+          row.id !== skipId &&
+          row.is_default === true
+        ) {
+          fakePipelines.set(key, {
+            ...row,
+            is_default: false,
+            updated_at: new Date(),
+          });
+          affected += 1;
+        }
+      }
+      return { rowCount: affected, rows: [] };
+    }
+
+    // UPDATE pipeline_definitions (single-target by id).
     if (s.startsWith('UPDATE PIPELINE_DEFINITIONS')) {
       const id = params![params!.length - 2] as string;
       const existing = fakePipelines.get(id);
@@ -605,6 +637,59 @@ describe('updatePipeline', () => {
 
     const result = await updatePipeline(TENANT_ID, created.id, {});
     expect(result.name).toBe('Test Pipeline');
+  });
+
+  it('demotes the previous default when promoting another pipeline on the same object', async () => {
+    // Regression: before this change, setting `isDefault=true` on one
+    // pipeline left any existing defaults alone, so a tenant could end
+    // up with two pipelines both flagged is_default=true for the same
+    // object. That tripped `assignDefaultPipeline` into picking an
+    // unexpected pipeline and produced cross-pipeline 400s.
+    const first = await createPipeline(TENANT_ID, {
+      name: 'First',
+      apiName: 'first_pipeline',
+      objectId: 'obj-1',
+      ownerId: 'user-123',
+    });
+    const second = await createPipeline(TENANT_ID, {
+      name: 'Second',
+      apiName: 'second_pipeline',
+      objectId: 'obj-1',
+      ownerId: 'user-123',
+    });
+
+    // Seed the corrupted pre-state: both pipelines marked default.
+    const firstRow = fakePipelines.get(first.id)!;
+    fakePipelines.set(first.id, { ...firstRow, is_default: true });
+    const secondRow = fakePipelines.get(second.id)!;
+    fakePipelines.set(second.id, { ...secondRow, is_default: true });
+
+    await updatePipeline(TENANT_ID, second.id, { isDefault: true });
+
+    expect(fakePipelines.get(first.id)!.is_default).toBe(false);
+  });
+
+  it('does not touch other pipelines when isDefault is not being set', async () => {
+    const first = await createPipeline(TENANT_ID, {
+      name: 'First',
+      apiName: 'first_pipeline',
+      objectId: 'obj-1',
+      ownerId: 'user-123',
+    });
+    const second = await createPipeline(TENANT_ID, {
+      name: 'Second',
+      apiName: 'second_pipeline',
+      objectId: 'obj-1',
+      ownerId: 'user-123',
+    });
+    // Mark `first` as the canonical default; a name-only edit on
+    // `second` must leave `first` alone.
+    const firstRow = fakePipelines.get(first.id)!;
+    fakePipelines.set(first.id, { ...firstRow, is_default: true });
+
+    await updatePipeline(TENANT_ID, second.id, { name: 'Second Renamed' });
+
+    expect(fakePipelines.get(first.id)!.is_default).toBe(true);
   });
 });
 

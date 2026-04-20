@@ -327,4 +327,136 @@ describe('PipelineDetailPage', () => {
     expect(screen.getByRole('dialog', { name: 'Confirm delete stage' })).toBeInTheDocument();
     expect(screen.getByText(/Are you sure you want to delete/)).toBeInTheDocument();
   });
+
+  // ── Pipeline-level default / delete ─────────────────────────────────────────
+
+  it('renders the default badge when isDefault is true', async () => {
+    mockFetchPipeline({ ...samplePipeline, isDefault: true });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('default-badge')).toHaveTextContent('Default');
+    });
+  });
+
+  it('does not render "Set as default" button when pipeline is already default', async () => {
+    mockFetchPipeline({ ...samplePipeline, isDefault: true });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Sales Pipeline' })).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByRole('button', { name: /Set as default/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('sends PUT with isDefault=true when "Set as default" is clicked', async () => {
+    const nonDefault = { ...samplePipeline, isDefault: false };
+    const promoted = { ...samplePipeline, isDefault: true };
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => promoted,
+        } as Response);
+      }
+      // GET pipeline detail — return the currently-not-default version first,
+      // then the promoted version after PUT.
+      return Promise.resolve({
+        ok: true,
+        json: async () => (fetchMock.mock.calls.filter((c) => !c[1]?.method || c[1].method === 'GET').length > 1 ? promoted : nonDefault),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Set as default/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Set as default/i }));
+
+    await waitFor(() => {
+      const putCall = fetchMock.mock.calls.find(
+        (call) => call[1]?.method === 'PUT',
+      );
+      expect(putCall).toBeDefined();
+      expect(putCall![0]).toContain('/api/v1/admin/pipelines/pipe-1');
+      expect(JSON.parse(putCall![1].body as string)).toEqual({ isDefault: true });
+    });
+  });
+
+  it('disables Delete pipeline button for system pipelines', async () => {
+    mockFetchPipeline({ ...samplePipeline, isDefault: false, isSystem: true });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Sales Pipeline' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /Delete pipeline/i })).toBeDisabled();
+  });
+
+  it('disables Delete pipeline button for the default pipeline', async () => {
+    mockFetchPipeline({ ...samplePipeline, isDefault: true, isSystem: false });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Sales Pipeline' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /Delete pipeline/i })).toBeDisabled();
+  });
+
+  it('opens delete pipeline confirmation modal and sends DELETE on confirm', async () => {
+    const nonDefault = { ...samplePipeline, isDefault: false, isSystem: false };
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          status: 204,
+          json: async () => ({}),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => nonDefault,
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Delete pipeline/i })).toBeEnabled();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Delete pipeline/i }));
+
+    expect(
+      screen.getByRole('dialog', { name: 'Confirm delete pipeline' }),
+    ).toBeInTheDocument();
+
+    // The modal has both "Cancel" and a second "Delete" button; click the
+    // submit one inside the dialog.
+    const dialog = screen.getByRole('dialog', { name: 'Confirm delete pipeline' });
+    const confirmButton = Array.from(dialog.querySelectorAll('button')).find(
+      (btn) => btn.textContent?.trim() === 'Delete',
+    );
+    expect(confirmButton).toBeDefined();
+    await user.click(confirmButton!);
+
+    await waitFor(() => {
+      const deleteCall = fetchMock.mock.calls.find(
+        (call) => call[1]?.method === 'DELETE',
+      );
+      expect(deleteCall).toBeDefined();
+      expect(deleteCall![0]).toContain('/api/v1/admin/pipelines/pipe-1');
+    });
+  });
 });
