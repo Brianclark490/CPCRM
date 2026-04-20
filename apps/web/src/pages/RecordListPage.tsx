@@ -147,10 +147,17 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>(initialView ?? 'list');
   const [hasPipeline, setHasPipeline] = useState(false);
   const [resolvedObjectId, setResolvedObjectId] = useState<string | null>(null);
+  // Tracks whether the user has manually chosen a view. Once true we
+  // stop auto-flipping to pipeline even if hasPipeline resolves later.
+  const userToggledView = useRef(false);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset state when the object changes
+  // Reset state when the object changes. Keyed on `apiName` only: a
+  // prop-only change to `initialView` (e.g. same object, switching
+  // between `/objects/:apiName` and `/objects/:apiName/pipeline`) must
+  // NOT clear pipeline state, because the loader that repopulates it
+  // is also keyed only on `apiName` and won't refetch.
   useEffect(() => {
     setRecords([]);
     setObjectDef(null);
@@ -165,7 +172,23 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
     setError(null);
     setHasPipeline(false);
     setResolvedObjectId(null);
+    userToggledView.current = false;
+    // Always sync viewMode to the current pinned route — otherwise a
+    // user who toggled to List before navigating between two pipeline
+    // routes would stay stuck on list.
+    setViewMode(initialView ?? 'list');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiName]);
+
+  // Default to the pipeline view for objects that have a pipeline, unless
+  // the caller pinned an initialView or the user has manually toggled.
+  useEffect(() => {
+    if (initialView) return;
+    if (userToggledView.current) return;
+    if (hasPipeline) {
+      setViewMode('pipeline');
+    }
+  }, [hasPipeline, initialView]);
 
   // Debounce search input
   const handleSearchChange = useCallback((value: string) => {
@@ -397,7 +420,10 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
               <button
                 type="button"
                 className={`${styles.viewToggleButton} ${viewMode === 'list' ? styles.viewToggleActive : ''}`}
-                onClick={() => setViewMode('list')}
+                onClick={() => {
+                  userToggledView.current = true;
+                  setViewMode('list');
+                }}
                 aria-pressed={viewMode === 'list'}
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -408,7 +434,10 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
               <button
                 type="button"
                 className={`${styles.viewToggleButton} ${viewMode === 'pipeline' ? styles.viewToggleActive : ''}`}
-                onClick={() => setViewMode('pipeline')}
+                onClick={() => {
+                  userToggledView.current = true;
+                  setViewMode('pipeline');
+                }}
                 aria-pressed={viewMode === 'pipeline'}
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
