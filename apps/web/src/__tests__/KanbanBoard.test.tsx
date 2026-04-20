@@ -1150,6 +1150,164 @@ describe('KanbanBoard', () => {
     expect(screen.queryByText('Default Deal')).not.toBeInTheDocument();
   });
 
+  it('clears the dragging style on the card after drop', async () => {
+    // Regression: the browser can lose the `dragend` event when the card is
+    // reparented by the optimistic update that follows a successful move.
+    // The board must therefore clear the dragging state in `handleDrop`
+    // itself so the card never stays rendered in the faded drag ghost
+    // style after a successful move.
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+
+    fireEvent.dragStart(card, {
+      dataTransfer: {
+        effectAllowed: 'move',
+        setData: vi.fn(),
+        getData: () => 'rec-1',
+      },
+    });
+
+    // After dragStart the card should carry the dragging class.
+    expect(card.className).toMatch(/Dragging/);
+
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'rec-1',
+            pipelineId: 'pipe-1',
+            currentStageId: 'stage-2',
+            stageEnteredAt: new Date().toISOString(),
+            fieldValues: {},
+          }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+    });
+
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
+    });
+
+    // Drop must clear the dragging style even without a subsequent
+    // dragEnd — the browser may skip it when the card reparents.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('kanban-card-rec-1').className,
+      ).not.toMatch(/Dragging/);
+    });
+  });
+
+  it('shows records with no pipelineId only on the default pipeline board', async () => {
+    // Records that the server never auto-assigned a pipeline to (missing or
+    // undefined pipelineId) should only render on the default pipeline —
+    // otherwise switching to a sibling pipeline would show a card whose
+    // move-stage would 400 once the server auto-assigns it to the default.
+    const defaultPipeline = {
+      ...mockPipeline,
+      id: 'pipe-default',
+      name: 'Default Pipeline',
+      isDefault: true,
+      is_default: true,
+    };
+    const otherPipeline = {
+      id: 'pipe-other',
+      name: 'Other Pipeline',
+      objectId: 'obj-1',
+      isDefault: false,
+      is_default: false,
+      stages: [
+        {
+          id: 'stage-other-1',
+          name: 'Other Stage',
+          apiName: 'other_stage',
+          sortOrder: 0,
+          stageType: 'open',
+          colour: 'grey',
+          defaultProbability: 0,
+        },
+      ],
+    };
+    const recordsWithUnassigned = {
+      data: [
+        {
+          id: 'rec-unassigned',
+          name: 'Unassigned Deal',
+          fieldValues: {},
+          ownerId: 'user-1',
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 100,
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-default')) {
+          return Promise.resolve({ ok: true, json: async () => defaultPipeline } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-other')) {
+          return Promise.resolve({ ok: true, json: async () => otherPipeline } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () =>
+              paginated([
+                { ...defaultPipeline, object_id: 'obj-1' },
+                { ...otherPipeline, object_id: 'obj-1' },
+              ]),
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
+          return Promise.resolve({ ok: true, json: async () => recordsWithUnassigned } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/summary')) {
+          return Promise.resolve({ ok: true, json: async () => mockSummary } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/velocity')) {
+          return Promise.resolve({ ok: true, json: async () => mockVelocity } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/overdue')) {
+          return Promise.resolve({ ok: true, json: async () => [] } as Response);
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }),
+    );
+
+    renderBoard();
+
+    const picker = await screen.findByTestId<HTMLSelectElement>('kanban-pipeline-picker');
+    // Visible on default — unassigned records land in the first open stage.
+    await waitFor(() => {
+      expect(screen.getByText('Unassigned Deal')).toBeInTheDocument();
+    });
+
+    // Switch to non-default — the unassigned record should disappear so we
+    // never issue a cross-pipeline move.
+    fireEvent.change(picker, { target: { value: 'pipe-other' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-column-other_stage')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Unassigned Deal')).not.toBeInTheDocument();
+  });
+
   it('renders the summary toggle button', async () => {
     mockFetch();
     renderBoard();

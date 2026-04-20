@@ -3,6 +3,7 @@ import type { Kysely } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/kysely.js';
 import type { DB, Json } from '../db/kysely.types.js';
+import { AppError } from '../lib/appError.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -316,7 +317,15 @@ export async function moveRecordStage(
     );
 
     if (targetStage.pipelineId !== resolvedPipelineId) {
-      throwValidationError('Target stage does not belong to the same pipeline');
+      throw AppError.validation(
+        'Target stage does not belong to the same pipeline',
+        {
+          recordId,
+          recordPipelineId: resolvedPipelineId,
+          targetStageId,
+          targetStagePipelineId: targetStage.pipelineId,
+        },
+      );
     }
 
     if (targetStageId === resolvedCurrentStageId) {
