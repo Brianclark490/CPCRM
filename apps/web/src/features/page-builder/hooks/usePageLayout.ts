@@ -105,12 +105,14 @@ export function usePageLayout(objectId: string | undefined) {
 
       if (relRes.ok) {
         const relData = unwrapList<RelationshipApiItem>(await relRes.json());
+        const firstNonEmpty = (...vals: Array<string | null | undefined>) =>
+          vals.find((v) => typeof v === 'string' && v.trim().length > 0) ?? '';
         setRelationships(
           relData.map((r) => {
             const isInbound = r.targetObjectId === objectId;
             const displayLabel = isInbound
-              ? (r.reverseLabel ?? r.sourceObjectPluralLabel)
-              : (r.targetObjectPluralLabel ?? r.label);
+              ? firstNonEmpty(r.reverseLabel, r.sourceObjectPluralLabel, r.label)
+              : firstNonEmpty(r.label, r.targetObjectPluralLabel);
             return {
               id: r.id,
               label: r.label,

@@ -52,7 +52,7 @@ const sampleRelationships = [
     targetObjectId: 'obj-2',
     relationshipType: 'lookup',
     apiName: 'account_opportunity',
-    label: 'Opportunities',
+    label: 'Primary Opportunity',
     required: false,
     targetObjectLabel: 'Opportunity',
     targetObjectPluralLabel: 'Opportunities',
@@ -68,7 +68,7 @@ const sampleRelationships = [
     relationshipType: 'lookup',
     apiName: 'contact_account',
     label: 'Account',
-    reverseLabel: 'Contacts',
+    reverseLabel: 'Primary Contacts',
     required: false,
     targetObjectLabel: 'Account',
     targetObjectPluralLabel: 'Accounts',
@@ -76,6 +76,21 @@ const sampleRelationships = [
     sourceObjectApiName: 'contact',
     sourceObjectLabel: 'Contact',
     sourceObjectPluralLabel: 'Contacts',
+  },
+  {
+    id: 'rel-3',
+    sourceObjectId: 'obj-4',
+    targetObjectId: 'obj-1',
+    relationshipType: 'lookup',
+    apiName: 'lead_account',
+    label: 'Account',
+    required: false,
+    targetObjectLabel: 'Account',
+    targetObjectPluralLabel: 'Accounts',
+    targetObjectApiName: 'account',
+    sourceObjectApiName: 'lead',
+    sourceObjectLabel: 'Lead',
+    sourceObjectPluralLabel: 'Leads',
   },
 ];
 
@@ -382,14 +397,19 @@ describe('PageBuilderPage', () => {
       expect(screen.getByTestId('component-palette')).toBeInTheDocument();
     });
 
+    // Outbound: relationship-specific forward label wins over generic target plural.
     const outbound = screen.getByTestId('palette-item-palette-rel-rel-1');
-    expect(outbound).toBeInTheDocument();
-    expect(outbound).toHaveTextContent('Opportunities');
+    expect(outbound).toHaveTextContent('Primary Opportunity');
 
-    const inbound = screen.getByTestId('palette-item-palette-rel-rel-2');
-    expect(inbound).toBeInTheDocument();
-    expect(inbound).toHaveTextContent('Contacts');
-    expect(inbound).not.toHaveTextContent('Account');
+    // Inbound with reverseLabel: reverseLabel wins over sourceObjectPluralLabel.
+    const inboundWithReverse = screen.getByTestId('palette-item-palette-rel-rel-2');
+    expect(inboundWithReverse).toHaveTextContent('Primary Contacts');
+    expect(inboundWithReverse).not.toHaveTextContent('Account');
+
+    // Inbound without reverseLabel: falls back to sourceObjectPluralLabel.
+    const inboundFallback = screen.getByTestId('palette-item-palette-rel-rel-3');
+    expect(inboundFallback).toHaveTextContent('Leads');
+    expect(inboundFallback).not.toHaveTextContent('Account');
   });
 
   it('shows related fields from lookup relationships in the component palette', async () => {
