@@ -214,9 +214,8 @@ const samplePageLayoutDetail = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function renderPage(objectId = 'obj-1') {
-  const queryClient = createTestQueryClient();
-  return render(
+function renderPage(objectId = 'obj-1', queryClient = createTestQueryClient()) {
+  const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/admin/objects/${objectId}/page-builder`]}>
         <Routes>
@@ -228,6 +227,7 @@ function renderPage(objectId = 'obj-1') {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...result, queryClient };
 }
 
 function mockAllFetches() {
@@ -706,6 +706,31 @@ describe('PageBuilderPage', () => {
         },
       );
       expect(postCalls.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('invalidates pageLayouts queries after Publish so record pages refetch', async () => {
+    const user = userEvent.setup();
+    const mockFetch = mockAllFetches();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => samplePageLayoutDetail,
+    } as Response);
+
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    renderPage('obj-1', queryClient);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('publish-button')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('publish-button'));
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['pageLayouts'],
+      });
     });
   });
 

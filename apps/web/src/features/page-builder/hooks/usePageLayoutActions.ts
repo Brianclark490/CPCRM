@@ -123,8 +123,10 @@ export function usePageLayoutActions({
       // Record-detail pages cache the effective layout through TanStack
       // Query; without this invalidation, an already-open record page
       // would keep showing the previous layout until its staleTime
-      // expired or the user hard-refreshed.
-      await queryClient.invalidateQueries({ queryKey: pageLayoutsKeys.all() });
+      // expired or the user hard-refreshed. Fire-and-forget: awaiting
+      // this would hold the "Publishing" spinner until every listening
+      // consumer finishes refetching.
+      void queryClient.invalidateQueries({ queryKey: pageLayoutsKeys.all() });
     } catch {
       setSaveError('Failed to connect to the server. Please try again.');
     } finally {
