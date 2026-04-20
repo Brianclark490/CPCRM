@@ -500,7 +500,7 @@ describe('moveRecordStage', () => {
     ).rejects.toThrow('Record is already in this stage');
   });
 
-  it('auto-assigns default pipeline and moves record when record has no pipeline', async () => {
+  it('adopts target stage pipeline and moves record when record has no pipeline', async () => {
     seedPipelineAndStages();
 
     fakeRecords.set('rec-no-pipeline', {
@@ -522,13 +522,45 @@ describe('moveRecordStage', () => {
     expect(result.pipelineId).toBe('pipeline-1');
   });
 
-  it('throws VALIDATION_ERROR when record has no pipeline and no default pipeline exists', async () => {
-    // Only seed stages, not the pipeline — so assignDefaultPipeline returns false
+  it('adopts the target stage pipeline even when a sibling pipeline is also default', async () => {
+    // Regression: when multiple pipelines for an object are marked
+    // is_default=true the legacy `assignDefaultPipeline` lookup could
+    // pick a different pipeline than the one the user chose a stage
+    // from, producing a cross-pipeline 400. Picking the target stage's
+    // pipeline directly avoids the ambiguity.
+    seedPipelineAndStages();
+
+    // Second default pipeline for the same object, with its own stages.
+    fakePipelines.set('pipeline-2', {
+      id: 'pipeline-2',
+      object_id: 'obj-opportunity-id',
+      name: 'Sales Pipeline 2',
+      is_default: true,
+    });
+    fakeStages.set('stage-p2-prospect', {
+      id: 'stage-p2-prospect',
+      pipeline_id: 'pipeline-2',
+      name: 'Prospecting',
+      api_name: 'prospecting',
+      sort_order: 0,
+      stage_type: 'open',
+      default_probability: 10,
+    });
+    fakeStages.set('stage-p2-qualification', {
+      id: 'stage-p2-qualification',
+      pipeline_id: 'pipeline-2',
+      name: 'Qualification',
+      api_name: 'qualification',
+      sort_order: 1,
+      stage_type: 'open',
+      default_probability: 25,
+    });
+
     fakeRecords.set('rec-no-pipeline', {
       id: 'rec-no-pipeline',
       object_id: 'obj-opportunity-id',
       name: 'No Pipeline',
-      field_values: {},
+      field_values: { value: 50000 },
       owner_id: 'user-123',
       pipeline_id: null,
       current_stage_id: null,
@@ -537,9 +569,17 @@ describe('moveRecordStage', () => {
       updated_at: new Date().toISOString(),
     });
 
-    await expect(
-      moveRecordStage(TENANT_ID, 'opportunity', 'rec-no-pipeline', 'stage-qualification', 'user-123'),
-    ).rejects.toThrow('Record is not assigned to a pipeline');
+    // User picks a stage from pipeline-2 — the record should adopt pipeline-2.
+    const result = await moveRecordStage(
+      TENANT_ID,
+      'opportunity',
+      'rec-no-pipeline',
+      'stage-p2-qualification',
+      'user-123',
+    );
+
+    expect(result.currentStageId).toBe('stage-p2-qualification');
+    expect(result.pipelineId).toBe('pipeline-2');
   });
 
   it('applies default_probability on stage entry', async () => {
