@@ -432,52 +432,69 @@ export async function updatePipeline(
   id: string,
   params: UpdatePipelineParams,
 ): Promise<PipelineDefinition> {
-  const existing = await db
-    .selectFrom('pipeline_definitions')
-    .selectAll()
-    .where('id', '=', id)
-    .where('tenant_id', '=', tenantId)
-    .executeTakeFirst();
+  return db.transaction().execute(async (trx) => {
+    const existing = await trx
+      .selectFrom('pipeline_definitions')
+      .selectAll()
+      .where('id', '=', id)
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirst();
 
-  if (!existing) {
-    throwNotFoundError('Pipeline not found');
-  }
+    if (!existing) {
+      throwNotFoundError('Pipeline not found');
+    }
 
-  if (params.name !== undefined) {
-    const nameError = validatePipelineName(params.name);
-    if (nameError) throwValidationError(nameError);
-  }
+    if (params.name !== undefined) {
+      const nameError = validatePipelineName(params.name);
+      if (nameError) throwValidationError(nameError);
+    }
 
-  // Build dynamic update set
-  const set: Record<string, unknown> = {};
+    // Build dynamic update set
+    const set: Record<string, unknown> = {};
 
-  if ('name' in params) {
-    set.name = params.name!.trim();
-  }
-  if ('description' in params) {
-    set.description = params.description?.trim() ?? null;
-  }
-  if ('isDefault' in params) {
-    set.is_default = params.isDefault;
-  }
+    if ('name' in params) {
+      set.name = params.name!.trim();
+    }
+    if ('description' in params) {
+      set.description = params.description?.trim() ?? null;
+    }
+    if ('isDefault' in params) {
+      set.is_default = params.isDefault;
+    }
 
-  if (Object.keys(set).length === 0) {
-    return rowToPipeline(existing as unknown as Record<string, unknown>);
-  }
+    if (Object.keys(set).length === 0) {
+      return rowToPipeline(existing as unknown as Record<string, unknown>);
+    }
 
-  set.updated_at = new Date();
+    set.updated_at = new Date();
 
-  const updated = await db
-    .updateTable('pipeline_definitions')
-    .set(set)
-    .where('id', '=', id)
-    .where('tenant_id', '=', tenantId)
-    .returningAll()
-    .executeTakeFirstOrThrow();
+    // Enforce single-default-per-object invariant atomically. When we are
+    // promoting this pipeline to default, demote every other pipeline for
+    // the same object first. This prevents the dual-default corruption
+    // that produced stranded records in the stage-move flow.
+    if (params.isDefault === true) {
+      await trx
+        .updateTable('pipeline_definitions')
+        .set({ is_default: false, updated_at: new Date() })
+        .where('tenant_id', '=', tenantId)
+        .where('object_id', '=', existing.object_id)
+        .where('id', '!=', id)
+        .where('is_default', '=', true)
+        .execute();
+    }
 
-  logger.info({ pipelineId: id }, 'Pipeline updated');
+    const updated = await trx
+      .updateTable('pipeline_definitions')
+      .set(set)
+      .where('id', '=', id)
+      .where('tenant_id', '=', tenantId)
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-  return rowToPipeline(updated as unknown as Record<string, unknown>);
+    logger.info({ pipelineId: id }, 'Pipeline updated');
+
+    return rowToPipeline(updated as unknown as Record<string, unknown>);
+  });
 }
 
 /**
