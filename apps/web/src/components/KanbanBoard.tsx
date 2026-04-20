@@ -211,10 +211,21 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const recordsQuery = useRecords(apiName, RECORDS_QUERY_PARAMS);
 
   const pipeline = pipelineDetailQuery.data ?? null;
-  const allRecords = useMemo<RecordItem[]>(
-    () => recordsQuery.data?.data ?? [],
-    [recordsQuery.data],
-  );
+  const allRecords = useMemo<RecordItem[]>(() => {
+    const rows = recordsQuery.data?.data ?? [];
+    // The records endpoint lists every record for the object regardless of
+    // pipeline; when a tenant has more than one pipeline for the same object,
+    // rows belonging to a sibling pipeline would otherwise render here via
+    // the `fieldValues.stage` fallback and any drop would fire a cross-
+    // pipeline move-stage that the server rejects with 400 "Target stage
+    // does not belong to the same pipeline". Keep rows whose `pipelineId`
+    // matches the board's pipeline, or is unset (server will auto-assign
+    // the default pipeline on first move).
+    if (!matchedPipelineId) return rows;
+    return rows.filter(
+      (r) => !r.pipelineId || r.pipelineId === matchedPipelineId,
+    );
+  }, [recordsQuery.data, matchedPipelineId]);
 
   const loading =
     pipelineListQuery.isLoading ||
