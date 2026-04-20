@@ -8,6 +8,12 @@ vi.mock('@descope/react-sdk', () => ({
   useSession: vi.fn(),
 }));
 
+// Stub the Kanban board so this suite can focus on view-toggle logic
+// without pulling in react-query, pipeline hooks, and drag-and-drop.
+vi.mock('../components/KanbanBoard.js', () => ({
+  KanbanBoard: () => <div data-testid="kanban-board-stub">Kanban</div>,
+}));
+
 const { useSession } = await import('@descope/react-sdk');
 
 function renderPage(apiName = 'account') {
@@ -55,8 +61,22 @@ function makeRecordsResponse(
   };
 }
 
-function mockFetch(recordsResponse?: ReturnType<typeof makeRecordsResponse>) {
+function mockFetch(
+  recordsResponse?: ReturnType<typeof makeRecordsResponse>,
+  options: { withPipeline?: boolean } = {},
+) {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
+    if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
+      // Pipelines list (only populated when a test opts in).
+      return Promise.resolve({
+        ok: true,
+        json: async () =>
+          options.withPipeline
+            ? [{ id: 'pipeline-1', objectId: 'obj-1', isDefault: true }]
+            : [],
+      } as Response);
+    }
+
     if (typeof url === 'string' && url.includes('/api/v1/admin/objects') && !url.includes('/layouts')) {
       // Admin objects list
       return Promise.resolve({
@@ -465,5 +485,52 @@ describe('RecordListPage', () => {
     const columnHeaders = screen.getAllByRole('columnheader');
     const headerTexts = columnHeaders.map((th) => th.textContent);
     expect(headerTexts).toContain('Owner');
+  });
+
+  it('defaults to the pipeline view once hasPipeline resolves', async () => {
+    mockFetch(makeRecordsResponse(), { withPipeline: true });
+    renderPage();
+
+    // Kanban board stub should render once the pipeline lookup resolves —
+    // no user toggle click required.
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-board-stub')).toBeInTheDocument();
+    });
+
+    const pipelineToggle = screen.getByRole('button', { name: /Pipeline/ });
+    expect(pipelineToggle).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('honours a manual List toggle and does not auto-flip back to pipeline', async () => {
+    const user = userEvent.setup();
+    mockFetch(makeRecordsResponse(), { withPipeline: true });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-board-stub')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /List/ }));
+
+    // Kanban disappears and stays gone even on subsequent re-renders.
+    expect(screen.queryByTestId('kanban-board-stub')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /List/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('stays on the list view when the object has no pipeline', async () => {
+    mockFetch(makeRecordsResponse());
+    renderPage();
+
+    // Let the loader settle.
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Accounts' })).toBeInTheDocument();
+    });
+
+    // No pipeline → no toggle, no kanban.
+    expect(screen.queryByTestId('view-toggle')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('kanban-board-stub')).not.toBeInTheDocument();
   });
 });
