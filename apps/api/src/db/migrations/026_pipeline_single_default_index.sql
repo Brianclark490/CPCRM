@@ -10,10 +10,12 @@
 --              causing cross-pipeline 400s when moving records.
 --
 --              Step 1 is a defensive backfill: if any (tenant_id, object_id)
---              currently has multiple defaults, keep the lowest id as the
---              canonical default and demote the rest. This keeps the
---              partial unique index creation in step 2 from failing on
---              existing corrupted rows.
+--              currently has multiple defaults, keep the one most likely to
+--              be the intended default — prefer `is_system = true`, then the
+--              oldest `created_at`, then id as a final tiebreaker — and
+--              demote the rest. (Ordering by id alone would be arbitrary
+--              since id is a UUID.) This keeps the partial unique index
+--              creation in step 2 from failing on existing corrupted rows.
 --
 --              Application-level enforcement also lives in
 --              `updatePipeline` (wraps the is_default promotion in a
@@ -31,7 +33,11 @@ WITH ranked AS (
   SELECT id,
          ROW_NUMBER() OVER (
            PARTITION BY tenant_id, object_id
-           ORDER BY id
+           -- Deterministic ordering that reflects intent: prefer system
+           -- defaults, then the oldest pipeline, then id to break ties
+           -- (id is a UUID so it is only a stable tiebreaker, not a
+           -- meaningful ordering on its own).
+           ORDER BY is_system DESC, created_at ASC, id ASC
          ) AS rn
   FROM pipeline_definitions
   WHERE is_default = true

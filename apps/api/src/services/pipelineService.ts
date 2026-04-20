@@ -432,6 +432,32 @@ export async function updatePipeline(
   id: string,
   params: UpdatePipelineParams,
 ): Promise<PipelineDefinition> {
+  try {
+    return await runUpdatePipeline(tenantId, id, params);
+  } catch (err: unknown) {
+    // The partial unique index `pipeline_definitions_single_default_per_object`
+    // can fire under concurrent promotions (two tenants-users promoting
+    // different pipelines to default for the same object). Postgres raises
+    // SQLSTATE 23505; surface it as CONFLICT so the route returns 409
+    // instead of a generic 500.
+    const pgErr = err as { code?: string; constraint?: string };
+    if (
+      pgErr?.code === '23505' &&
+      pgErr?.constraint === 'pipeline_definitions_single_default_per_object'
+    ) {
+      throwConflictError(
+        'Another pipeline was just promoted to default for this object. Please reload and try again.',
+      );
+    }
+    throw err;
+  }
+}
+
+async function runUpdatePipeline(
+  tenantId: string,
+  id: string,
+  params: UpdatePipelineParams,
+): Promise<PipelineDefinition> {
   return db.transaction().execute(async (trx) => {
     const existing = await trx
       .selectFrom('pipeline_definitions')

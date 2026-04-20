@@ -648,25 +648,55 @@ export function PipelineDetailPage() {
                 {settingsSaving ? 'Saving…' : 'Set as default'}
               </PrimaryButton>
             )}
-            <button
-              type="button"
-              className={styles.dangerButton}
-              onClick={() => {
-                setDeletePipelineError(null);
-                setShowDeletePipelineConfirm(true);
-              }}
-              disabled={pipeline.isSystem || pipeline.isDefault}
-              title={
-                pipeline.isSystem
-                  ? 'System pipelines cannot be deleted'
-                  : pipeline.isDefault
-                    ? 'Promote another pipeline to default before deleting this one'
-                    : undefined
-              }
-            >
-              <TrashIcon />
-              Delete pipeline
-            </button>
+            {(() => {
+              // While `handleSetDefault` is in flight, `pipeline.isDefault`
+              // still reflects the pre-promotion state locally even though
+              // the server may have already flipped it. Disabling delete
+              // during that window prevents a user from racing the promote
+              // → delete and stranding the object without a default.
+              const deleteDisabledReason = pipeline.isSystem
+                ? 'System pipelines cannot be deleted'
+                : pipeline.isDefault
+                  ? 'Promote another pipeline to default before deleting this one'
+                  : settingsSaving
+                    ? 'Finishing default-pipeline change…'
+                    : null;
+              const isDisabled = deleteDisabledReason !== null;
+              // Disabled <button> elements don't show native title tooltips
+              // and aren't focusable, so we put the tooltip on a wrapping
+              // <span> and expose the reason to screen readers via
+              // aria-describedby + visually-hidden text.
+              return (
+                <span
+                  className={styles.dangerButtonWrap}
+                  title={deleteDisabledReason ?? undefined}
+                >
+                  <button
+                    type="button"
+                    className={styles.dangerButton}
+                    onClick={() => {
+                      setDeletePipelineError(null);
+                      setShowDeletePipelineConfirm(true);
+                    }}
+                    disabled={isDisabled}
+                    aria-describedby={
+                      isDisabled ? 'delete-pipeline-reason' : undefined
+                    }
+                  >
+                    <TrashIcon />
+                    Delete pipeline
+                  </button>
+                  {isDisabled && (
+                    <span
+                      id="delete-pipeline-reason"
+                      className={styles.srOnly}
+                    >
+                      {deleteDisabledReason}
+                    </span>
+                  )}
+                </span>
+              );
+            })()}
           </div>
           {settingsError && (
             <p className={styles.settingsError} role="alert">
