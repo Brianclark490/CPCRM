@@ -878,33 +878,20 @@ describe('KanbanBoard', () => {
       limit: 100,
     };
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-1')) {
-          return Promise.resolve({ ok: true, json: async () => mockPipeline } as Response);
-        }
-        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => paginated([{ ...mockPipeline, object_id: 'obj-1' }]),
-          } as Response);
-        }
-        if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
-          return Promise.resolve({ ok: true, json: async () => mismatchedRecords } as Response);
-        }
-        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/summary')) {
-          return Promise.resolve({ ok: true, json: async () => mockSummary } as Response);
-        }
-        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/velocity')) {
-          return Promise.resolve({ ok: true, json: async () => mockVelocity } as Response);
-        }
-        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-1/overdue')) {
-          return Promise.resolve({ ok: true, json: async () => [] } as Response);
-        }
-        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
-      }),
-    );
+    // Override only the records endpoint; everything else (pipelines,
+    // summary, velocity, overdue) keeps the default mock so future endpoint
+    // changes stay in one place.
+    const fetchMock = mockFetch();
+    const defaultImpl = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
+        return Promise.resolve({ ok: true, json: async () => mismatchedRecords } as Response);
+      }
+      return (
+        defaultImpl?.(url, options) ??
+        Promise.resolve({ ok: false, json: async () => ({}) } as Response)
+      );
+    });
 
     renderBoard();
 

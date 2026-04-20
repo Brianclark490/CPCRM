@@ -363,35 +363,12 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     const record = allRecords.find((r) => r.id === recordId);
     if (!record) return;
 
-    // Compute effective current stage using the same resolution logic as
-    // the column placement. Priority mirrors the server's source of truth
-    // (records.current_stage_id) so dropping a card onto the column it's
-    // actually in doesn't fire a request the server rejects as 400 "already
-    // in this stage" — which happens when a stale fieldValues.stage shows
-    // the card in a different column than current_stage_id points at.
-    const sortedStages = pipeline.stages.slice().sort((a, b) => a.sortOrder - b.sortOrder);
-    const localStageIds = new Set(sortedStages.map((s) => s.id));
-    const localStageByName = new Map<string, string>();
-    for (const s of sortedStages) {
-      localStageByName.set(s.name.toLowerCase(), s.id);
-      localStageByName.set(s.apiName.toLowerCase(), s.id);
-    }
-
-    let effectiveCurrentStageId: string | undefined;
-    if (record.currentStageId && localStageIds.has(record.currentStageId)) {
-      effectiveCurrentStageId = record.currentStageId;
-    }
-    if (!effectiveCurrentStageId) {
-      const dropFv = record.fieldValues ?? {};
-      const stageField = dropFv.stage;
-      if (typeof stageField === 'string' && stageField.trim()) {
-        effectiveCurrentStageId = localStageByName.get(stageField.trim().toLowerCase());
-      }
-    }
-    if (!effectiveCurrentStageId) {
-      effectiveCurrentStageId = sortedStages.find((s) => s.stageType === 'open')?.id;
-    }
-
+    // Share column-placement logic so the drop no-op check can't drift from
+    // where the card is actually rendered. `resolveStageForRecord` mirrors the
+    // server's source of truth (records.current_stage_id), keeping us clear of
+    // the 400 "already in this stage" case a stale fieldValues.stage could
+    // otherwise trigger.
+    const effectiveCurrentStageId = resolveStageForRecord(record)?.id;
     if (effectiveCurrentStageId === targetStageId) return;
 
     const targetStage = pipeline.stages.find((s) => s.id === targetStageId);
