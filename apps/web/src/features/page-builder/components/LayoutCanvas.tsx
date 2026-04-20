@@ -2,8 +2,16 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
+  pointerWithin,
+  rectIntersection,
 } from '@dnd-kit/core';
-import type { DragStartEvent, DragEndEvent, SensorDescriptor, SensorOptions } from '@dnd-kit/core';
+import type {
+  CollisionDetection,
+  DragStartEvent,
+  DragEndEvent,
+  SensorDescriptor,
+  SensorOptions,
+} from '@dnd-kit/core';
 import { ComponentPalette } from '../../../components/ComponentPalette.js';
 import { BuilderCanvas } from '../../../components/BuilderCanvas.js';
 import { PropertiesPanel } from '../../../components/PropertiesPanel.js';
@@ -17,6 +25,19 @@ import type {
 } from '../../../components/builderTypes.js';
 import type { HeaderConfig, VisibilityRule } from '../../../components/layoutTypes.js';
 import styles from '../PageBuilderPage.module.css';
+
+// The palette's DragOverlay is wider than the new-section buttons, so
+// `closestCorners` routinely ranks an adjacent section's drop zone ahead
+// of the button the pointer is actually over. Pointer-first collision
+// ensures the droppable under the cursor wins; rectIntersection and
+// closestCorners cover keyboard drags and out-of-bounds moves.
+const collisionDetection: CollisionDetection = (args) => {
+  const pointer = pointerWithin(args);
+  if (pointer.length > 0) return pointer;
+  const rect = rectIntersection(args);
+  if (rect.length > 0) return rect;
+  return closestCorners(args);
+};
 
 interface LayoutCanvasProps {
   layout: BuilderLayout;
@@ -79,7 +100,7 @@ export function LayoutCanvas({
     <div className={styles.builderBody}>
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={collisionDetection}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
       >
