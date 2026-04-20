@@ -1211,10 +1211,10 @@ describe('KanbanBoard', () => {
   });
 
   it('shows records with no pipelineId only on the default pipeline board', async () => {
-    // Records that the server never auto-assigned a pipeline to (null
-    // pipelineId) should only render on the default pipeline — otherwise
-    // switching to a sibling pipeline would show a card whose move-stage
-    // would 400 once the server auto-assigns it to the default.
+    // Records that the server never auto-assigned a pipeline to (missing or
+    // undefined pipelineId) should only render on the default pipeline —
+    // otherwise switching to a sibling pipeline would show a card whose
+    // move-stage would 400 once the server auto-assigns it to the default.
     const defaultPipeline = {
       ...mockPipeline,
       id: 'pipe-default',
