@@ -33,7 +33,7 @@ import styles from '../PageBuilderPage.module.css';
 // sortable reordering keep their original behaviour.
 const collisionDetection: CollisionDetection = (args) => {
   for (const collision of pointerWithin(args)) {
-    const container = args.droppableContainers.get(collision.id);
+    const container = args.droppableContainers.find((c) => c.id === collision.id);
     if (container?.data.current?.origin === 'new-section') {
       return [collision];
     }
