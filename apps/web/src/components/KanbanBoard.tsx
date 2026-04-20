@@ -168,6 +168,35 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     }
   });
 
+  // Selected pipeline — persisted per-object so switching objects remembers
+  // the last-viewed pipeline. `null` means "use default".
+  const pipelineStorageKey = `cpcrm-kanban-pipeline:${objectId}`;
+  const [selectedPipelineId, setSelectedPipelineIdState] = useState<
+    string | null
+  >(() => {
+    try {
+      return localStorage.getItem(pipelineStorageKey);
+    } catch {
+      return null;
+    }
+  });
+
+  const setSelectedPipelineId = useCallback(
+    (id: string | null) => {
+      setSelectedPipelineIdState(id);
+      try {
+        if (id) {
+          localStorage.setItem(pipelineStorageKey, id);
+        } else {
+          localStorage.removeItem(pipelineStorageKey);
+        }
+      } catch {
+        // localStorage unavailable
+      }
+    },
+    [pipelineStorageKey],
+  );
+
   const toggleSummary = () => {
     setSummaryCollapsed((prev) => {
       const next = !prev;
@@ -206,43 +235,60 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     enabled: Boolean(sessionToken),
   });
 
-  const matchedPipelineId = useMemo(() => {
+  const pipelinesForObject = useMemo(() => {
     const list = pipelineListQuery.data;
-    if (!list) return undefined;
-    const forObject = list.filter(
-      (p) => (p.objectId ?? p.object_id) === objectId,
-    );
-    if (forObject.length === 0) return undefined;
-    // Prefer the default pipeline so the Kanban matches the one the server
-    // auto-assigns via `assignDefaultPipeline`. Without this, a tenant with
-    // multiple pipelines could render the non-default one, and records that
-    // arrive without a `pipeline_id` would be auto-assigned to the default
-    // at move-stage time — making every target stage cross-pipeline and
-    // producing 400 "Target stage does not belong to the same pipeline".
-    const preferred =
-      forObject.find((p) => p.isDefault ?? p.is_default) ?? forObject[0];
-    return preferred.id;
+    if (!list) return [];
+    return list.filter((p) => (p.objectId ?? p.object_id) === objectId);
   }, [pipelineListQuery.data, objectId]);
+
+  const matchedPipelineId = useMemo(() => {
+    if (pipelinesForObject.length === 0) return undefined;
+    // Honour the user's explicit choice when it still points at a valid
+    // pipeline for this object.
+    if (
+      selectedPipelineId &&
+      pipelinesForObject.some((p) => p.id === selectedPipelineId)
+    ) {
+      return selectedPipelineId;
+    }
+    // Otherwise prefer the default pipeline so the Kanban matches the one
+    // the server auto-assigns via `assignDefaultPipeline`. Without this, a
+    // tenant with multiple pipelines could render the non-default one, and
+    // records that arrive without a `pipeline_id` would be auto-assigned to
+    // the default at move-stage time — making every target stage cross-
+    // pipeline and producing 400 "Target stage does not belong to the same
+    // pipeline".
+    const preferred =
+      pipelinesForObject.find((p) => p.isDefault ?? p.is_default) ??
+      pipelinesForObject[0];
+    return preferred.id;
+  }, [pipelinesForObject, selectedPipelineId]);
 
   const pipelineDetailQuery = usePipeline(matchedPipelineId);
   const recordsQuery = useRecords(apiName, RECORDS_QUERY_PARAMS);
 
   const pipeline = pipelineDetailQuery.data ?? null;
+  const boardIsDefaultPipeline = useMemo(() => {
+    if (!matchedPipelineId) return false;
+    const match = pipelinesForObject.find((p) => p.id === matchedPipelineId);
+    return Boolean(match?.isDefault ?? match?.is_default);
+  }, [pipelinesForObject, matchedPipelineId]);
+
   const allRecords = useMemo<RecordItem[]>(() => {
     const rows = recordsQuery.data?.data ?? [];
     // The records endpoint lists every record for the object regardless of
-    // pipeline; when a tenant has more than one pipeline for the same object,
-    // rows belonging to a sibling pipeline would otherwise render here via
-    // the `fieldValues.stage` fallback and any drop would fire a cross-
-    // pipeline move-stage that the server rejects with 400 "Target stage
-    // does not belong to the same pipeline". Keep rows whose `pipelineId`
-    // matches the board's pipeline, or is unset (server will auto-assign
-    // the default pipeline on first move).
+    // pipeline. Drop rows that belong to a sibling pipeline so cards never
+    // render in a pipeline they can't actually move within — that would
+    // trigger the server's "Target stage does not belong to the same
+    // pipeline" 400.  Records without a `pipelineId` are only shown on the
+    // default pipeline, matching the server's `assignDefaultPipeline`
+    // behaviour on first move.
     if (!matchedPipelineId) return rows;
-    return rows.filter(
-      (r) => !r.pipelineId || r.pipelineId === matchedPipelineId,
-    );
-  }, [recordsQuery.data, matchedPipelineId]);
+    return rows.filter((r) => {
+      if (r.pipelineId) return r.pipelineId === matchedPipelineId;
+      return boardIsDefaultPipeline;
+    });
+  }, [recordsQuery.data, matchedPipelineId, boardIsDefaultPipeline]);
 
   const loading =
     pipelineListQuery.isLoading ||
@@ -578,8 +624,28 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
 
   return (
     <div className={styles.board} data-testid="kanban-board">
-      {/* Summary toggle */}
+      {/* Pipeline picker + summary toggle */}
       <div className={styles.summaryHeader}>
+        {pipelinesForObject.length > 1 ? (
+          <label className={styles.pipelinePicker}>
+            Pipeline
+            <select
+              value={pipeline.id}
+              onChange={(e) => setSelectedPipelineId(e.target.value)}
+              data-testid="kanban-pipeline-picker"
+              aria-label="Select pipeline"
+            >
+              {pipelinesForObject.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {(p.isDefault ?? p.is_default) ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span />
+        )}
         <button
           type="button"
           className={styles.summaryToggle}

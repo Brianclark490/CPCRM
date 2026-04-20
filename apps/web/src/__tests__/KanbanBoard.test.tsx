@@ -27,6 +27,7 @@ const mockPipeline = {
   id: 'pipe-1',
   name: 'Sales Pipeline',
   objectId: 'obj-1',
+  is_default: true,
   stages: [
     {
       id: 'stage-1',
@@ -1035,6 +1036,118 @@ describe('KanbanBoard', () => {
       expect(screen.getByTestId('kanban-column-prospecting')).toBeInTheDocument();
     });
     expect(screen.queryByTestId('kanban-column-other_stage')).not.toBeInTheDocument();
+  });
+
+  it('shows a pipeline picker and switches boards when multiple pipelines exist', async () => {
+    // Two pipelines for the same object — the picker should let the user
+    // switch boards without the page reloading. Selecting the non-default
+    // pipeline swaps the columns and the records shown to those belonging
+    // to the newly-selected pipeline.
+    const defaultPipeline = {
+      ...mockPipeline,
+      id: 'pipe-default',
+      name: 'Default Pipeline',
+      isDefault: true,
+      is_default: true,
+    };
+    const otherPipeline = {
+      id: 'pipe-other',
+      name: 'Other Pipeline',
+      objectId: 'obj-1',
+      isDefault: false,
+      is_default: false,
+      stages: [
+        {
+          id: 'stage-other-1',
+          name: 'Other Stage',
+          apiName: 'other_stage',
+          sortOrder: 0,
+          stageType: 'open',
+          colour: 'grey',
+          defaultProbability: 0,
+        },
+      ],
+    };
+    const multiPipelineRecords = {
+      data: [
+        {
+          id: 'rec-default',
+          name: 'Default Deal',
+          fieldValues: {},
+          ownerId: 'user-1',
+          pipelineId: 'pipe-default',
+          currentStageId: 'stage-1',
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+        {
+          id: 'rec-other',
+          name: 'Other Deal',
+          fieldValues: {},
+          ownerId: 'user-1',
+          pipelineId: 'pipe-other',
+          currentStageId: 'stage-other-1',
+          createdAt: '2026-03-02T00:00:00Z',
+        },
+      ],
+      total: 2,
+      page: 1,
+      limit: 100,
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-default')) {
+          return Promise.resolve({ ok: true, json: async () => defaultPipeline } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-other')) {
+          return Promise.resolve({ ok: true, json: async () => otherPipeline } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () =>
+              paginated([
+                { ...defaultPipeline, object_id: 'obj-1' },
+                { ...otherPipeline, object_id: 'obj-1' },
+              ]),
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
+          return Promise.resolve({ ok: true, json: async () => multiPipelineRecords } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/summary')) {
+          return Promise.resolve({ ok: true, json: async () => mockSummary } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/velocity')) {
+          return Promise.resolve({ ok: true, json: async () => mockVelocity } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/overdue')) {
+          return Promise.resolve({ ok: true, json: async () => [] } as Response);
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }),
+    );
+
+    renderBoard();
+
+    // Default board renders first; only the default-pipeline record is visible.
+    const picker = await screen.findByTestId<HTMLSelectElement>('kanban-pipeline-picker');
+    expect(picker.value).toBe('pipe-default');
+    await waitFor(() => {
+      expect(screen.getByText('Default Deal')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Other Deal')).not.toBeInTheDocument();
+
+    // Switch to the non-default pipeline.
+    fireEvent.change(picker, { target: { value: 'pipe-other' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-column-other_stage')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('kanban-column-prospecting')).not.toBeInTheDocument();
+    expect(screen.getByText('Other Deal')).toBeInTheDocument();
+    expect(screen.queryByText('Default Deal')).not.toBeInTheDocument();
   });
 
   it('renders the summary toggle button', async () => {
