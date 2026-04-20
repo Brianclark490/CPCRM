@@ -1,58 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@descope/react-sdk';
 import { useApiClient } from './lib/apiClient.js';
+import { pageLayoutsKeys } from './lib/queryKeys.js';
 import type { PageLayout } from './components/layoutTypes.js';
 
 /**
  * Fetches the effective page layout for a given object type.
- * Returns null if no page layout is configured — the caller should
- * fall back to the legacy record form.
+ *
+ * Backed by TanStack Query with the shared `pageLayoutsKeys.effective`
+ * key so the admin publish handler can invalidate every listening
+ * record-detail page with one call. Returns `layout: null` when the
+ * server responds 204 (no layout configured) so callers can fall back
+ * to the legacy record form unchanged; any other non-OK response
+ * propagates as an error so the default retry kicks in instead of
+ * caching a spurious "no layout" for the global staleTime window.
+ *
+ * `staleTime: 0` and the always-refetch flags restore the original
+ * per-mount/per-focus fetch semantics a record page needs; publishes
+ * from other tabs then land as soon as the record tab regains focus.
  */
 export function usePageLayout(objectApiName: string | undefined) {
   const { sessionToken } = useSession();
   const api = useApiClient();
-  const [layout, setLayout] = useState<PageLayout | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!sessionToken || !objectApiName) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadLayout = async () => {
-      setLoading(true);
-
-      try {
-        const response = await api.request(
-          `/api/v1/objects/${encodeURIComponent(objectApiName)}/page-layout`,
-        );
-
-        if (cancelled) return;
-
-        if (response.status === 204) {
-          if (!cancelled) setLayout(null);
-        } else if (response.ok) {
-          const data = (await response.json()) as PageLayout;
-          if (!cancelled) setLayout(data);
-        } else {
-          if (!cancelled) setLayout(null);
-        }
-      } catch {
-        if (!cancelled) setLayout(null);
-      } finally {
-        if (!cancelled) setLoading(false);
+  const query = useQuery<PageLayout | null>({
+    queryKey: pageLayoutsKeys.effective(objectApiName ?? ''),
+    enabled: Boolean(sessionToken && objectApiName),
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    queryFn: async () => {
+      const response = await api.request(
+        `/api/v1/objects/${encodeURIComponent(objectApiName!)}/page-layout`,
+      );
+      if (response.status === 204) return null;
+      if (!response.ok) {
+        throw new Error(`Failed to load page layout: ${response.status}`);
       }
-    };
+      return (await response.json()) as PageLayout;
+    },
+  });
 
-    void loadLayout();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionToken, api, objectApiName]);
-
-  return { layout, loading };
+  return {
+    layout: query.data ?? null,
+    loading: query.isPending && Boolean(sessionToken && objectApiName),
+  };
 }
