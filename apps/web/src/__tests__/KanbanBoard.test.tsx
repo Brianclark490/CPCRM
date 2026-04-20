@@ -962,6 +962,81 @@ describe('KanbanBoard', () => {
     expect(screen.queryByText('In Other Pipeline')).not.toBeInTheDocument();
   });
 
+  it('prefers the default pipeline when multiple exist for the object', async () => {
+    // When a tenant has more than one pipeline for the same object, the
+    // server's `assignDefaultPipeline` routes records without a
+    // `pipeline_id` to the pipeline flagged `is_default`. The Kanban must
+    // render that same pipeline, otherwise target stages would live in the
+    // non-default pipeline and the server would reject moves with 400
+    // "Target stage does not belong to the same pipeline".
+    const defaultPipeline = {
+      ...mockPipeline,
+      id: 'pipe-default',
+      name: 'Default Pipeline',
+      isDefault: true,
+    };
+    const nonDefaultPipeline = {
+      id: 'pipe-other',
+      name: 'Other Pipeline',
+      objectId: 'obj-1',
+      isDefault: false,
+      stages: [
+        {
+          id: 'stage-other-1',
+          name: 'Other Stage',
+          apiName: 'other_stage',
+          sortOrder: 0,
+          stageType: 'open',
+          colour: 'grey',
+          defaultProbability: 0,
+        },
+      ],
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines/pipe-default')) {
+          return Promise.resolve({ ok: true, json: async () => defaultPipeline } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/admin/pipelines')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () =>
+              paginated([
+                // Non-default comes first so the test fails if the Kanban
+                // naively picks the first match rather than the default.
+                { ...nonDefaultPipeline, object_id: 'obj-1' },
+                { ...defaultPipeline, object_id: 'obj-1' },
+              ]),
+          } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
+          return Promise.resolve({ ok: true, json: async () => mockRecords } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-default/summary')) {
+          return Promise.resolve({ ok: true, json: async () => mockSummary } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-default/velocity')) {
+          return Promise.resolve({ ok: true, json: async () => mockVelocity } as Response);
+        }
+        if (typeof url === 'string' && url.includes('/api/v1/pipelines/pipe-default/overdue')) {
+          return Promise.resolve({ ok: true, json: async () => [] } as Response);
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }),
+    );
+
+    renderBoard();
+
+    // Default pipeline's Prospecting column should render, not the other
+    // pipeline's single "Other Stage" column.
+    await waitFor(() => {
+      expect(screen.getByTestId('kanban-column-prospecting')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('kanban-column-other_stage')).not.toBeInTheDocument();
+  });
+
   it('renders the summary toggle button', async () => {
     mockFetch();
     renderBoard();

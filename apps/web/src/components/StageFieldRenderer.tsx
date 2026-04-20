@@ -155,15 +155,24 @@ export function StageFieldRenderer({
       // loading a sibling pipeline for the same object.
       if (pipelineId) return pipelineId;
 
-      // Fall back to the first pipeline matching this object (create forms).
+      // Fall back to the default pipeline for this object, matching the
+      // server's auto-assignment behaviour.  Falls back to the first match
+      // when no pipeline is marked default.
       const response = await api.request('/api/v1/admin/pipelines');
       if (!response.ok) return null;
       const pipelines = unwrapList<
-        PipelineDefinition & { objectId?: string; object_id?: string }
+        PipelineDefinition & {
+          objectId?: string;
+          object_id?: string;
+          isDefault?: boolean;
+          is_default?: boolean;
+        }
       >(await response.json());
-      const match = pipelines.find(
+      const forObject = pipelines.filter(
         (p) => (p.objectId ?? p.object_id) === objectId,
       );
+      const match =
+        forObject.find((p) => p.isDefault ?? p.is_default) ?? forObject[0];
       return match?.id ?? null;
     };
 

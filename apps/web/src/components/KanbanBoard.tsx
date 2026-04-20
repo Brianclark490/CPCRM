@@ -195,7 +195,12 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     queryFn: async () => {
       const payload = await api.get<unknown>('/api/v1/admin/pipelines');
       return unwrapList<
-        PipelineDefinition & { objectId?: string; object_id?: string }
+        PipelineDefinition & {
+          objectId?: string;
+          object_id?: string;
+          isDefault?: boolean;
+          is_default?: boolean;
+        }
       >(payload);
     },
     enabled: Boolean(sessionToken),
@@ -204,7 +209,19 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const matchedPipelineId = useMemo(() => {
     const list = pipelineListQuery.data;
     if (!list) return undefined;
-    return list.find((p) => (p.objectId ?? p.object_id) === objectId)?.id;
+    const forObject = list.filter(
+      (p) => (p.objectId ?? p.object_id) === objectId,
+    );
+    if (forObject.length === 0) return undefined;
+    // Prefer the default pipeline so the Kanban matches the one the server
+    // auto-assigns via `assignDefaultPipeline`. Without this, a tenant with
+    // multiple pipelines could render the non-default one, and records that
+    // arrive without a `pipeline_id` would be auto-assigned to the default
+    // at move-stage time — making every target stage cross-pipeline and
+    // producing 400 "Target stage does not belong to the same pipeline".
+    const preferred =
+      forObject.find((p) => p.isDefault ?? p.is_default) ?? forObject[0];
+    return preferred.id;
   }, [pipelineListQuery.data, objectId]);
 
   const pipelineDetailQuery = usePipeline(matchedPipelineId);
