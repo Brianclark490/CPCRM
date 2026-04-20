@@ -181,6 +181,18 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     }
   });
 
+  // Rehydrate the selection when `objectId` changes — the initial
+  // `useState` only runs once, so navigating between objects while the
+  // board stays mounted would otherwise carry the previous object's
+  // pipeline id forward and ignore the new object's saved preference.
+  useEffect(() => {
+    try {
+      setSelectedPipelineIdState(localStorage.getItem(pipelineStorageKey));
+    } catch {
+      setSelectedPipelineIdState(null);
+    }
+  }, [pipelineStorageKey]);
+
   const setSelectedPipelineId = useCallback(
     (id: string | null) => {
       setSelectedPipelineIdState(id);
@@ -430,6 +442,13 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const handleDrop = (e: React.DragEvent, targetStageId: string) => {
     e.preventDefault();
     setDragOverStageId(null);
+    // React may reparent the dragged card into the target column as part of
+    // the optimistic update before the browser fires `dragend` on the
+    // source element. When that happens the dragend listener is lost and
+    // the card stays rendered with the "dragging" opacity. Clear the
+    // dragging id explicitly on drop so the UI returns to normal even if
+    // dragend never lands.
+    setDraggingRecordId(null);
 
     const recordId = e.dataTransfer.getData('text/plain');
     if (!recordId || !pipeline) return;
