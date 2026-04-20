@@ -55,9 +55,27 @@ const sampleRelationships = [
     label: 'Opportunities',
     required: false,
     targetObjectLabel: 'Opportunity',
+    targetObjectPluralLabel: 'Opportunities',
     targetObjectApiName: 'opportunity',
     sourceObjectApiName: 'account',
     sourceObjectLabel: 'Account',
+    sourceObjectPluralLabel: 'Accounts',
+  },
+  {
+    id: 'rel-2',
+    sourceObjectId: 'obj-3',
+    targetObjectId: 'obj-1',
+    relationshipType: 'lookup',
+    apiName: 'contact_account',
+    label: 'Account',
+    reverseLabel: 'Contacts',
+    required: false,
+    targetObjectLabel: 'Account',
+    targetObjectPluralLabel: 'Accounts',
+    targetObjectApiName: 'account',
+    sourceObjectApiName: 'contact',
+    sourceObjectLabel: 'Contact',
+    sourceObjectPluralLabel: 'Contacts',
   },
 ];
 
@@ -364,7 +382,14 @@ describe('PageBuilderPage', () => {
       expect(screen.getByTestId('component-palette')).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('palette-item-palette-rel-rel-1')).toBeInTheDocument();
+    const outbound = screen.getByTestId('palette-item-palette-rel-rel-1');
+    expect(outbound).toBeInTheDocument();
+    expect(outbound).toHaveTextContent('Opportunities');
+
+    const inbound = screen.getByTestId('palette-item-palette-rel-rel-2');
+    expect(inbound).toBeInTheDocument();
+    expect(inbound).toHaveTextContent('Contacts');
+    expect(inbound).not.toHaveTextContent('Account');
   });
 
   it('shows related fields from lookup relationships in the component palette', async () => {

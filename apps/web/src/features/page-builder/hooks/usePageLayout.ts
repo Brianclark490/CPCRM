@@ -106,13 +106,20 @@ export function usePageLayout(objectId: string | undefined) {
       if (relRes.ok) {
         const relData = unwrapList<RelationshipApiItem>(await relRes.json());
         setRelationships(
-          relData.map((r) => ({
-            id: r.id,
-            label: r.label,
-            apiName: r.apiName,
-            relationshipType: r.relationshipType,
-            targetObjectLabel: r.targetObjectLabel,
-          })),
+          relData.map((r) => {
+            const isInbound = r.targetObjectId === objectId;
+            const displayLabel = isInbound
+              ? (r.reverseLabel ?? r.sourceObjectPluralLabel)
+              : (r.targetObjectPluralLabel ?? r.label);
+            return {
+              id: r.id,
+              label: r.label,
+              displayLabel,
+              apiName: r.apiName,
+              relationshipType: r.relationshipType,
+              targetObjectLabel: r.targetObjectLabel,
+            };
+          }),
         );
 
         const outgoingRels = relData.filter((r) => r.sourceObjectId === objectId);
