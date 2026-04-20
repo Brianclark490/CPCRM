@@ -120,7 +120,8 @@
     background var(--transition-base);
 }
 
-.addSectionBtn:hover {
+.addSectionBtn:hover,
+.addSectionBtnOver {
   color: var(--accent-text);
   border-color: var(--accent);
   background: var(--accent-soft);

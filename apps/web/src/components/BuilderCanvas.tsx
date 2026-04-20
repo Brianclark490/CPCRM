@@ -5,6 +5,7 @@ import type {
   BuilderLayout,
   BuilderSection,
   FieldRef,
+  RelationshipRef,
   ComponentDefinition,
 } from './builderTypes.js';
 import { HeaderZoneEditor } from './HeaderZoneEditor.js';
@@ -37,9 +38,40 @@ function DroppableTab({ tabId, isActive, children }: DroppableTabProps) {
   );
 }
 
+interface AddSectionDropZoneProps {
+  tabId: string;
+  columns: number;
+  label: string;
+  testId: string;
+  onClick: () => void;
+}
+
+function AddSectionDropZone({ tabId, columns, label, testId, onClick }: AddSectionDropZoneProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `add-section-${tabId}-${columns}`,
+    data: { origin: 'new-section', tabId, columns },
+  });
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      className={`${styles.addSectionBtn} ${isOver ? styles.addSectionBtnOver : ''}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      data-testid={testId}
+    >
+      {label}
+    </button>
+  );
+}
+
 interface BuilderCanvasProps {
   layout: BuilderLayout;
   fields: FieldRef[];
+  relationships: RelationshipRef[];
   registry: ComponentDefinition[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
@@ -60,6 +92,7 @@ interface BuilderCanvasProps {
 export function BuilderCanvas({
   layout,
   fields,
+  relationships,
   registry,
   selectedId,
   onSelect,
@@ -190,6 +223,7 @@ export function BuilderCanvas({
                 key={section.id}
                 section={section}
                 fields={fields}
+                relationships={relationships}
                 registry={registry}
                 selectedId={selectedId}
                 onSelectComponent={onSelectComponent}
@@ -202,28 +236,20 @@ export function BuilderCanvas({
           </SortableContext>
 
           <div className={styles.addSectionRow}>
-            <button
-              type="button"
-              className={styles.addSectionBtn}
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddSection(activeTab.id, 1);
-              }}
-              data-testid="add-section-1col"
-            >
-              + 1-column section
-            </button>
-            <button
-              type="button"
-              className={styles.addSectionBtn}
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddSection(activeTab.id, 2);
-              }}
-              data-testid="add-section-2col"
-            >
-              + 2-column section
-            </button>
+            <AddSectionDropZone
+              tabId={activeTab.id}
+              columns={1}
+              label="+ 1-column section"
+              testId="add-section-1col"
+              onClick={() => onAddSection(activeTab.id, 1)}
+            />
+            <AddSectionDropZone
+              tabId={activeTab.id}
+              columns={2}
+              label="+ 2-column section"
+              testId="add-section-2col"
+              onClick={() => onAddSection(activeTab.id, 2)}
+            />
           </div>
         </div>
       )}

@@ -1,6 +1,11 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BuilderComponent, FieldRef, ComponentDefinition } from './builderTypes.js';
+import type {
+  BuilderComponent,
+  FieldRef,
+  RelationshipRef,
+  ComponentDefinition,
+} from './builderTypes.js';
 import { resolveIcon } from './iconMap.js';
 import styles from './DraggableComponent.module.css';
 
@@ -10,6 +15,7 @@ interface DraggableComponentProps {
   component: BuilderComponent;
   sectionId: string;
   fields: FieldRef[];
+  relationships: RelationshipRef[];
   registry: ComponentDefinition[];
   isSelected: boolean;
   onSelect: () => void;
@@ -21,11 +27,20 @@ interface DraggableComponentProps {
 function getComponentLabel(
   component: BuilderComponent,
   fields: FieldRef[],
+  relationships: RelationshipRef[],
   registry: ComponentDefinition[],
 ): string {
   if (component.type === 'field') {
     const field = fields.find((f) => f.apiName === component.config.fieldApiName);
     return field ? field.label : String(component.config.fieldApiName ?? 'Unknown field');
+  }
+
+  if (component.type === 'related_list') {
+    const relId = component.config.relationshipId;
+    if (relId) {
+      const rel = relationships.find((r) => r.id === relId);
+      if (rel) return rel.displayLabel;
+    }
   }
 
   const def = registry.find((r) => r.type === component.type);
@@ -54,6 +69,7 @@ export function DraggableComponent({
   component,
   sectionId,
   fields,
+  relationships,
   registry,
   isSelected,
   onSelect,
@@ -81,7 +97,7 @@ export function DraggableComponent({
     opacity: isDragging ? 0.4 : 1,
   };
 
-  const label = getComponentLabel(component, fields, registry);
+  const label = getComponentLabel(component, fields, relationships, registry);
   const icon = getComponentIcon(component, fields, registry);
 
   return (
