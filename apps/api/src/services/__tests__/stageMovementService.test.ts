@@ -83,7 +83,30 @@ const {
       return { rows: [] };
     }
 
-    // Stage lookup by id + tenant_id (target stage)
+    // Target stage lookup joined with parent pipeline to project
+    // pipeline_definitions.object_id (for cross-object validation).
+    if (
+      s.includes('FROM STAGE_DEFINITIONS') &&
+      s.includes('JOIN PIPELINE_DEFINITIONS') &&
+      s.includes('PIPELINE_OBJECT_ID')
+    ) {
+      const stageId = params![0] as string;
+      const stage = fakeStages.get(stageId);
+      if (stage) {
+        const pipeline = fakePipelines.get(stage.pipeline_id as string);
+        return {
+          rows: [
+            {
+              ...stage,
+              pipeline_object_id: pipeline?.object_id ?? null,
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    }
+
+    // Stage lookup by id + tenant_id (target stage, legacy path)
     if (s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE ID')) {
       const stageId = params![0] as string;
       const stage = fakeStages.get(stageId);
@@ -476,6 +499,15 @@ describe('moveRecordStage', () => {
     seedPipelineAndStages();
     seedRecord();
 
+    // Second pipeline for the SAME object — exercises the cross-pipeline
+    // rejection path (not the cross-object one).
+    fakePipelines.set('pipeline-2', {
+      id: 'pipeline-2',
+      object_id: 'obj-opportunity-id',
+      name: 'Other Pipeline',
+      is_default: false,
+    });
+
     // Add a stage in a different pipeline
     fakeStages.set('stage-other', {
       id: 'stage-other',
@@ -500,7 +532,7 @@ describe('moveRecordStage', () => {
     ).rejects.toThrow('Record is already in this stage');
   });
 
-  it('auto-assigns default pipeline and moves record when record has no pipeline', async () => {
+  it('adopts target stage pipeline and moves record when record has no pipeline', async () => {
     seedPipelineAndStages();
 
     fakeRecords.set('rec-no-pipeline', {
@@ -522,8 +554,89 @@ describe('moveRecordStage', () => {
     expect(result.pipelineId).toBe('pipeline-1');
   });
 
-  it('throws VALIDATION_ERROR when record has no pipeline and no default pipeline exists', async () => {
-    // Only seed stages, not the pipeline — so assignDefaultPipeline returns false
+  it('adopts the target stage pipeline even when a sibling pipeline is also default', async () => {
+    // Regression: when multiple pipelines for an object are marked
+    // is_default=true the legacy `assignDefaultPipeline` lookup could
+    // pick a different pipeline than the one the user chose a stage
+    // from, producing a cross-pipeline 400. Picking the target stage's
+    // pipeline directly avoids the ambiguity.
+    seedPipelineAndStages();
+
+    // Second default pipeline for the same object, with its own stages.
+    fakePipelines.set('pipeline-2', {
+      id: 'pipeline-2',
+      object_id: 'obj-opportunity-id',
+      name: 'Sales Pipeline 2',
+      is_default: true,
+    });
+    fakeStages.set('stage-p2-prospect', {
+      id: 'stage-p2-prospect',
+      pipeline_id: 'pipeline-2',
+      name: 'Prospecting',
+      api_name: 'prospecting',
+      sort_order: 0,
+      stage_type: 'open',
+      default_probability: 10,
+    });
+    fakeStages.set('stage-p2-qualification', {
+      id: 'stage-p2-qualification',
+      pipeline_id: 'pipeline-2',
+      name: 'Qualification',
+      api_name: 'qualification',
+      sort_order: 1,
+      stage_type: 'open',
+      default_probability: 25,
+    });
+
+    fakeRecords.set('rec-no-pipeline', {
+      id: 'rec-no-pipeline',
+      object_id: 'obj-opportunity-id',
+      name: 'No Pipeline',
+      field_values: { value: 50000 },
+      owner_id: 'user-123',
+      pipeline_id: null,
+      current_stage_id: null,
+      stage_entered_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    // User picks a stage from pipeline-2 — the record should adopt pipeline-2.
+    const result = await moveRecordStage(
+      TENANT_ID,
+      'opportunity',
+      'rec-no-pipeline',
+      'stage-p2-qualification',
+      'user-123',
+    );
+
+    expect(result.currentStageId).toBe('stage-p2-qualification');
+    expect(result.pipelineId).toBe('pipeline-2');
+  });
+
+  it('rejects move when target stage belongs to a different object type', async () => {
+    // Regression: adopting the target stage's pipeline must still reject
+    // cross-object moves — a record for object A cannot be moved to a
+    // stage whose parent pipeline belongs to object B.
+    seedPipelineAndStages();
+
+    // Foreign pipeline for a different object.
+    fakePipelines.set('pipeline-other', {
+      id: 'pipeline-other',
+      object_id: 'obj-contact-id',
+      name: 'Contact Pipeline',
+      is_default: true,
+    });
+    fakeStages.set('stage-foreign', {
+      id: 'stage-foreign',
+      pipeline_id: 'pipeline-other',
+      name: 'Foreign',
+      api_name: 'foreign',
+      sort_order: 0,
+      stage_type: 'open',
+      default_probability: 0,
+    });
+
     fakeRecords.set('rec-no-pipeline', {
       id: 'rec-no-pipeline',
       object_id: 'obj-opportunity-id',
@@ -537,9 +650,25 @@ describe('moveRecordStage', () => {
       updated_at: new Date().toISOString(),
     });
 
-    await expect(
-      moveRecordStage(TENANT_ID, 'opportunity', 'rec-no-pipeline', 'stage-qualification', 'user-123'),
-    ).rejects.toThrow('Record is not assigned to a pipeline');
+    try {
+      await moveRecordStage(
+        TENANT_ID,
+        'opportunity',
+        'rec-no-pipeline',
+        'stage-foreign',
+        'user-123',
+      );
+      expect.fail('Should have thrown');
+    } catch (err: unknown) {
+      const error = err as Error & {
+        code: string;
+        details?: Record<string, unknown>;
+      };
+      expect(error.code).toBe('VALIDATION_ERROR');
+      expect(error.message).toMatch(/different object type/i);
+      expect(error.details?.recordObjectId).toBe('obj-opportunity-id');
+      expect(error.details?.targetStagePipelineObjectId).toBe('obj-contact-id');
+    }
   });
 
   it('applies default_probability on stage entry', async () => {

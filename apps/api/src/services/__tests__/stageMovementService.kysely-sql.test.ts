@@ -92,7 +92,30 @@ const { capturedQueries, mockQuery, mockConnect, resetCapture } = vi.hoisted(
         return { rows: [] };
       }
 
-      // stage lookup by id + tenant_id (target stage)
+      // target stage joined with pipeline_definitions to project
+      // pipeline_object_id (for cross-object validation).
+      if (
+        s.includes('FROM STAGE_DEFINITIONS') &&
+        s.includes('JOIN PIPELINE_DEFINITIONS') &&
+        s.includes('PIPELINE_OBJECT_ID')
+      ) {
+        const id = params![0] as string;
+        const row = fakeStages.get(id);
+        if (row) {
+          const pipeline = fakePipelines.get(row.pipeline_id as string);
+          return {
+            rows: [
+              {
+                ...row,
+                pipeline_object_id: pipeline?.object_id ?? null,
+              },
+            ],
+          };
+        }
+        return { rows: [] };
+      }
+
+      // stage lookup by id + tenant_id (target stage, legacy)
       if (s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE ID')) {
         const id = params![0] as string;
         const row = fakeStages.get(id);

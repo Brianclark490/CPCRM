@@ -248,46 +248,114 @@ export async function moveRecordStage(
       ? new Date(stageEnteredAtRaw as unknown as string)
       : null;
 
-    // 3. Auto-assign default pipeline if the record has no pipeline yet
+    // 3. Fetch the target stage first so we can use its pipeline_id to
+    //    resolve ambiguity when the record has no pipeline assigned yet.
+    //    Picking the stage implicitly picks the pipeline; this honours user
+    //    intent and side-steps "default pipeline" lookups that can diverge
+    //    from the frontend when multiple pipelines are marked is_default.
+    //
+    //    We also project the parent pipeline's object_id so we can reject
+    //    cross-object moves before adopting the target stage's pipeline.
+    const targetStageRow = await trx
+      .selectFrom('stage_definitions as sd')
+      .innerJoin('pipeline_definitions as pd', 'pd.id', 'sd.pipeline_id')
+      .selectAll('sd')
+      .select('pd.object_id as pipeline_object_id')
+      .where('sd.id', '=', targetStageId)
+      .where('sd.tenant_id', '=', tenantId)
+      .executeTakeFirst();
+    if (!targetStageRow) {
+      throwNotFoundError('Target stage not found');
+    }
+    const targetStagePipelineObjectId = targetStageRow.pipeline_object_id as string;
+    if (targetStagePipelineObjectId !== objectId) {
+      throw AppError.validation(
+        'Target stage belongs to a different object type',
+        {
+          recordId,
+          recordObjectId: objectId,
+          targetStageId,
+          targetStagePipelineObjectId,
+        },
+      );
+    }
+    const targetStage = rowToStage(
+      targetStageRow as unknown as Record<string, unknown>,
+    );
+
+    // 4. Resolve the record's pipeline. If the record is not yet assigned,
+    //    adopt the target stage's pipeline and seed a current stage so gate
+    //    validation below runs in the correct pipeline context.
     let resolvedPipelineId = pipelineId;
     let resolvedCurrentStageId = currentStageId;
     let resolvedStageEnteredAt = stageEnteredAt;
 
-    if (!resolvedPipelineId || !resolvedCurrentStageId) {
-      const assigned = await assignDefaultPipeline(
-        trx,
-        recordId,
-        objectId,
-        ownerId,
-        tenantId,
-      );
-      if (!assigned) {
-        throwValidationError('Record is not assigned to a pipeline');
+    if (!resolvedPipelineId) {
+      resolvedPipelineId = targetStage.pipelineId;
+
+      if (!resolvedCurrentStageId) {
+        // Seed current stage = first open stage in the adopted pipeline
+        // (fall back to first stage by sort_order when no open stage).
+        const initialStageRow = await trx
+          .selectFrom('stage_definitions')
+          .select(['id', 'stage_type'])
+          .where('pipeline_id', '=', resolvedPipelineId)
+          .where('tenant_id', '=', tenantId)
+          .orderBy('sort_order', 'asc')
+          .execute();
+        const seedStage =
+          initialStageRow.find((s) => s.stage_type === 'open') ??
+          initialStageRow[0];
+        if (!seedStage) {
+          throwValidationError('Pipeline has no stages');
+        }
+        resolvedCurrentStageId = seedStage.id as string;
+        resolvedStageEnteredAt = new Date();
       }
 
-      // Re-read the record to pick up the newly assigned pipeline columns
-      const refreshRow = await trx
-        .selectFrom('records')
-        .select(['pipeline_id', 'current_stage_id', 'stage_entered_at'])
+      // Persist the pipeline assignment now so stage_history and the
+      // record row reflect the adopted pipeline once the transaction
+      // commits.
+      await trx
+        .updateTable('records')
+        .set({
+          pipeline_id: resolvedPipelineId,
+          current_stage_id: resolvedCurrentStageId,
+          stage_entered_at: resolvedStageEnteredAt,
+        })
         .where('id', '=', recordId)
         .where('tenant_id', '=', tenantId)
-        .executeTakeFirst();
-      if (!refreshRow) {
-        throwValidationError('Record is not assigned to a pipeline');
+        .execute();
+    } else if (!resolvedCurrentStageId) {
+      // Pipeline present but no current stage — seed from first open stage
+      // in the existing pipeline.
+      const initialStageRow = await trx
+        .selectFrom('stage_definitions')
+        .select(['id', 'stage_type'])
+        .where('pipeline_id', '=', resolvedPipelineId)
+        .where('tenant_id', '=', tenantId)
+        .orderBy('sort_order', 'asc')
+        .execute();
+      const seedStage =
+        initialStageRow.find((s) => s.stage_type === 'open') ??
+        initialStageRow[0];
+      if (!seedStage) {
+        throwValidationError('Pipeline has no stages');
       }
-
-      resolvedPipelineId = (refreshRow.pipeline_id as string | null) ?? null;
-      resolvedCurrentStageId = (refreshRow.current_stage_id as string | null) ?? null;
-      resolvedStageEnteredAt = refreshRow.stage_entered_at
-        ? new Date(refreshRow.stage_entered_at as unknown as string)
-        : null;
-
-      if (!resolvedPipelineId || !resolvedCurrentStageId) {
-        throwValidationError('Record is not assigned to a pipeline');
-      }
+      resolvedCurrentStageId = seedStage.id as string;
+      resolvedStageEnteredAt = new Date();
+      await trx
+        .updateTable('records')
+        .set({
+          current_stage_id: resolvedCurrentStageId,
+          stage_entered_at: resolvedStageEnteredAt,
+        })
+        .where('id', '=', recordId)
+        .where('tenant_id', '=', tenantId)
+        .execute();
     }
 
-    // 4. Fetch the current stage
+    // 5. Fetch the current stage
     const currentStageRow = await trx
       .selectFrom('stage_definitions')
       .selectAll()
@@ -302,20 +370,7 @@ export async function moveRecordStage(
       currentStageRow as unknown as Record<string, unknown>,
     );
 
-    // 5. Fetch the target stage and validate it belongs to the same pipeline
-    const targetStageRow = await trx
-      .selectFrom('stage_definitions')
-      .selectAll()
-      .where('id', '=', targetStageId)
-      .where('tenant_id', '=', tenantId)
-      .executeTakeFirst();
-    if (!targetStageRow) {
-      throwNotFoundError('Target stage not found');
-    }
-    const targetStage = rowToStage(
-      targetStageRow as unknown as Record<string, unknown>,
-    );
-
+    // 6. Target stage must belong to the record's resolved pipeline.
     if (targetStage.pipelineId !== resolvedPipelineId) {
       throw AppError.validation(
         'Target stage does not belong to the same pipeline',
@@ -332,7 +387,7 @@ export async function moveRecordStage(
       throwValidationError('Record is already in this stage');
     }
 
-    // 6. Determine if gate validation is required
+    // 7. Determine if gate validation is required
     const isForwardMove = targetStage.sortOrder > currentStage.sortOrder;
     const isWonOrLost = targetStage.stageType === 'won' || targetStage.stageType === 'lost';
     const requireGateValidation = isForwardMove || isWonOrLost;
