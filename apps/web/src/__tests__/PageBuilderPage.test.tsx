@@ -197,6 +197,11 @@ const samplePageLayoutDetail = {
                 type: 'field',
                 config: { fieldApiName: 'name', span: 1, readOnly: false },
               },
+              {
+                id: 'comp-rl-1',
+                type: 'related_list',
+                config: { relationshipId: 'rel-2', displayFields: [], limit: 5, allowCreate: true },
+              },
             ],
           },
         ],
@@ -410,6 +415,19 @@ describe('PageBuilderPage', () => {
     const inboundFallback = screen.getByTestId('palette-item-palette-rel-rel-3');
     expect(inboundFallback).toHaveTextContent('Leads');
     expect(inboundFallback).not.toHaveTextContent('Account');
+  });
+
+  it('renders placed related_list tiles with the relationship label, not the generic type', async () => {
+    mockAllFetches();
+    renderPage();
+
+    // comp-rl-1 in samplePageLayoutDetail targets rel-2 (Primary Contacts).
+    const tile = await screen.findByTestId('canvas-component-comp-rl-1');
+    expect(tile).toHaveTextContent('Primary Contacts');
+    // "Related List" (with space) is the registry fallback label; it should
+    // not appear when a relationshipId resolves. The type badge renders
+    // "related_list" (snake_case), so this substring check is safe.
+    expect(tile).not.toHaveTextContent('Related List');
   });
 
   it('shows related fields from lookup relationships in the component palette', async () => {

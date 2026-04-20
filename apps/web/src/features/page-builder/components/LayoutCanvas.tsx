@@ -94,6 +94,7 @@ export function LayoutCanvas({
         <BuilderCanvas
           layout={layout}
           fields={fields}
+          relationships={relationships}
           registry={registry}
           selectedId={selectedId}
           onSelect={onSelect}

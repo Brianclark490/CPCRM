@@ -36,18 +36,37 @@ export function usePageLayoutDnd({ layout, updateLayout }: UsePageLayoutDndOptio
       const paletteData = activeData as unknown as PaletteDragData;
       const overData = over.data.current;
 
+      const newComp: BuilderComponent = {
+        id: uid(),
+        type: paletteData.componentType,
+        config: { ...paletteData.defaultConfig },
+      };
+
+      // Palette → new-section drop: create a section and place the component in it.
+      if (overData && overData.origin === 'new-section') {
+        const targetTabId = overData.tabId as string;
+        const columns = (overData.columns as number) ?? 1;
+        updateLayout((draft) => {
+          const tab = draft.tabs.find((t: BuilderTab) => t.id === targetTabId);
+          if (!tab) return draft;
+          tab.sections.push({
+            id: uid(),
+            type: 'field_section',
+            label: `Section ${tab.sections.length + 1}`,
+            columns,
+            components: [newComp],
+          });
+          return draft;
+        });
+        return;
+      }
+
       let targetSectionId: string | null = null;
       if (overData && 'sectionId' in overData) {
         targetSectionId = overData.sectionId as string;
       }
 
       if (!targetSectionId) return;
-
-      const newComp: BuilderComponent = {
-        id: uid(),
-        type: paletteData.componentType,
-        config: { ...paletteData.defaultConfig },
-      };
 
       updateLayout((draft) => {
         const loc = findSection(draft, targetSectionId!);

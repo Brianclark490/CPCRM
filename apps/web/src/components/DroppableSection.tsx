@@ -5,7 +5,13 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BuilderSection, BuilderComponent, FieldRef, ComponentDefinition } from './builderTypes.js';
+import type {
+  BuilderSection,
+  BuilderComponent,
+  FieldRef,
+  RelationshipRef,
+  ComponentDefinition,
+} from './builderTypes.js';
 import { DraggableComponent } from './DraggableComponent.js';
 import styles from './DroppableSection.module.css';
 
@@ -14,6 +20,7 @@ import styles from './DroppableSection.module.css';
 interface DroppableSectionProps {
   section: BuilderSection;
   fields: FieldRef[];
+  relationships: RelationshipRef[];
   registry: ComponentDefinition[];
   selectedId: string | null;
   onSelectComponent: (componentId: string) => void;
@@ -28,6 +35,7 @@ interface DroppableSectionProps {
 export function DroppableSection({
   section,
   fields,
+  relationships,
   registry,
   selectedId,
   onSelectComponent,
@@ -113,6 +121,7 @@ export function DroppableSection({
               component={comp}
               sectionId={section.id}
               fields={fields}
+              relationships={relationships}
               registry={registry}
               isSelected={selectedId === comp.id}
               onSelect={() => onSelectComponent(comp.id)}
