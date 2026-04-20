@@ -906,6 +906,62 @@ describe('KanbanBoard', () => {
     expect(prospectingColumn).not.toHaveTextContent('Mismatched Deal');
   });
 
+  it('hides records that belong to a different pipeline', async () => {
+    // Regression: the records endpoint returns every record for the object
+    // regardless of pipeline. If a row's `pipelineId` points at a sibling
+    // pipeline, rendering it via `fieldValues.stage` fallback lets the user
+    // drag it — and the resulting move-stage fires cross-pipeline and the
+    // server rejects with 400 "Target stage does not belong to the same
+    // pipeline". Such rows should be hidden entirely.
+    const mixedPipelineRecords = {
+      data: [
+        {
+          id: 'rec-this-pipeline',
+          name: 'In This Pipeline',
+          fieldValues: { value: 10000 },
+          ownerId: 'user-1',
+          pipelineId: 'pipe-1',
+          currentStageId: 'stage-1',
+          stageEnteredAt: '2026-04-01T00:00:00Z',
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+        {
+          id: 'rec-other-pipeline',
+          name: 'In Other Pipeline',
+          fieldValues: { value: 20000, stage: 'Qualification' },
+          ownerId: 'user-2',
+          pipelineId: 'pipe-2',
+          currentStageId: 'stage-x',
+          stageEnteredAt: '2026-04-01T00:00:00Z',
+          createdAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+      total: 2,
+      page: 1,
+      limit: 100,
+    };
+
+    const fetchMock = mockFetch();
+    const defaultImpl = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (typeof url === 'string' && url.includes('/api/v1/objects/opportunity/records')) {
+        return Promise.resolve({ ok: true, json: async () => mixedPipelineRecords } as Response);
+      }
+      return (
+        defaultImpl?.(url, options) ??
+        Promise.resolve({ ok: false, json: async () => ({}) } as Response)
+      );
+    });
+
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('In This Pipeline')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('In Other Pipeline')).not.toBeInTheDocument();
+  });
+
   it('renders the summary toggle button', async () => {
     mockFetch();
     renderBoard();
