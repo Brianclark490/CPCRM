@@ -3,7 +3,6 @@ import {
   DragOverlay,
   closestCorners,
   pointerWithin,
-  rectIntersection,
 } from '@dnd-kit/core';
 import type {
   CollisionDetection,
@@ -26,16 +25,19 @@ import type {
 import type { HeaderConfig, VisibilityRule } from '../../../components/layoutTypes.js';
 import styles from '../PageBuilderPage.module.css';
 
-// The palette's DragOverlay is wider than the new-section buttons, so
-// `closestCorners` routinely ranks an adjacent section's drop zone ahead
-// of the button the pointer is actually over. Pointer-first collision
-// ensures the droppable under the cursor wins; rectIntersection and
-// closestCorners cover keyboard drags and out-of-bounds moves.
+// The DragOverlay is wider than the "+ N-column section" buttons, so
+// `closestCorners` often ranks an adjacent section ahead of the button
+// the pointer is actually over. Short-circuit to the new-section
+// droppable whenever the pointer is within one; fall back to
+// `closestCorners` for every other case so existing-section drops and
+// sortable reordering keep their original behaviour.
 const collisionDetection: CollisionDetection = (args) => {
-  const pointer = pointerWithin(args);
-  if (pointer.length > 0) return pointer;
-  const rect = rectIntersection(args);
-  if (rect.length > 0) return rect;
+  for (const collision of pointerWithin(args)) {
+    const container = args.droppableContainers.get(collision.id);
+    if (container?.data.current?.origin === 'new-section') {
+      return [collision];
+    }
+  }
   return closestCorners(args);
 };
 
