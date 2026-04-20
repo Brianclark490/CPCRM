@@ -1063,6 +1063,41 @@ describe('POST /objects/:apiName/records/:id/move-stage', () => {
     });
   });
 
+  it('includes AppError details in 400 body for cross-pipeline target stage', async () => {
+    const err = Object.assign(
+      new Error('Target stage does not belong to the same pipeline'),
+      {
+        code: 'VALIDATION_ERROR',
+        details: {
+          recordId: VALID_UUID,
+          recordPipelineId: 'pipeline-a',
+          targetStageId: VALID_UUID_2,
+          targetStagePipelineId: 'pipeline-b',
+        },
+      },
+    );
+    mockMoveRecordStage.mockRejectedValue(err);
+
+    const req = mockReq(
+      { target_stage_id: VALID_UUID_2 },
+      { userId: 'user-123', tenantId: 'tenant-abc' },
+      { apiName: 'opportunity', id: VALID_UUID },
+    );
+    const res = mockRes();
+
+    await handleMoveStage(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Target stage does not belong to the same pipeline',
+      code: 'VALIDATION_ERROR',
+      recordId: VALID_UUID,
+      recordPipelineId: 'pipeline-a',
+      targetStageId: VALID_UUID_2,
+      targetStagePipelineId: 'pipeline-b',
+    });
+  });
+
   it('returns 500 on unexpected error', async () => {
     mockMoveRecordStage.mockRejectedValue(new Error('Database error'));
 
