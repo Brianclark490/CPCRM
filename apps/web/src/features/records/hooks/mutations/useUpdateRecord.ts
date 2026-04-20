@@ -14,9 +14,22 @@ import type { RecordItem, RecordsResponse } from '../queries/useRecords.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Subset of `RecordWithLabels` (`apps/api/src/services/recordService.ts`) that
+ * the records list cache actually renders.  The server's PUT handler returns
+ * the full record — including a server-recomputed `name` when the edit
+ * touches the name-source field — so we take `name` + the stage/pipeline/
+ * owner fields from the response rather than replaying the caller's payload
+ * and letting the card title go stale.
+ */
 export interface UpdateRecordResponse {
   id: string;
+  name?: string;
   fieldValues: Record<string, unknown>;
+  ownerId?: string;
+  pipelineId?: string;
+  currentStageId?: string;
+  stageEnteredAt?: string;
 }
 
 export interface UpdateRecordVariables {
@@ -40,10 +53,12 @@ export interface UseUpdateRecordOptions {
 /**
  * PUT record field values.
  *
- * Merges the submitted `fieldValues` into the cached list entry on success
- * so consumers (e.g. Kanban board) see the new values immediately without
- * a refetch. Used by the gate-failure "fill and move" flow to satisfy
- * required fields before retrying the stage move — see `useMoveStage`.
+ * On success, merges the server's authoritative response into the cached
+ * list entry — including the recomputed `name` when the edit touches the
+ * object's name-source field — so consumers (e.g. Kanban board) see the
+ * updated card title + field values without a refetch. Used by the gate-
+ * failure "fill and move" flow to satisfy required fields before retrying
+ * the stage move — see `useMoveStage`.
  */
 export function useUpdateRecord(
   options: UseUpdateRecordOptions,
@@ -61,18 +76,29 @@ export function useUpdateRecord(
       ),
 
     onSuccess: (data, { recordId, fieldValues }) => {
-      // Merge submitted values into the cached record so the Kanban card
-      // reflects the new field state immediately. Prefer the server's
-      // authoritative `fieldValues` when returned; otherwise fall back to
-      // the caller's payload.
-      const merged = data?.fieldValues ?? fieldValues;
+      // Merge the server response into the cached row so list-visible
+      // fields (name, owner, pipeline assignment) reflect any server-side
+      // recomputations.  Values absent from the response fall back to the
+      // existing cached value or — for `fieldValues` — the caller's
+      // payload, matching pre-TQ behaviour.
       queryClient.setQueryData<RecordsResponse>(recordsListKey, (prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           data: prev.data.map((r: RecordItem) =>
             r.id === recordId
-              ? { ...r, fieldValues: { ...r.fieldValues, ...merged } }
+              ? {
+                  ...r,
+                  name: data.name ?? r.name,
+                  ownerId: data.ownerId ?? r.ownerId,
+                  pipelineId: data.pipelineId ?? r.pipelineId,
+                  currentStageId: data.currentStageId ?? r.currentStageId,
+                  stageEnteredAt: data.stageEnteredAt ?? r.stageEnteredAt,
+                  fieldValues: {
+                    ...r.fieldValues,
+                    ...(data.fieldValues ?? fieldValues),
+                  },
+                }
               : r,
           ),
         };
@@ -80,3 +106,4 @@ export function useUpdateRecord(
     },
   });
 }
+
