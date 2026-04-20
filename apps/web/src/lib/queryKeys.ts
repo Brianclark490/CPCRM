@@ -120,12 +120,14 @@ export const pipelinesKeys = {
  *   ['pageLayouts', 'object', objectId]        — every layout query for one object
  *   ['pageLayouts', 'object', objectId, 'list']— the list of layouts for one object
  *   ['pageLayouts', 'detail', layoutId]        — one specific layout
+ *   ['pageLayouts', 'effective', apiName]      — the effective published layout the record page consumes
  */
 export const pageLayoutsKeys = {
   all: () => ['pageLayouts'] as const,
   byObject: (objectId: ObjectDefinitionId) => ['pageLayouts', 'object', objectId] as const,
   list: (objectId: ObjectDefinitionId) => ['pageLayouts', 'object', objectId, 'list'] as const,
   detail: (layoutId: PageLayoutId) => ['pageLayouts', 'detail', layoutId] as const,
+  effective: (apiName: ObjectApiName) => ['pageLayouts', 'effective', apiName] as const,
 } as const;
 
 // ─── Aggregate export ───────────────────────────────────────────────────────

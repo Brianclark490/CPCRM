@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useSession } from '@descope/react-sdk';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApiClient, unwrapList } from '../../../lib/apiClient.js';
+import { pageLayoutsKeys } from '../../../lib/queryKeys.js';
 import type {
   BuilderLayout,
   PageLayoutListItem,
@@ -35,6 +37,7 @@ export function usePageLayoutActions({
 }: UsePageLayoutActionsOptions) {
   const { sessionToken } = useSession();
   const api = useApiClient();
+  const queryClient = useQueryClient();
 
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -115,13 +118,19 @@ export function usePageLayoutActions({
       if (!res.ok) {
         const body = await res.json().catch(() => null) as { error?: string } | null;
         setSaveError(body?.error ?? 'Failed to publish layout.');
+        return;
       }
+      // Record-detail pages cache the effective layout through TanStack
+      // Query; without this invalidation, an already-open record page
+      // would keep showing the previous layout until its staleTime
+      // expired or the user hard-refreshed.
+      await queryClient.invalidateQueries({ queryKey: pageLayoutsKeys.all() });
     } catch {
       setSaveError('Failed to connect to the server. Please try again.');
     } finally {
       setPublishing(false);
     }
-  }, [sessionToken, api, objectId, selectedLayoutId, dirty, handleSaveDraft]);
+  }, [sessionToken, api, queryClient, objectId, selectedLayoutId, dirty, handleSaveDraft]);
 
   // ── Role-based layout handlers ─────────────────────────────
 

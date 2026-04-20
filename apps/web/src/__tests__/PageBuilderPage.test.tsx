@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createTestQueryClient } from './utils/renderWithQuery.js';
 import { PageBuilderPage } from '../pages/PageBuilderPage.js';
 
 vi.mock('@descope/react-sdk', () => ({
@@ -213,15 +215,18 @@ const samplePageLayoutDetail = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function renderPage(objectId = 'obj-1') {
+  const queryClient = createTestQueryClient();
   return render(
-    <MemoryRouter initialEntries={[`/admin/objects/${objectId}/page-builder`]}>
-      <Routes>
-        <Route
-          path="/admin/objects/:objectId/page-builder"
-          element={<PageBuilderPage />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[`/admin/objects/${objectId}/page-builder`]}>
+        <Routes>
+          <Route
+            path="/admin/objects/:objectId/page-builder"
+            element={<PageBuilderPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
