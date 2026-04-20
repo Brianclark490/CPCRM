@@ -13,6 +13,7 @@ import {
   type RecordItem,
   type RecordsResponse,
 } from '../features/records/hooks/queries/useRecords.js';
+import { useMoveStage } from '../features/pipelines/hooks/mutations/useMoveStage.js';
 import { useTenantLocale } from '../useTenantLocale.js';
 import { KanbanCard } from './KanbanCard.js';
 import type { KanbanCardRecord } from './KanbanCard.js';
@@ -27,20 +28,6 @@ import type { OverdueRecord } from './OverdueDealsPanel.js';
 import styles from './KanbanBoard.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface MoveStageResponse {
-  id: string;
-  pipelineId: string;
-  currentStageId: string;
-  stageEnteredAt: string;
-  fieldValues: Record<string, unknown>;
-}
-
-interface GateFailureResponse {
-  error: string;
-  code: string;
-  failures: GateFailure[];
-}
 
 interface ConfirmState {
   recordId: string;
@@ -248,10 +235,10 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
           : 'Failed to load records for the pipeline.'
         : null;
 
-  // Apply a local patch to one record in the cached records list so drag-
-  // and-drop updates reflect immediately without a full refetch.
-  const patchRecord = useCallback(
-    (recordId: string, patch: Partial<RecordItem>) => {
+  // Patch a single record in the cached list. Used by fill-and-move to
+  // reflect the PUT field update before retrying the stage move.
+  const patchRecordFields = useCallback(
+    (recordId: string, fieldValues: Record<string, unknown>) => {
       queryClient.setQueryData<RecordsResponse>(
         recordsKeys.list(apiName, RECORDS_QUERY_PARAMS),
         (prev) => {
@@ -259,7 +246,9 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
           return {
             ...prev,
             data: prev.data.map((r) =>
-              r.id === recordId ? { ...r, ...patch } : r,
+              r.id === recordId
+                ? { ...r, fieldValues: { ...r.fieldValues, ...fieldValues } }
+                : r,
             ),
           };
         },
@@ -304,6 +293,22 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     }
   }, [pipeline, loadAnalytics]);
 
+  // ── Move-stage mutation (optimistic + gate-failure rollback) ──
+  const moveStage = useMoveStage({
+    apiName,
+    listParams: RECORDS_QUERY_PARAMS,
+    pipelineId: pipeline?.id,
+    onGateFailure: (failures, vars) => {
+      const targetStage = pipeline?.stages.find((s) => s.id === vars.targetStageId);
+      setGateModal({
+        recordId: vars.recordId,
+        targetStageId: vars.targetStageId,
+        stageName: targetStage?.name ?? 'stage',
+        failures,
+      });
+    },
+  });
+
   // ── Drag and drop handlers ────────────────────────────────
 
   const handleDragStart = (recordId: string) => {
@@ -325,54 +330,28 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     setDragOverStageId(null);
   };
 
-  const performMoveStage = async (
-    recordId: string,
-    targetStageId: string,
-  ): Promise<boolean> => {
-    if (!sessionToken) return false;
-
-    try {
-      const response = await api.request(
-        `/api/v1/objects/${apiName}/records/${recordId}/move-stage`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+  const performMoveStage = useCallback(
+    async (recordId: string, targetStageId: string): Promise<boolean> => {
+      if (!sessionToken) return false;
+      const targetStage = pipeline?.stages.find((s) => s.id === targetStageId);
+      try {
+        await moveStage.mutateAsync(
+          {
+            recordId,
+            targetStageId,
+            targetStageApiName: targetStage?.apiName,
           },
-          body: JSON.stringify({ target_stage_id: targetStageId }),
-        },
-      );
-
-      if (response.ok) {
-        const updated = (await response.json()) as MoveStageResponse;
-        patchRecord(recordId, {
-          pipelineId: updated.pipelineId,
-          currentStageId: updated.currentStageId,
-          stageEnteredAt: updated.stageEnteredAt,
-          fieldValues: updated.fieldValues,
-        });
-        // Refresh analytics after stage change
-        void loadAnalytics();
+          { onSuccess: () => void loadAnalytics() },
+        );
         return true;
-      }
-
-      if (response.status === 422) {
-        const gateError = (await response.json()) as GateFailureResponse;
-        const targetStage = pipeline?.stages.find((s) => s.id === targetStageId);
-        setGateModal({
-          recordId,
-          targetStageId,
-          stageName: targetStage?.name ?? 'stage',
-          failures: gateError.failures,
-        });
+      } catch {
+        // `onError` in the hook rolls back the cache and — for 422 — opens
+        // the gate modal.  Other failures fall through silently.
         return false;
       }
-
-      return false;
-    } catch {
-      return false;
-    }
-  };
+    },
+    [sessionToken, pipeline, moveStage, loadAnalytics],
+  );
 
   const handleDrop = (e: React.DragEvent, targetStageId: string) => {
     e.preventDefault();
@@ -457,10 +436,7 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
       }
 
       // Update local record field values
-      const existing = allRecords.find((r) => r.id === gateModal.recordId);
-      patchRecord(gateModal.recordId, {
-        fieldValues: { ...(existing?.fieldValues ?? {}), ...fieldValues },
-      });
+      patchRecordFields(gateModal.recordId, fieldValues);
 
       // Now retry the move
       const success = await performMoveStage(

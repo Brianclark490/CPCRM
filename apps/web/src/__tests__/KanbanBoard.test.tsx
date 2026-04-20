@@ -618,6 +618,148 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Deal Value is required')).toBeInTheDocument();
   });
 
+  it('optimistically moves card to target column before server responds', async () => {
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    // Big Deal starts in Prospecting
+    const prospectingColumn = screen.getByTestId('kanban-column-prospecting');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+    expect(prospectingColumn).toHaveTextContent('Big Deal');
+
+    // Hold the move-stage response until we flip this deferred. Every other
+    // request falls back to the default mock so analytics panels (summary,
+    // velocity, overdue) still get their expected shapes and don't crash the
+    // component when `loadAnalytics()` fires in the success path.
+    let resolveMove: (value: Response) => void = () => {};
+    const movePromise = new Promise<Response>((r) => {
+      resolveMove = r;
+    });
+    const defaultImpl = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return movePromise;
+      }
+      return defaultImpl?.(url, options) ?? Promise.resolve({
+        ok: false,
+        json: async () => ({}),
+      } as Response);
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    fireEvent.dragStart(card, {
+      dataTransfer: { effectAllowed: 'move', setData: vi.fn(), getData: () => 'rec-1' },
+    });
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
+    });
+
+    // Optimistic update: card should appear in Qualification while the POST is pending
+    await waitFor(() => {
+      expect(qualColumn).toHaveTextContent('Big Deal');
+    });
+    expect(prospectingColumn).not.toHaveTextContent('Big Deal');
+
+    // Release the server response and wait for the success path (including
+    // the `loadAnalytics()` refresh) to settle before the test exits, so we
+    // don't leak pending promises into later tests.
+    resolveMove({
+      ok: true,
+      json: async () => ({
+        id: 'rec-1',
+        pipelineId: 'pipe-1',
+        currentStageId: 'stage-2',
+        stageEnteredAt: new Date().toISOString(),
+        fieldValues: { value: 100000, close_date: '2026-06-15', probability: 30 },
+      }),
+    } as Response);
+
+    await waitFor(() => {
+      const moveCalls = fetchMock.mock.calls.filter(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && (call[0] as string).includes('/move-stage'),
+      );
+      expect(moveCalls.length).toBeGreaterThanOrEqual(1);
+      // Card stays in Qualification and no gate dialog appeared.
+      expect(qualColumn).toHaveTextContent('Big Deal');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('rolls back optimistic move when server returns 422', async () => {
+    const fetchMock = mockFetch();
+    renderBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Big Deal')).toBeInTheDocument();
+    });
+
+    const prospectingColumn = screen.getByTestId('kanban-column-prospecting');
+    const qualColumn = screen.getByTestId('kanban-column-qualification');
+    expect(prospectingColumn).toHaveTextContent('Big Deal');
+
+    // Only override the move-stage POST; every other request (including
+    // analytics endpoints that fire after settle) keeps using the default
+    // mock so the board renders without surprise shape mismatches.
+    const defaultImpl = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
+      if (
+        typeof url === 'string' &&
+        url.includes('/move-stage') &&
+        options?.method === 'POST'
+      ) {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          json: async () => ({
+            error: 'Cannot move to Qualification — missing required fields',
+            code: 'GATE_VALIDATION_FAILED',
+            failures: [
+              {
+                field: 'value',
+                label: 'Deal Value',
+                gate: 'required',
+                message: 'Deal Value is required',
+                fieldType: 'currency',
+                currentValue: null,
+                options: {},
+              },
+            ],
+          }),
+        } as Response);
+      }
+      return defaultImpl?.(url, options) ?? Promise.resolve({
+        ok: false,
+        json: async () => ({}),
+      } as Response);
+    });
+
+    const card = screen.getByTestId('kanban-card-rec-1');
+    fireEvent.dragStart(card, {
+      dataTransfer: { effectAllowed: 'move', setData: vi.fn(), getData: () => 'rec-1' },
+    });
+    fireEvent.drop(qualColumn, {
+      dataTransfer: { getData: () => 'rec-1' },
+    });
+
+    // Gate modal opens ⇒ server responded with 422 ⇒ rollback has run
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    // After rollback the card is back in Prospecting — not lingering in Qualification.
+    expect(prospectingColumn).toHaveTextContent('Big Deal');
+    expect(qualColumn).not.toHaveTextContent('Big Deal');
+  });
+
   it('places records using fieldValues.stage when present', async () => {
     const stageRecords = {
       data: [

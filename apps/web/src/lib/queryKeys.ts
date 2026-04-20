@@ -97,14 +97,17 @@ export const fieldDefinitionsKeys = {
  * Keys for `/api/v1/admin/pipelines` and `/api/v1/pipelines/:id/...`.
  *
  * Hierarchy:
- *   ['pipelines']                              — invalidate everything
- *   ['pipelines', 'list']                      — the list of all pipelines
- *   ['pipelines', 'detail', pipelineId]        — one pipeline's full payload
+ *   ['pipelines']                                    — invalidate everything
+ *   ['pipelines', 'list']                            — the list of all pipelines
+ *   ['pipelines', 'detail', pipelineId]              — one pipeline's full payload
+ *   ['pipelines', 'analytics', pipelineId]           — every analytics query (summary/velocity/overdue)
  */
 export const pipelinesKeys = {
   all: () => ['pipelines'] as const,
   list: () => ['pipelines', 'list'] as const,
   detail: (pipelineId: PipelineId) => ['pipelines', 'detail', pipelineId] as const,
+  analytics: (pipelineId: PipelineId) =>
+    ['pipelines', 'analytics', pipelineId] as const,
 } as const;
 
 // ─── Page layouts ───────────────────────────────────────────────────────────
