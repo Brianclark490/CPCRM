@@ -83,7 +83,30 @@ const {
       return { rows: [] };
     }
 
-    // Stage lookup by id + tenant_id (target stage)
+    // Target stage lookup joined with parent pipeline to project
+    // pipeline_definitions.object_id (for cross-object validation).
+    if (
+      s.includes('FROM STAGE_DEFINITIONS') &&
+      s.includes('JOIN PIPELINE_DEFINITIONS') &&
+      s.includes('PIPELINE_OBJECT_ID')
+    ) {
+      const stageId = params![0] as string;
+      const stage = fakeStages.get(stageId);
+      if (stage) {
+        const pipeline = fakePipelines.get(stage.pipeline_id as string);
+        return {
+          rows: [
+            {
+              ...stage,
+              pipeline_object_id: pipeline?.object_id ?? null,
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    }
+
+    // Stage lookup by id + tenant_id (target stage, legacy path)
     if (s.startsWith('SELECT * FROM STAGE_DEFINITIONS WHERE ID')) {
       const stageId = params![0] as string;
       const stage = fakeStages.get(stageId);
@@ -476,6 +499,15 @@ describe('moveRecordStage', () => {
     seedPipelineAndStages();
     seedRecord();
 
+    // Second pipeline for the SAME object — exercises the cross-pipeline
+    // rejection path (not the cross-object one).
+    fakePipelines.set('pipeline-2', {
+      id: 'pipeline-2',
+      object_id: 'obj-opportunity-id',
+      name: 'Other Pipeline',
+      is_default: false,
+    });
+
     // Add a stage in a different pipeline
     fakeStages.set('stage-other', {
       id: 'stage-other',
@@ -580,6 +612,63 @@ describe('moveRecordStage', () => {
 
     expect(result.currentStageId).toBe('stage-p2-qualification');
     expect(result.pipelineId).toBe('pipeline-2');
+  });
+
+  it('rejects move when target stage belongs to a different object type', async () => {
+    // Regression: adopting the target stage's pipeline must still reject
+    // cross-object moves — a record for object A cannot be moved to a
+    // stage whose parent pipeline belongs to object B.
+    seedPipelineAndStages();
+
+    // Foreign pipeline for a different object.
+    fakePipelines.set('pipeline-other', {
+      id: 'pipeline-other',
+      object_id: 'obj-contact-id',
+      name: 'Contact Pipeline',
+      is_default: true,
+    });
+    fakeStages.set('stage-foreign', {
+      id: 'stage-foreign',
+      pipeline_id: 'pipeline-other',
+      name: 'Foreign',
+      api_name: 'foreign',
+      sort_order: 0,
+      stage_type: 'open',
+      default_probability: 0,
+    });
+
+    fakeRecords.set('rec-no-pipeline', {
+      id: 'rec-no-pipeline',
+      object_id: 'obj-opportunity-id',
+      name: 'No Pipeline',
+      field_values: {},
+      owner_id: 'user-123',
+      pipeline_id: null,
+      current_stage_id: null,
+      stage_entered_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    try {
+      await moveRecordStage(
+        TENANT_ID,
+        'opportunity',
+        'rec-no-pipeline',
+        'stage-foreign',
+        'user-123',
+      );
+      expect.fail('Should have thrown');
+    } catch (err: unknown) {
+      const error = err as Error & {
+        code: string;
+        details?: Record<string, unknown>;
+      };
+      expect(error.code).toBe('VALIDATION_ERROR');
+      expect(error.message).toMatch(/different object type/i);
+      expect(error.details?.recordObjectId).toBe('obj-opportunity-id');
+      expect(error.details?.targetStagePipelineObjectId).toBe('obj-contact-id');
+    }
   });
 
   it('applies default_probability on stage entry', async () => {

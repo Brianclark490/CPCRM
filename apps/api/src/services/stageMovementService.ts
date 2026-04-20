@@ -253,14 +253,31 @@ export async function moveRecordStage(
     //    Picking the stage implicitly picks the pipeline; this honours user
     //    intent and side-steps "default pipeline" lookups that can diverge
     //    from the frontend when multiple pipelines are marked is_default.
+    //
+    //    We also project the parent pipeline's object_id so we can reject
+    //    cross-object moves before adopting the target stage's pipeline.
     const targetStageRow = await trx
-      .selectFrom('stage_definitions')
-      .selectAll()
-      .where('id', '=', targetStageId)
-      .where('tenant_id', '=', tenantId)
+      .selectFrom('stage_definitions as sd')
+      .innerJoin('pipeline_definitions as pd', 'pd.id', 'sd.pipeline_id')
+      .selectAll('sd')
+      .select('pd.object_id as pipeline_object_id')
+      .where('sd.id', '=', targetStageId)
+      .where('sd.tenant_id', '=', tenantId)
       .executeTakeFirst();
     if (!targetStageRow) {
       throwNotFoundError('Target stage not found');
+    }
+    const targetStagePipelineObjectId = targetStageRow.pipeline_object_id as string;
+    if (targetStagePipelineObjectId !== objectId) {
+      throw AppError.validation(
+        'Target stage belongs to a different object type',
+        {
+          recordId,
+          recordObjectId: objectId,
+          targetStageId,
+          targetStagePipelineObjectId,
+        },
+      );
     }
     const targetStage = rowToStage(
       targetStageRow as unknown as Record<string, unknown>,
