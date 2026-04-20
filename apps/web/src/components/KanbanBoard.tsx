@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@descope/react-sdk';
 import { ApiError, unwrapList, useApiClient } from '../lib/apiClient.js';
-import { pipelinesKeys, recordsKeys } from '../lib/queryKeys.js';
+import { pipelinesKeys } from '../lib/queryKeys.js';
 import {
   usePipeline,
   type Pipeline as PipelineDefinition,
@@ -11,9 +11,9 @@ import {
 import {
   useRecords,
   type RecordItem,
-  type RecordsResponse,
 } from '../features/records/hooks/queries/useRecords.js';
 import { useMoveStage } from '../features/pipelines/hooks/mutations/useMoveStage.js';
+import { useUpdateRecord } from '../features/records/hooks/mutations/useUpdateRecord.js';
 import { useTenantLocale } from '../useTenantLocale.js';
 import { KanbanCard } from './KanbanCard.js';
 import type { KanbanCardRecord } from './KanbanCard.js';
@@ -141,7 +141,6 @@ function applyFilters(
 export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
   const { sessionToken } = useSession();
   const api = useApiClient();
-  const queryClient = useQueryClient();
   const { formatCurrencyCompact } = useTenantLocale();
 
   const [filters, setFilters] = useState<KanbanFilters>(EMPTY_FILTERS);
@@ -321,28 +320,6 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
           : 'Failed to load records for the pipeline.'
         : null;
 
-  // Patch a single record in the cached list. Used by fill-and-move to
-  // reflect the PUT field update before retrying the stage move.
-  const patchRecordFields = useCallback(
-    (recordId: string, fieldValues: Record<string, unknown>) => {
-      queryClient.setQueryData<RecordsResponse>(
-        recordsKeys.list(apiName, RECORDS_QUERY_PARAMS),
-        (prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            data: prev.data.map((r) =>
-              r.id === recordId
-                ? { ...r, fieldValues: { ...r.fieldValues, ...fieldValues } }
-                : r,
-            ),
-          };
-        },
-      );
-    },
-    [queryClient, apiName],
-  );
-
   // ── Fetch pipeline analytics ──────────────────────────────
   const loadAnalytics = useCallback(async () => {
     if (!sessionToken || !pipeline) return;
@@ -393,6 +370,12 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
         failures,
       });
     },
+  });
+
+  // ── Update-record mutation (used by fill-and-move) ────────
+  const updateRecord = useUpdateRecord({
+    apiName,
+    listParams: RECORDS_QUERY_PARAMS,
   });
 
   // ── Drag and drop handlers ────────────────────────────────
@@ -491,29 +474,17 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
     if (!gateModal || !sessionToken) return;
 
     setGateLoading(true);
-
     try {
-      // First update the record fields
-      const updateResponse = await api.request(
-        `/api/v1/objects/${apiName}/records/${gateModal.recordId}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ fieldValues }),
-        },
-      );
+      // Sequence the two mutations so the field update lands (and the cache
+      // reflects it) before the move-stage retry reads the new values on
+      // the server. `updateRecord` throws an `ApiError` on non-2xx responses
+      // — letting it propagate aborts the move and keeps the gate modal
+      // open so the user can correct the values and retry.
+      await updateRecord.mutateAsync({
+        recordId: gateModal.recordId,
+        fieldValues,
+      });
 
-      if (!updateResponse.ok) {
-        setGateLoading(false);
-        return;
-      }
-
-      // Update local record field values
-      patchRecordFields(gateModal.recordId, fieldValues);
-
-      // Now retry the move
       const success = await performMoveStage(
         gateModal.recordId,
         gateModal.targetStageId,
@@ -523,7 +494,9 @@ export function KanbanBoard({ apiName, objectId }: KanbanBoardProps) {
         setGateModal(null);
       }
     } catch {
-      // Error handled silently
+      // The update failed. `useMoveStage` already handles rollback + gate
+      // modal re-open for the move leg; for the update leg we simply keep
+      // the modal open with the user's values intact so they can retry.
     } finally {
       setGateLoading(false);
     }
