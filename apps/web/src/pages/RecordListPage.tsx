@@ -1,88 +1,20 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { useSession } from '@descope/react-sdk';
+import { useQuery } from '@tanstack/react-query';
 import { ApiError, useApiClient, unwrapList } from '../lib/apiClient.js';
+import { pipelinesKeys } from '../lib/queryKeys.js';
+import {
+  useRecords,
+  type RecordItem,
+  type RecordField,
+} from '../features/records/hooks/queries/useRecords.js';
+import { useObjectDefinition } from '../features/records/hooks/queries/useObjectDefinition.js';
+import { useLayout } from '../features/records/hooks/queries/useLayout.js';
 import { ApiErrorDisplay } from '../components/ApiErrorDisplay.js';
 import { PrimaryButton } from '../components/PrimaryButton.js';
 import { FieldRenderer } from '../components/FieldRenderer.js';
 import { KanbanBoard } from '../components/KanbanBoard.js';
 import styles from './RecordListPage.module.css';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ObjectDefinition {
-  id: string;
-  apiName: string;
-  label: string;
-  pluralLabel: string;
-  isSystem: boolean;
-  nameFieldId?: string;
-}
-
-interface RecordField {
-  apiName: string;
-  label: string;
-  fieldType: string;
-  value: unknown;
-}
-
-interface LinkedParentRecord {
-  objectApiName: string;
-  recordId: string;
-  recordName: string;
-}
-
-interface RecordItem {
-  id: string;
-  name: string;
-  fieldValues: Record<string, unknown>;
-  fields: RecordField[];
-  ownerId: string;
-  ownerName?: string;
-  linkedParent?: LinkedParentRecord;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface PaginationMeta {
-  total: number;
-  limit: number;
-  offset: number;
-  hasMore: boolean;
-}
-
-interface RecordsResponse {
-  data: RecordItem[];
-  pagination: PaginationMeta;
-  object: ObjectDefinition;
-}
-
-interface LayoutFieldWithMetadata {
-  fieldId: string;
-  fieldApiName: string;
-  fieldLabel: string;
-  fieldType: string;
-  sortOrder: number;
-  section: number;
-  width: string;
-}
-
-interface LayoutDefinition {
-  id: string;
-  objectId: string;
-  name: string;
-  layoutType: string;
-  isDefault: boolean;
-  fields: LayoutFieldWithMetadata[];
-}
-
-interface LayoutListItem {
-  id: string;
-  objectId: string;
-  name: string;
-  layoutType: string;
-  isDefault: boolean;
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -119,6 +51,29 @@ function getInitials(name: string | undefined): string {
   return (parts[0][0] ?? '?').toUpperCase();
 }
 
+/**
+ * Translate the records query error into the user-facing message the
+ * pre-TQ page rendered. A 404 from `/api/v1/objects/:apiName/records`
+ * means the object type itself doesn't exist; network failures get a
+ * connection hint; everything else is a generic "failed to load".
+ */
+function toDisplayError(error: unknown): ApiError | null {
+  if (!(error instanceof ApiError)) return null;
+  if (error.status === 404) {
+    return new ApiError({ status: 404, message: 'Object type not found.' });
+  }
+  if (error.isNetwork) {
+    return new ApiError({
+      status: 0,
+      message: 'Failed to connect to the server. Please try again.',
+    });
+  }
+  return new ApiError({
+    status: error.status,
+    message: 'Failed to load records.',
+  });
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface RecordListPageProps {
@@ -127,51 +82,34 @@ interface RecordListPageProps {
 
 export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   const { apiName } = useParams<{ apiName: string }>();
-  const { sessionToken } = useSession();
   const api = useApiClient();
   const navigate = useNavigate();
 
-  const [records, setRecords] = useState<RecordItem[]>([]);
-  const [objectDef, setObjectDef] = useState<ObjectDefinition | null>(null);
-  const [layoutColumns, setLayoutColumns] = useState<LayoutFieldWithMetadata[] | null>(null);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ApiError | null>(null);
 
   // Pipeline view toggle state
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>(initialView ?? 'list');
-  const [hasPipeline, setHasPipeline] = useState(false);
-  const [resolvedObjectId, setResolvedObjectId] = useState<string | null>(null);
   // Tracks whether the user has manually chosen a view. Once true we
   // stop auto-flipping to pipeline even if hasPipeline resolves later.
   const userToggledView = useRef(false);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset state when the object changes. Keyed on `apiName` only: a
-  // prop-only change to `initialView` (e.g. same object, switching
-  // between `/objects/:apiName` and `/objects/:apiName/pipeline`) must
-  // NOT clear pipeline state, because the loader that repopulates it
-  // is also keyed only on `apiName` and won't refetch.
+  // Reset *local* page/search/sort when the object changes. Queries are
+  // keyed on `apiName` so their data swaps automatically; we only need to
+  // clear the caller-owned state. `initialView` changes (same object,
+  // routed list → pipeline) must not reset pipeline state because the
+  // queries that populate it are keyed only on `apiName` and won't refetch.
   useEffect(() => {
-    setRecords([]);
-    setObjectDef(null);
-    setLayoutColumns(null);
-    setTotal(0);
     setPage(1);
     setSearch('');
     setDebouncedSearch('');
     setSortBy(null);
     setSortDir('asc');
-    setLoading(true);
-    setError(null);
-    setHasPipeline(false);
-    setResolvedObjectId(null);
     userToggledView.current = false;
     // Always sync viewMode to the current pinned route — otherwise a
     // user who toggled to List before navigating between two pipeline
@@ -180,17 +118,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiName]);
 
-  // Default to the pipeline view for objects that have a pipeline, unless
-  // the caller pinned an initialView or the user has manually toggled.
-  useEffect(() => {
-    if (initialView) return;
-    if (userToggledView.current) return;
-    if (hasPipeline) {
-      setViewMode('pipeline');
-    }
-  }, [hasPipeline, initialView]);
-
-  // Debounce search input
+  // Debounce search input → `debouncedSearch` feeds into the query key.
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -206,150 +134,66 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
     };
   }, []);
 
-  // Fetch list layout columns and check for pipeline
+  // ── Queries ──────────────────────────────────────────────────
+
+  const objectDefQuery = useObjectDefinition(apiName);
+  const resolvedObjectId = objectDefQuery.data?.id ?? null;
+
+  const layoutQuery = useLayout(resolvedObjectId ?? undefined, 'list');
+
+  // Pipeline existence check — reuse the cached `/api/v1/admin/pipelines`
+  // list so the KanbanBoard (which fetches the same list under the same key)
+  // doesn't trigger a second request.
+  const pipelineListQuery = useQuery({
+    queryKey: pipelinesKeys.list(),
+    queryFn: async () => {
+      const payload = await api.get<unknown>('/api/v1/admin/pipelines');
+      return unwrapList<{ objectId?: string; object_id?: string }>(payload);
+    },
+    enabled: Boolean(resolvedObjectId),
+  });
+  const hasPipeline = useMemo(() => {
+    if (!resolvedObjectId || !pipelineListQuery.data) return false;
+    return pipelineListQuery.data.some(
+      (p) => (p.objectId ?? p.object_id) === resolvedObjectId,
+    );
+  }, [pipelineListQuery.data, resolvedObjectId]);
+
+  const recordsParams = useMemo(() => {
+    const params: Record<string, unknown> = {
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    };
+    const trimmed = debouncedSearch.trim();
+    if (trimmed) params.search = trimmed;
+    if (sortBy) {
+      params.sort_by = sortBy;
+      params.sort_dir = sortDir;
+    }
+    return params;
+  }, [page, debouncedSearch, sortBy, sortDir]);
+
+  const recordsQuery = useRecords(apiName, recordsParams);
+
+  // Default to the pipeline view for objects that have a pipeline, unless
+  // the caller pinned an initialView or the user has manually toggled.
   useEffect(() => {
-    if (!sessionToken || !apiName) return;
+    if (initialView) return;
+    if (userToggledView.current) return;
+    if (hasPipeline) {
+      setViewMode('pipeline');
+    }
+  }, [hasPipeline, initialView]);
 
-    let cancelled = false;
+  // ── Derived view state ────────────────────────────────────────
 
-    const loadLayout = async () => {
-      try {
-        // First get the object definitions to find the object ID
-        const objResponse = await api.request('/api/v1/admin/objects');
+  const records: RecordItem[] = recordsQuery.data?.data ?? [];
+  const total = recordsQuery.data?.pagination.total ?? 0;
+  const objectDef = recordsQuery.data?.object ?? null;
+  const layoutColumns = layoutQuery.data?.fields ?? null;
 
-        if (cancelled) return;
-
-        if (!objResponse.ok) return;
-
-        const allObjects = unwrapList<{
-          id: string;
-          apiName: string;
-        }>(await objResponse.json());
-        const obj = allObjects.find((o) => o.apiName === apiName);
-        if (!obj || cancelled) return;
-
-        // Store the resolved object ID for pipeline view
-        setResolvedObjectId(obj.id);
-
-        // Check for pipeline existence (best-effort)
-        api.request('/api/v1/admin/pipelines')
-          .then((resp) => {
-            if (cancelled || !resp.ok) return null;
-            return resp.json();
-          })
-          .then((pipelines) => {
-            if (cancelled || !pipelines) return;
-            const list = unwrapList<{ objectId?: string; object_id?: string }>(pipelines);
-            const match = list.find(
-              (p) => (p.objectId ?? p.object_id) === obj.id,
-            );
-            if (!cancelled) setHasPipeline(!!match);
-          })
-          .catch(() => { /* best-effort */ });
-
-        // Fetch layouts for this object
-        const layoutsResponse = await api.request(
-          `/api/v1/admin/objects/${obj.id}/layouts`,
-        );
-
-        if (cancelled || !layoutsResponse.ok) return;
-
-        const layouts = unwrapList<LayoutListItem>(await layoutsResponse.json());
-        const listLayout = layouts.find(
-          (l) => l.layoutType === 'list' && l.isDefault,
-        ) ?? layouts.find((l) => l.layoutType === 'list');
-
-        if (!listLayout || cancelled) return;
-
-        // Fetch the layout detail with fields
-        const layoutDetailResponse = await api.request(
-          `/api/v1/admin/objects/${obj.id}/layouts/${listLayout.id}`,
-        );
-
-        if (cancelled || !layoutDetailResponse.ok) return;
-
-        const layoutDetail = (await layoutDetailResponse.json()) as LayoutDefinition;
-        if (!cancelled && layoutDetail.fields.length > 0) {
-          setLayoutColumns(layoutDetail.fields);
-        }
-      } catch {
-        // Layout fetch is best-effort — fall back to record fields
-      }
-    };
-
-    void loadLayout();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionToken, api, apiName]);
-
-  // Fetch records
-  useEffect(() => {
-    if (!sessionToken || !apiName) return;
-
-    let cancelled = false;
-
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams({
-        limit: String(PAGE_SIZE),
-        offset: String((page - 1) * PAGE_SIZE),
-      });
-      if (debouncedSearch.trim()) {
-        params.set('search', debouncedSearch.trim());
-      }
-      if (sortBy) {
-        params.set('sort_by', sortBy);
-        params.set('sort_dir', sortDir);
-      }
-
-      try {
-        const data = await api.get<RecordsResponse>(
-          `/api/v1/objects/${apiName}/records?${params.toString()}`,
-        );
-
-        if (!cancelled) {
-          setRecords(data.data);
-          setTotal(data.pagination.total);
-          setObjectDef(data.object);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        if (err instanceof ApiError) {
-          if (err.status === 404) {
-            setError(
-              new ApiError({ status: 404, message: 'Object type not found.' }),
-            );
-          } else if (err.isNetwork) {
-            setError(
-              new ApiError({
-                status: 0,
-                message: 'Failed to connect to the server. Please try again.',
-              }),
-            );
-          } else {
-            setError(
-              new ApiError({
-                status: err.status,
-                message: 'Failed to load records.',
-              }),
-            );
-          }
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionToken, api, apiName, page, debouncedSearch, sortBy, sortDir]);
+  const loading = recordsQuery.isPending;
+  const error = toDisplayError(recordsQuery.error);
 
   const handleSort = (fieldApiName: string) => {
     if (sortBy === fieldApiName) {
@@ -372,8 +216,8 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
           fieldType: lf.fieldType,
           fieldId: lf.fieldId,
         }))
-      : records.length > 0
-        ? records[0].fields.map((f) => ({
+      : records.length > 0 && records[0].fields
+        ? records[0].fields.map((f: RecordField) => ({
             apiName: f.apiName,
             label: f.label,
             fieldType: f.fieldType,
@@ -553,7 +397,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
               {records.map((record) => {
                 // Build a quick lookup of field values from the record
                 const fieldMap = new Map(
-                  record.fields.map((f) => [f.apiName, f]),
+                  (record.fields ?? []).map((f) => [f.apiName, f]),
                 );
 
                 return (

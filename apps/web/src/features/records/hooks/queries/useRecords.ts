@@ -7,11 +7,26 @@ import { useSession } from '@descope/react-sdk';
 import { useApiClient } from '../../../../lib/apiClient.js';
 import { recordsKeys, type ListParams } from '../../../../lib/queryKeys.js';
 
+export interface RecordField {
+  apiName: string;
+  label: string;
+  fieldType: string;
+  value: unknown;
+}
+
 export interface RecordItem {
   id: string;
   name: string;
   fieldValues: Record<string, unknown>;
+  /**
+   * Label-resolved field projection the API returns alongside raw
+   * `fieldValues`.  Consumers that render a table column per field — the
+   * records list page, the layout-less fallback — rely on this array.  The
+   * Kanban board ignores it and only needs `fieldValues`.
+   */
+  fields?: RecordField[];
   ownerId: string;
+  ownerName?: string;
   pipelineId?: string;
   currentStageId?: string;
   stageEnteredAt?: string;
@@ -21,13 +36,29 @@ export interface RecordItem {
     recordName: string;
   };
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface RecordsObjectSummary {
+  id: string;
+  apiName: string;
+  label: string;
+  pluralLabel: string;
+  isSystem: boolean;
+  nameFieldId?: string;
+}
+
+export interface RecordsPagination {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 }
 
 export interface RecordsResponse {
   data: RecordItem[];
-  total: number;
-  page: number;
-  limit: number;
+  pagination: RecordsPagination;
+  object: RecordsObjectSummary;
 }
 
 export interface UseRecordsParams {
