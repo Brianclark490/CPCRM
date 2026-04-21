@@ -59,10 +59,7 @@ export function useLayout(
   const queryClient = useQueryClient();
 
   return useQuery<LayoutDefinition | null>({
-    queryKey: [
-      ...pageLayoutsKeys.byObject(objectId ?? ''),
-      { resolved: layoutType },
-    ],
+    queryKey: pageLayoutsKeys.resolved(objectId ?? '', layoutType),
     queryFn: async () => {
       const listPayload = await queryClient.fetchQuery<LayoutListItem[]>({
         queryKey: pageLayoutsKeys.list(objectId ?? ''),

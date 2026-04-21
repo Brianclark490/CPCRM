@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useSession } from '@descope/react-sdk';
 import { ApiError, useApiClient, unwrapList } from '../lib/apiClient.js';
 import { pipelinesKeys } from '../lib/queryKeys.js';
 import {
@@ -82,6 +83,7 @@ interface RecordListPageProps {
 
 export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   const { apiName } = useParams<{ apiName: string }>();
+  const { sessionToken } = useSession();
   const api = useApiClient();
   const navigate = useNavigate();
 
@@ -105,6 +107,14 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   // routed list → pipeline) must not reset pipeline state because the
   // queries that populate it are keyed only on `apiName` and won't refetch.
   useEffect(() => {
+    // Cancel any in-flight search debounce — otherwise a pending timeout
+    // from typing on the previous object can fire after navigation and
+    // set `debouncedSearch` for the *new* object, triggering an unwanted
+    // filtered fetch.
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+      debounceTimer.current = null;
+    }
     setPage(1);
     setSearch('');
     setDebouncedSearch('');
@@ -150,7 +160,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
       const payload = await api.get<unknown>('/api/v1/admin/pipelines');
       return unwrapList<{ objectId?: string; object_id?: string }>(payload);
     },
-    enabled: Boolean(resolvedObjectId),
+    enabled: Boolean(sessionToken && resolvedObjectId),
   });
   const hasPipeline = useMemo(() => {
     if (!resolvedObjectId || !pipelineListQuery.data) return false;
