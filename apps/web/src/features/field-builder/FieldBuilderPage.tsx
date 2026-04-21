@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ObjectIcon } from '../../components/ObjectIcon.js';
-import { useFieldDefinitions } from './hooks/useFieldDefinitions.js';
+import { useFieldDefinitions } from './hooks/queries/useFieldDefinitions.js';
+import { useObjectRelationships } from './hooks/queries/useObjectRelationships.js';
+import { useObjectDefinitions } from './hooks/queries/useObjectDefinitions.js';
+import { usePageLayoutList } from './hooks/queries/usePageLayoutList.js';
 import { useFieldMutations } from './hooks/useFieldMutations.js';
 import { useRelationshipMutations } from './hooks/useRelationshipMutations.js';
 import { FieldList } from './components/FieldList.js';
@@ -17,60 +20,49 @@ export function FieldBuilderPage() {
   const { id: objectId } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<TabName>('fields');
 
-  const {
-    sessionToken,
-    api,
-    objectDef,
-    fields,
-    setFields,
-    loading,
-    error,
-    fetchObject,
-    relationships,
-    relationshipsLoading,
-    relationshipsError,
-    fetchRelationships,
-    allObjects,
-    pageLayouts,
-    pageLayoutsLoading,
-    pageLayoutsError,
-    setPageLayoutsError,
-    loadTabData,
-  } = useFieldDefinitions(objectId);
+  // Per-tab override for the page-layouts error banner. The query itself
+  // surfaces fetch failures, but creating a default layout can fail too —
+  // that override lives in `useRelationshipMutations`.
+  const [pageLayoutsErrorOverride, setPageLayoutsErrorOverride] = useState<
+    string | null
+  >(null);
 
-  const mutations = useFieldMutations({
-    objectId,
-    sessionToken,
-    api,
-    fields,
-    setFields,
-    fetchObject,
+  const objectQuery = useFieldDefinitions(objectId);
+  const relationshipsQuery = useObjectRelationships(objectId, {
+    enabled: activeTab === 'relationships',
   });
+  const allObjectsQuery = useObjectDefinitions({
+    enabled: activeTab === 'relationships',
+  });
+  const pageLayoutsQuery = usePageLayoutList(objectId, {
+    enabled: activeTab === 'page_layout',
+  });
+
+  const objectDef = objectQuery.data;
+  const fields = objectDef?.fields ?? [];
+  const relationships = relationshipsQuery.data ?? [];
+  const allObjects = allObjectsQuery.data ?? [];
+  const pageLayouts = pageLayoutsQuery.data ?? [];
+
+  const mutations = useFieldMutations({ objectId, fields });
 
   const relMutations = useRelationshipMutations({
     objectId,
-    sessionToken,
-    api,
     objectDef,
-    fetchRelationships,
-    setPageLayoutsError,
+    setPageLayoutsError: setPageLayoutsErrorOverride,
   });
-
-  useEffect(() => {
-    loadTabData(activeTab);
-  }, [activeTab, loadTabData]);
 
   // ── Loading / error states ──────────────────────────────
 
-  if (loading) {
+  if (objectQuery.isPending) {
     return <div className={styles.page}>Loading…</div>;
   }
 
-  if (error) {
+  if (objectQuery.isError) {
     return (
       <div className={styles.page}>
         <p role="alert" className={styles.errorAlert}>
-          {error}
+          Failed to load object definition.
         </p>
       </div>
     );
@@ -85,6 +77,14 @@ export function FieldBuilderPage() {
       </div>
     );
   }
+
+  const relationshipsError = relationshipsQuery.isError
+    ? 'Failed to load relationships.'
+    : null;
+
+  const pageLayoutsError =
+    pageLayoutsErrorOverride ??
+    (pageLayoutsQuery.isError ? 'Failed to load page layouts.' : null);
 
   // ── Render ──────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ export function FieldBuilderPage() {
           objectId={objectId!}
           relationships={relationships}
           allObjects={allObjects}
-          relationshipsLoading={relationshipsLoading}
+          relationshipsLoading={relationshipsQuery.isPending}
           relationshipsError={relationshipsError}
           onAddRelationship={relMutations.openRelModal}
           onDeleteRelationship={relMutations.openDeleteRelConfirm}
@@ -168,11 +168,11 @@ export function FieldBuilderPage() {
       )}
 
       {/* Page Layout tab */}
-      {activeTab === 'page_layout' && sessionToken && objectId && (
+      {activeTab === 'page_layout' && objectId && (
         <PageLayoutTab
           objectId={objectId}
           pageLayouts={pageLayouts}
-          pageLayoutsLoading={pageLayoutsLoading}
+          pageLayoutsLoading={pageLayoutsQuery.isPending}
           pageLayoutsError={pageLayoutsError}
           creatingLayout={relMutations.creatingLayout}
           onCreateDefaultLayout={() => void relMutations.handleCreateDefaultLayout()}

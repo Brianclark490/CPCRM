@@ -4,6 +4,7 @@ import {
   recordsKeys,
   objectDefinitionsKeys,
   fieldDefinitionsKeys,
+  relationshipsKeys,
   pipelinesKeys,
   pageLayoutsKeys,
 } from '../queryKeys.js';
@@ -40,6 +41,11 @@ describe('queryKeys factory', () => {
     expect(fieldDefinitionsKeys.byObject('obj-1')).toEqual(['fieldDefinitions', 'obj-1']);
   });
 
+  it('relationships are scoped under their owning object', () => {
+    expect(relationshipsKeys.list('obj-1')).toEqual(['relationships', 'obj-1', 'list']);
+    expect(relationshipsKeys.byObject('obj-1')).toEqual(['relationships', 'obj-1']);
+  });
+
   it('pipelines expose detail keyed by pipeline id', () => {
     expect(pipelinesKeys.detail('pipe-1')).toEqual(['pipelines', 'detail', 'pipe-1']);
   });
@@ -53,6 +59,7 @@ describe('queryKeys factory', () => {
     expect(queryKeys.records).toBe(recordsKeys);
     expect(queryKeys.objectDefinitions).toBe(objectDefinitionsKeys);
     expect(queryKeys.fieldDefinitions).toBe(fieldDefinitionsKeys);
+    expect(queryKeys.relationships).toBe(relationshipsKeys);
     expect(queryKeys.pipelines).toBe(pipelinesKeys);
     expect(queryKeys.pageLayouts).toBe(pageLayoutsKeys);
   });
