@@ -20,16 +20,16 @@ export function FieldBuilderPage() {
   const { id: objectId } = useParams<{ id: string }>();
   const [activeTab, setActiveTabState] = useState<TabName>('fields');
 
-  // Per-tab override for the page-layouts error banner. The query itself
-  // surfaces fetch failures, but creating a default layout can fail too —
-  // that override lives in `useRelationshipMutations`. Cleared on tab
-  // changes so a one-off mutation failure can't haunt later visits.
-  const [pageLayoutsErrorOverride, setPageLayoutsErrorOverride] = useState<
-    string | null
-  >(null);
+  // Surfaces failures from the create-default-layout mutation. Kept separate
+  // from the query error below so the empty-state retry button stays
+  // clickable after a failed create — hiding it would trap users on the tab
+  // until reload. Cleared on tab changes so stale errors don't linger.
+  const [createLayoutError, setCreateLayoutError] = useState<string | null>(
+    null,
+  );
 
   const setActiveTab = (tab: TabName) => {
-    setPageLayoutsErrorOverride(null);
+    setCreateLayoutError(null);
     setActiveTabState(tab);
   };
 
@@ -55,7 +55,7 @@ export function FieldBuilderPage() {
   const relMutations = useRelationshipMutations({
     objectId,
     objectDef,
-    setPageLayoutsError: setPageLayoutsErrorOverride,
+    setCreateLayoutError,
   });
 
   // ── Loading / error states ──────────────────────────────
@@ -88,9 +88,9 @@ export function FieldBuilderPage() {
     ? 'Failed to load relationships.'
     : null;
 
-  const pageLayoutsError =
-    pageLayoutsErrorOverride ??
-    (pageLayoutsQuery.isError ? 'Failed to load page layouts.' : null);
+  const pageLayoutsError = pageLayoutsQuery.isError
+    ? 'Failed to load page layouts.'
+    : null;
 
   // ── Render ──────────────────────────────────────────────
 
@@ -180,6 +180,7 @@ export function FieldBuilderPage() {
           pageLayouts={pageLayouts}
           pageLayoutsLoading={pageLayoutsQuery.isPending}
           pageLayoutsError={pageLayoutsError}
+          createLayoutError={createLayoutError}
           creatingLayout={relMutations.creatingLayout}
           onCreateDefaultLayout={() => void relMutations.handleCreateDefaultLayout()}
         />

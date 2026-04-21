@@ -19,13 +19,13 @@ import type {
 interface UseRelationshipMutationsOptions {
   objectId: string | undefined;
   objectDef: ObjectDefinitionDetail | undefined;
-  setPageLayoutsError: (message: string | null) => void;
+  setCreateLayoutError: (message: string | null) => void;
 }
 
 export function useRelationshipMutations({
   objectId,
   objectDef,
-  setPageLayoutsError,
+  setCreateLayoutError,
 }: UseRelationshipMutationsOptions) {
   const navigate = useNavigate();
   const { sessionToken } = useSession();
@@ -178,7 +178,7 @@ export function useRelationshipMutations({
 
     // Reset any banner from a previous failed attempt so a retry starts
     // clean — otherwise the old error lingers until the user swaps tabs.
-    setPageLayoutsError(null);
+    setCreateLayoutError(null);
     setCreatingLayout(true);
 
     try {
@@ -194,10 +194,10 @@ export function useRelationshipMutations({
         });
         void navigate(`/admin/objects/${objectId}/page-builder`);
       } else {
-        setPageLayoutsError('Failed to create layout.');
+        setCreateLayoutError('Failed to create layout.');
       }
     } catch {
-      setPageLayoutsError('Failed to connect to the server. Please try again.');
+      setCreateLayoutError('Failed to connect to the server. Please try again.');
     } finally {
       setCreatingLayout(false);
     }

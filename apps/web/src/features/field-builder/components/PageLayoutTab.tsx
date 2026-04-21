@@ -8,6 +8,7 @@ interface PageLayoutTabProps {
   pageLayouts: PageLayoutListItem[];
   pageLayoutsLoading: boolean;
   pageLayoutsError: string | null;
+  createLayoutError: string | null;
   creatingLayout: boolean;
   onCreateDefaultLayout: () => void;
 }
@@ -17,6 +18,7 @@ export function PageLayoutTab({
   pageLayouts,
   pageLayoutsLoading,
   pageLayoutsError,
+  createLayoutError,
   creatingLayout,
   onCreateDefaultLayout,
 }: PageLayoutTabProps) {
@@ -29,6 +31,12 @@ export function PageLayoutTab({
       {pageLayoutsError && (
         <p role="alert" className={styles.errorAlert}>
           {pageLayoutsError}
+        </p>
+      )}
+
+      {createLayoutError && (
+        <p role="alert" className={styles.errorAlert}>
+          {createLayoutError}
         </p>
       )}
 
