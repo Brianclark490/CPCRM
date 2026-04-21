@@ -116,16 +116,19 @@ export const pipelinesKeys = {
  * Keys for the page-layout endpoints.
  *
  * Hierarchy:
- *   ['pageLayouts']                            — invalidate everything
- *   ['pageLayouts', 'object', objectId]        — every layout query for one object
- *   ['pageLayouts', 'object', objectId, 'list']— the list of layouts for one object
- *   ['pageLayouts', 'detail', layoutId]        — one specific layout
- *   ['pageLayouts', 'effective', apiName]      — the effective published layout the record page consumes
+ *   ['pageLayouts']                                        — invalidate everything
+ *   ['pageLayouts', 'object', objectId]                    — every layout query for one object
+ *   ['pageLayouts', 'object', objectId, 'list']            — the list of layouts for one object
+ *   ['pageLayouts', 'object', objectId, 'resolved', type]  — the default-of-type layout for one object
+ *   ['pageLayouts', 'detail', layoutId]                    — one specific layout
+ *   ['pageLayouts', 'effective', apiName]                  — the effective published layout the record page consumes
  */
 export const pageLayoutsKeys = {
   all: () => ['pageLayouts'] as const,
   byObject: (objectId: ObjectDefinitionId) => ['pageLayouts', 'object', objectId] as const,
   list: (objectId: ObjectDefinitionId) => ['pageLayouts', 'object', objectId, 'list'] as const,
+  resolved: (objectId: ObjectDefinitionId, layoutType: string) =>
+    ['pageLayouts', 'object', objectId, 'resolved', layoutType] as const,
   detail: (layoutId: PageLayoutId) => ['pageLayouts', 'detail', layoutId] as const,
   effective: (apiName: ObjectApiName) => ['pageLayouts', 'effective', apiName] as const,
 } as const;
