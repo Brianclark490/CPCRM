@@ -192,7 +192,14 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   const objectDef = recordsQuery.data?.object ?? null;
   const layoutColumns = layoutQuery.data?.fields ?? null;
 
-  const loading = recordsQuery.isPending;
+  // `useRecords` uses `placeholderData: keepPreviousData` so paginating within
+  // the same object doesn't flicker — but when `apiName` changes the
+  // placeholder is for a *different* object. Treat that as loading so we
+  // don't render Account rows under `/objects/contact` while the new query
+  // resolves.
+  const isStaleObject =
+    recordsQuery.data != null && recordsQuery.data.object.apiName !== apiName;
+  const loading = recordsQuery.isPending || isStaleObject;
   const error = toDisplayError(recordsQuery.error);
 
   const handleSort = (fieldApiName: string) => {
