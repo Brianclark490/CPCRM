@@ -18,14 +18,20 @@ import styles from './FieldBuilderPage.module.css';
 
 export function FieldBuilderPage() {
   const { id: objectId } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState<TabName>('fields');
+  const [activeTab, setActiveTabState] = useState<TabName>('fields');
 
   // Per-tab override for the page-layouts error banner. The query itself
   // surfaces fetch failures, but creating a default layout can fail too —
-  // that override lives in `useRelationshipMutations`.
+  // that override lives in `useRelationshipMutations`. Cleared on tab
+  // changes so a one-off mutation failure can't haunt later visits.
   const [pageLayoutsErrorOverride, setPageLayoutsErrorOverride] = useState<
     string | null
   >(null);
+
+  const setActiveTab = (tab: TabName) => {
+    setPageLayoutsErrorOverride(null);
+    setActiveTabState(tab);
+  };
 
   const objectQuery = useFieldDefinitions(objectId);
   const relationshipsQuery = useObjectRelationships(objectId, {

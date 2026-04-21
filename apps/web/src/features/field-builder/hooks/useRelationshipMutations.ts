@@ -176,6 +176,9 @@ export function useRelationshipMutations({
   const handleCreateDefaultLayout = async () => {
     if (!sessionToken || !objectId || !objectDef) return;
 
+    // Reset any banner from a previous failed attempt so a retry starts
+    // clean — otherwise the old error lingers until the user swaps tabs.
+    setPageLayoutsError(null);
     setCreatingLayout(true);
 
     try {
