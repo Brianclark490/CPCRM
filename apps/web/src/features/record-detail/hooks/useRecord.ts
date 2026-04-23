@@ -1,14 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useMemo, type Dispatch, type SetStateAction } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@descope/react-sdk';
-import { useApiClient, unwrapList } from '../../../lib/apiClient.js';
+import { ApiError, useApiClient } from '../../../lib/apiClient.js';
+import { recordsKeys } from '../../../lib/queryKeys.js';
 import { usePageLayout } from '../../../usePageLayout.js';
+import { useObjectDefinition } from '../../records/hooks/queries/useObjectDefinition.js';
+import { useLayout } from '../../records/hooks/queries/useLayout.js';
 import { groupFieldsBySection } from '../helpers.js';
 import type {
+  LayoutFieldWithMetadata,
+  LayoutSection,
   ObjectDefinition,
   RecordDetail,
-  LayoutListItem,
-  LayoutDefinition,
-  LayoutSection,
 } from '../types.js';
 import type { PageLayout } from '../../../components/layoutTypes.js';
 
@@ -22,117 +25,120 @@ interface UseRecordResult {
   api: ReturnType<typeof useApiClient>;
   sessionToken: string | undefined;
   loadRecord: () => Promise<void>;
-  setRecord: React.Dispatch<React.SetStateAction<RecordDetail | null>>;
+  setRecord: Dispatch<SetStateAction<RecordDetail>>;
 }
 
+/**
+ * Composes the three queries a record-detail page needs (record + object
+ * definition + form layout) into a single hook.
+ *
+ * Each query is cached under its shared key factory entry so unrelated
+ * record pages share the object-definition list, the layout list, and the
+ * layout detail rather than re-fetching them per-mount. `loadRecord`
+ * invalidates only the record detail so save/delete/related-create flows
+ * refresh the visible data without bouncing the form-layout request.
+ */
 export function useRecord(
   apiName: string | undefined,
   id: string | undefined,
 ): UseRecordResult {
-  const { sessionToken } = useSession();
+  const { sessionToken, isSessionLoading } = useSession();
   const api = useApiClient();
+  const queryClient = useQueryClient();
 
-  const [record, setRecord] = useState<RecordDetail | null>(null);
-  const [objectDef, setObjectDef] = useState<ObjectDefinition | null>(null);
-  const [layoutSections, setLayoutSections] = useState<LayoutSection[] | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const recordKey = recordsKeys.detail(apiName ?? '', id ?? '');
+  const recordEnabled = Boolean(sessionToken && apiName && id);
+
+  const recordQuery = useQuery<RecordDetail, ApiError>({
+    queryKey: recordKey,
+    queryFn: () =>
+      api.get<RecordDetail>(
+        `/api/v1/objects/${apiName}/records/${id}`,
+      ),
+    enabled: recordEnabled,
+  });
+
+  const objectDefQuery = useObjectDefinition(apiName);
+  const objectDefData = objectDefQuery.data;
+  const objectDef = useMemo<ObjectDefinition | null>(() => {
+    if (!objectDefData) return null;
+    return {
+      id: objectDefData.id,
+      apiName: objectDefData.apiName,
+      label: objectDefData.label ?? objectDefData.apiName,
+      pluralLabel: objectDefData.pluralLabel ?? objectDefData.apiName,
+      isSystem: objectDefData.isSystem ?? false,
+    };
+  }, [objectDefData]);
 
   const { layout: pageLayout } = usePageLayout(apiName);
 
-  const loadRecord = useCallback(async () => {
-    if (!sessionToken || !apiName || !id) return;
+  const formLayoutQuery = useLayout(objectDefData?.id, 'form');
+  const layoutSections = useMemo<LayoutSection[] | null>(() => {
+    const layout = formLayoutQuery.data;
+    if (!layout || layout.fields.length === 0) return null;
+    const fields: LayoutFieldWithMetadata[] = layout.fields.map((lf) => ({
+      fieldId: lf.fieldId,
+      fieldApiName: lf.fieldApiName,
+      fieldLabel: lf.fieldLabel,
+      fieldType: lf.fieldType,
+      fieldRequired: lf.fieldRequired ?? false,
+      fieldOptions: lf.fieldOptions ?? {},
+      sortOrder: lf.sortOrder,
+      section: lf.section,
+      sectionLabel: lf.sectionLabel,
+      width: lf.width,
+    }));
+    return groupFieldsBySection(fields);
+  }, [formLayoutQuery.data]);
 
-    setLoading(true);
-    setLoadError(null);
-
-    try {
-      const response = await api.request(
-        `/api/v1/objects/${apiName}/records/${id}`,
-      );
-
-      if (response.ok) {
-        const data = (await response.json()) as RecordDetail;
-        setRecord(data);
-
-        const objResponse = await api.request('/api/v1/admin/objects');
-        if (objResponse.ok) {
-          const allObjects = unwrapList<ObjectDefinition>(await objResponse.json());
-          const obj = allObjects.find((o) => o.apiName === apiName);
-          if (obj) setObjectDef(obj);
-        }
-      } else if (response.status === 404) {
-        setLoadError('Record not found.');
-      } else {
-        setLoadError('Failed to load record.');
+  const loadError = useMemo<string | null>(() => {
+    const err = recordQuery.error;
+    if (!err) return null;
+    if (err instanceof ApiError) {
+      if (err.status === 404) return 'Record not found.';
+      if (err.isNetwork) {
+        return 'Failed to connect to the server. Please try again.';
       }
-    } catch {
-      setLoadError('Failed to connect to the server. Please try again.');
-    } finally {
-      setLoading(false);
+      return 'Failed to load record.';
     }
-  }, [sessionToken, api, apiName, id]);
+    return 'Failed to connect to the server. Please try again.';
+  }, [recordQuery.error]);
 
-  useEffect(() => {
-    void loadRecord();
-  }, [loadRecord]);
+  // Mirror the pre-TQ contract: `loading` gates the whole page on the
+  // primary record fetch. Object-definition / layout queries fill in
+  // progressively and never block the initial render. Treat "routing
+  // params present but Descope is still resolving the session token" as
+  // loading too, otherwise the page briefly renders "Record not found."
+  // while the SDK finishes refreshing.
+  const loading =
+    (Boolean(apiName && id) && !sessionToken && isSessionLoading) ||
+    (recordEnabled && recordQuery.isPending);
 
-  // Load form layout
-  useEffect(() => {
-    if (!sessionToken || !apiName) return;
+  const loadRecord = useCallback(async () => {
+    if (!apiName || !id) return;
+    await queryClient.invalidateQueries({ queryKey: recordKey });
+  }, [queryClient, recordKey, apiName, id]);
 
-    let cancelled = false;
-
-    const loadLayout = async () => {
-      try {
-        const objResponse = await api.request('/api/v1/admin/objects');
-        if (cancelled || !objResponse.ok) return;
-
-        const allObjects = unwrapList<{
-          id: string;
-          apiName: string;
-        }>(await objResponse.json());
-        const obj = allObjects.find((o) => o.apiName === apiName);
-        if (!obj || cancelled) return;
-
-        const layoutsResponse = await api.request(
-          `/api/v1/admin/objects/${obj.id}/layouts`,
-        );
-        if (cancelled || !layoutsResponse.ok) return;
-
-        const layouts = unwrapList<LayoutListItem>(await layoutsResponse.json());
-        const formLayout =
-          layouts.find((l) => l.layoutType === 'form' && l.isDefault) ??
-          layouts.find((l) => l.layoutType === 'form');
-
-        if (!formLayout || cancelled) return;
-
-        const layoutDetailResponse = await api.request(
-          `/api/v1/admin/objects/${obj.id}/layouts/${formLayout.id}`,
-        );
-        if (cancelled || !layoutDetailResponse.ok) return;
-
-        const layoutDetail =
-          (await layoutDetailResponse.json()) as LayoutDefinition;
-        if (!cancelled && layoutDetail.fields.length > 0) {
-          setLayoutSections(groupFieldsBySection(layoutDetail.fields));
+  // Narrowed to non-null — callers only patch after we already have a
+  // record (see `handleStageChanged` in RecordDetailPage), so we never
+  // want to write `null` into the detail cache slot typed as
+  // `RecordDetail`.
+  const setRecord = useCallback<Dispatch<SetStateAction<RecordDetail>>>(
+    (value) => {
+      queryClient.setQueryData<RecordDetail>(recordKey, (current) => {
+        if (current === undefined) return current;
+        if (typeof value === 'function') {
+          return (value as (prev: RecordDetail) => RecordDetail)(current);
         }
-      } catch {
-        // Layout fetch is best-effort — fall back to record fields
-      }
-    };
-
-    void loadLayout();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionToken, api, apiName]);
+        return value;
+      });
+    },
+    [queryClient, recordKey],
+  );
 
   return {
-    record,
+    record: recordQuery.data ?? null,
     objectDef,
     layoutSections,
     pageLayout,
