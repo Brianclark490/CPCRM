@@ -37,15 +37,26 @@ function Thrower({ shouldThrow, message = 'boom' }: { shouldThrow: boolean; mess
 
 describe('RouteErrorBoundary', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  let originalClipboardDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     vi.mocked(logger.error).mockClear();
     // React logs caught errors to console.error; silence the expected noise.
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Capture the original clipboard descriptor so tests that mutate it can
+    // restore exactly what was there (JSDOM environment is shared across tests).
+    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   });
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor);
+    } else {
+      // Remove any property tests added on a clean environment.
+      // `delete` on a non-configurable property is a no-op, which is fine here.
+      delete (navigator as { clipboard?: unknown }).clipboard;
+    }
   });
 
   it('renders children when no error is thrown', () => {

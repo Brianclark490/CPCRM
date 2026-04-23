@@ -34,7 +34,6 @@ import { AdminTargetsPage } from './pages/AdminTargetsPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
 import { TenantGuard } from './components/TenantGuard.js';
 import { AppShell } from './components/AppShell.js';
-import { GlobalErrorBoundary } from './components/GlobalErrorBoundary.js';
 import { RouteErrorBoundary } from './components/RouteErrorBoundary.js';
 
 function OpportunityDetailRedirect() {
@@ -44,7 +43,6 @@ function OpportunityDetailRedirect() {
 
 export function App() {
   return (
-    <GlobalErrorBoundary>
     <BrowserRouter>
       <SessionSync />
       <QueryClientProvider client={queryClient}>
@@ -354,6 +352,5 @@ export function App() {
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
       </QueryClientProvider>
     </BrowserRouter>
-    </GlobalErrorBoundary>
   );
 }

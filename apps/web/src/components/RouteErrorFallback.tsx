@@ -10,10 +10,21 @@ function isDev(): boolean {
   }
 }
 
-function formatErrorForCopy(error: Error): string {
-  const name = error.name || 'Error';
-  const message = error.message || '';
-  const stack = error.stack || '';
+function toError(value: unknown): Error {
+  if (value instanceof Error) return value;
+  if (typeof value === 'string') return new Error(value);
+  try {
+    return new Error(JSON.stringify(value));
+  } catch {
+    return new Error(String(value));
+  }
+}
+
+function formatErrorForCopy(error: unknown): string {
+  const err = toError(error);
+  const name = err.name || 'Error';
+  const message = err.message || '';
+  const stack = err.stack || '';
   return `${name}: ${message}\n\n${stack}`.trim();
 }
 
@@ -25,7 +36,7 @@ export function RouteErrorFallback({ error, resetErrorBoundary }: FallbackProps)
       return;
     }
     try {
-      await navigator.clipboard.writeText(formatErrorForCopy(error as Error));
+      await navigator.clipboard.writeText(formatErrorForCopy(error));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -67,7 +78,7 @@ export function RouteErrorFallback({ error, resetErrorBoundary }: FallbackProps)
       {isDev() && (
         <details className={styles.details}>
           <summary>Error details (dev only)</summary>
-          <pre className={styles.stack}>{formatErrorForCopy(error as Error)}</pre>
+          <pre className={styles.stack}>{formatErrorForCopy(error)}</pre>
         </details>
       )}
     </div>

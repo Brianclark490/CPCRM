@@ -5,6 +5,7 @@ import { AuthProvider } from '@descope/react-sdk';
 import './theme.css';
 import './index.css';
 import { App } from './App.js';
+import { GlobalErrorBoundary } from './components/GlobalErrorBoundary.js';
 
 const descopeProjectId = import.meta.env.VITE_DESCOPE_PROJECT_ID as string;
 
@@ -20,8 +21,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <AuthProvider projectId={descopeProjectId}>
-      <App />
-    </AuthProvider>
+    <GlobalErrorBoundary>
+      <AuthProvider projectId={descopeProjectId}>
+        <App />
+      </AuthProvider>
+    </GlobalErrorBoundary>
   </StrictMode>,
 );
