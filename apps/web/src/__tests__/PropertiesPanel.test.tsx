@@ -86,6 +86,15 @@ describe('PropertiesPanel — object-typed config fields', () => {
     expect(sourceBlock.textContent).toMatch(/read-only/i);
   });
 
+  it('associates the object-field textarea with its label for screen readers', () => {
+    renderPanel(metricComponent, metricDef);
+
+    // getByLabelText only succeeds when <label htmlFor> matches the textarea's id.
+    const textarea = screen.getByLabelText('source') as HTMLTextAreaElement;
+    expect(textarea.tagName).toBe('TEXTAREA');
+    expect(textarea.readOnly).toBe(true);
+  });
+
   it('still renders editable string fields alongside object fields', () => {
     renderPanel(metricComponent, metricDef);
 

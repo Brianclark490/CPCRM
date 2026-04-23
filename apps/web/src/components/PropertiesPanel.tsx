@@ -116,8 +116,11 @@ function ConfigField({
           })();
     return (
       <div className={styles.field} data-testid={`prop-object-${name}`}>
-        <label className={styles.fieldLabel}>{name}</label>
+        <label className={styles.fieldLabel} htmlFor={`prop-${name}`}>
+          {name}
+        </label>
         <textarea
+          id={`prop-${name}`}
           className={styles.textarea}
           value={json}
           readOnly
