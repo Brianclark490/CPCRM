@@ -15,8 +15,8 @@ Kanban optimistic UI, Records + Field builder, and cleanup.
   records, object definitions, field definitions, relationships, pipelines,
   and page layouts. Convention documented in
   [ADR 0001](adr/0001-query-key-factory.md).
-- Test helper `renderWithQueryClient` so hooks render in unit tests against
-  a fresh client per test.
+- Test helper `renderWithQuery` (plus `createTestQueryClient`) so hooks
+  render in unit tests against a fresh client per test.
 - Hooks migrated off hand-rolled `useEffect` + `useState` fetchers:
   `usePipeline`, `useRecords`, `useObjectDefinition`, `useObjectDefinitions`,
   `useLayout`, `useFieldDefinitions`, `usePageLayoutList`,
@@ -34,15 +34,16 @@ session. Numbers below are for a warm session (login already established).
 
 | Flow                  | Before                                                                                | After                                                              |
 | --------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| **Kanban board**      | Pipeline + records fetched on every mount; filter-bar edits re-fetched the full list. | Single `pipelines.detail` + `records.list` per `(pipelineId, filters)`; filter edits hit cache. |
-| **Records list**      | Object definition re-fetched per page mount; pagination cleared data between pages.   | `objectDefinitions.detail` shared with record-detail; `keepPreviousData` removes the empty-flash between pages. |
-| **Field builder**     | Object detail re-fetched after every field save; list jitter while the round-trip ran. | Mutations `invalidateQueries({ queryKey: objectDefinitions.detail(id) })` — one refetch per save, reordering is optimistic. |
+| **Kanban board**      | Pipeline + records fetched on every mount; filter-bar edits re-fetched the full list. | Single `queryKeys.pipelines.detail` + `queryKeys.records.list` per `(pipelineId, filters)`; filter edits hit cache. |
+| **Records list**      | Object definition re-fetched per page mount; pagination cleared data between pages.   | `queryKeys.objectDefinitions.detail` shared with record-detail; `keepPreviousData` removes the empty-flash between pages. |
+| **Field builder**     | Object detail re-fetched after every field save; list jitter while the round-trip ran. | Mutations `invalidateQueries({ queryKey: queryKeys.objectDefinitions.detail(id) })` — one refetch per save, reordering is optimistic. |
 
 The structural wins come from three places, not from tuning:
 
 1. **One key per resource.** Every caller of "the account record with id
-   X" routes through `recordsKeys.detail('account', 'X')`, so the second
-   mount is a cache hit rather than a second network round-trip.
+   X" routes through `queryKeys.records.detail('account', 'X')` (aka
+   `recordsKeys.detail('account', 'X')`), so the second mount is a cache
+   hit rather than a second network round-trip.
 2. **5-minute `staleTime`.** Most navigations within a session reuse cache;
    the devtools refetch button still works when truly needed.
 3. **`keepPreviousData` on `useRecords`.** Paginating/filtering a record
@@ -56,11 +57,13 @@ a record → back to list → open field builder → back):
 
 - The first visit to each surface populates its cache entry once. Re-visits
   within the 5-minute `staleTime` do not trigger a refetch.
-- The shared `objectDefinitions.detail(id)` entry is used by both the record
-  page and the field builder. Navigating between them is a cache hit.
+- The shared `queryKeys.objectDefinitions.detail(id)` entry is used by both
+  the record page and the field builder. Navigating between them is a
+  cache hit.
 - Mutations scope their invalidation: editing a field invalidates
-  `objectDefinitions.detail(id)` and `fieldDefinitions.byObject(id)` only —
-  unrelated objects' caches stay warm.
+  `queryKeys.objectDefinitions.detail(id)` and
+  `queryKeys.fieldDefinitions.byObject(id)` only — unrelated objects'
+  caches stay warm.
 - `refetchOnWindowFocus` still fires a background refetch when the tab
   regains focus. The UI is served from cache in the meantime, so the user
   doesn't see a loading state for data they're already looking at.
@@ -71,16 +74,16 @@ a record → back to list → open field builder → back):
   one record (not the whole list), so concurrent successful moves on
   siblings aren't clobbered when one fails a gate check.
 - **Targeted invalidation.** The hierarchical key factory means
-  `invalidateQueries({ queryKey: records.byObject('account') })` refreshes
-  the list and every detail view for accounts without touching other
-  objects.
+  `invalidateQueries({ queryKey: queryKeys.records.byObject('account') })`
+  refreshes the list and every detail view for accounts without touching
+  other objects.
 - **Smaller components.** Pages that used to own
   `useState<Data>()`+`useState<Error>()`+`useState<Loading>()` plus a
   `useEffect` fetch now pull a single hook and render the three result
   branches. `RecordListPage.tsx` and `KanbanBoard.tsx` are the clearest
   examples.
-- **Testability.** `renderWithQueryClient` gives each test a clean client
-  with retries off, so hooks test in isolation without mocking `useEffect`
+- **Testability.** `renderWithQuery` gives each test a clean client with
+  retries off, so hooks test in isolation without mocking `useEffect`
   timing.
 - **Dev ergonomics.** ReactQueryDevtools makes cache state inspectable at a
   glance — previously debugging a stale fetch meant `console.log` and
