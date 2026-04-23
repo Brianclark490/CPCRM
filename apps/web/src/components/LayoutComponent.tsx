@@ -5,6 +5,9 @@ import { LayoutFieldRenderer } from './LayoutFieldRenderer.js';
 import { RelatedListRenderer } from './RelatedListRenderer.js';
 import { PlaceholderWidget } from './PlaceholderWidget.js';
 import { SalesTargetsRenderer } from './SalesTargetsRenderer.js';
+import { IdentityPanel } from './IdentityPanel.js';
+import { ContactsPanel } from './ContactsPanel.js';
+import { ActivityFeed } from './ActivityFeed.js';
 
 // ─── Component registry (map, not switch) ─────────────────────────────────────
 
@@ -12,6 +15,9 @@ const COMPONENT_RENDERERS: Record<string, ComponentType<ComponentRendererProps>>
   field: LayoutFieldRenderer,
   related_list: RelatedListRenderer,
   sales_targets: SalesTargetsRenderer,
+  identity: IdentityPanel,
+  contacts: ContactsPanel,
+  activity: ActivityFeed,
   activity_timeline: PlaceholderWidget,
   notes: PlaceholderWidget,
   stage_history: PlaceholderWidget,

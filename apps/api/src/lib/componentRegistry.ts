@@ -8,6 +8,9 @@
  * - **type**          – unique key used in layout JSON (`component.type`)
  * - **label / icon**  – display metadata for the builder palette
  * - **category**      – grouping in the palette sidebar
+ * - **allowedZones**  – optional whitelist of zones where the component may be
+ *                       placed.  Omitted = allowed everywhere (backwards compat).
+ *                       Zones: 'kpi', 'leftRail', 'rightRail', 'main'.
  * - **configSchema**  – JSON-Schema-like description of the `config` object
  * - **defaultConfig** – sensible defaults applied when a component is first added
  */
@@ -16,11 +19,17 @@
 
 export type ComponentCategory = 'fields' | 'layout' | 'related' | 'widgets';
 
+/** Zones referenced by `allowedZones`. 'main' = inside a tab's section. */
+export type ComponentZone = 'kpi' | 'leftRail' | 'rightRail' | 'main';
+
+export const ALL_ZONES: readonly ComponentZone[] = ['kpi', 'leftRail', 'rightRail', 'main'];
+
 export interface ComponentDefinition {
   type: string;
   label: string;
   icon: string;
   category: ComponentCategory;
+  allowedZones?: readonly ComponentZone[];
   configSchema: Record<string, unknown>;
   defaultConfig: Record<string, unknown>;
 }
@@ -55,6 +64,57 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
       allowCreate: { type: 'boolean', description: 'Show inline "New" button' },
     },
     defaultConfig: { relationshipId: '', displayFields: [], limit: 5, allowCreate: true },
+  },
+
+  // ── Rail palette (issue #518) ───────────────────────────────────────────────
+  // Bread-and-butter components for the leftRail / rightRail zones.  Also
+  // allowed in the main zone (inside tab sections).
+  {
+    type: 'identity',
+    label: 'Identity',
+    icon: 'id-card',
+    category: 'widgets',
+    allowedZones: ['leftRail', 'rightRail', 'main'],
+    configSchema: {
+      fields: {
+        type: 'array',
+        items: 'string',
+        description: 'Field api_names to show as label/value rows',
+      },
+    },
+    defaultConfig: { fields: [] },
+  },
+  {
+    type: 'contacts',
+    label: 'Contacts',
+    icon: 'users',
+    category: 'widgets',
+    allowedZones: ['leftRail', 'rightRail', 'main'],
+    configSchema: {
+      relationshipId: {
+        type: 'string',
+        required: true,
+        description: 'UUID of the relationship to the contact object',
+      },
+      limit: { type: 'number', description: 'Max contacts to display' },
+    },
+    defaultConfig: { relationshipId: '', limit: 5 },
+  },
+  {
+    type: 'activity',
+    label: 'Activity Feed',
+    icon: 'activity',
+    category: 'widgets',
+    allowedZones: ['leftRail', 'rightRail', 'main'],
+    configSchema: {
+      limit: { type: 'number', description: 'Max activity items to display' },
+      types: {
+        type: 'array',
+        items: 'string',
+        description: 'Activity types to include (e.g. replied, call, edit, note, meeting)',
+      },
+    },
+    defaultConfig: { limit: 20, types: [] },
   },
 
   // ── Widget components ───────────────────────────────────────────────────────
@@ -118,4 +178,17 @@ export const VALID_COMPONENT_TYPES: ReadonlySet<string> = new Set(
  */
 export function getComponentDefinition(type: string): ComponentDefinition | undefined {
   return COMPONENT_REGISTRY.find((c) => c.type === type);
+}
+
+/**
+ * Returns true if a component type is allowed in the given zone.
+ * Components that do not declare `allowedZones` are permitted in any zone.
+ * Unknown component types return false — caller should separately check
+ * `VALID_COMPONENT_TYPES` for a clearer error message.
+ */
+export function isComponentAllowedInZone(type: string, zone: ComponentZone): boolean {
+  const def = getComponentDefinition(type);
+  if (!def) return false;
+  if (!def.allowedZones) return true;
+  return def.allowedZones.includes(zone);
 }

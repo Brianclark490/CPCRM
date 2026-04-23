@@ -1058,6 +1058,96 @@ describe('validateLayoutJson — zones', () => {
     };
     expect(validateLayoutJson(layout)).toContain('zones.kpi');
   });
+
+  // ── Zone whitelist (issue #518) ──────────────────────────────────────────
+  // Components with `allowedZones` can only appear in zones they whitelist.
+  // Rail palette components (identity, contacts, activity) are restricted to
+  // leftRail / rightRail / main — so a KPI placement must be rejected.
+
+  it('accepts an identity component in leftRail', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        leftRail: [
+          {
+            id: 'lr-1',
+            type: 'field_section',
+            label: 'Identity',
+            columns: 1,
+            components: [
+              { id: 'c-1', type: 'identity', config: { fields: ['name'] } },
+            ],
+          },
+        ],
+      },
+    };
+    expect(validateLayoutJson(layout)).toBeNull();
+  });
+
+  it('accepts a contacts component in rightRail', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        rightRail: [
+          {
+            id: 'rr-1',
+            type: 'related_list',
+            label: 'Contacts',
+            columns: 1,
+            components: [
+              { id: 'c-1', type: 'contacts', config: { relationshipId: 'rel-1' } },
+            ],
+          },
+        ],
+      },
+    };
+    expect(validateLayoutJson(layout)).toBeNull();
+  });
+
+  it('accepts an activity component in a main-zone section', () => {
+    const layout = {
+      header: { primaryField: 'name' },
+      tabs: [{
+        id: 'tab-1', label: 'Tab', sections: [{
+          id: 'sec-1', type: 'widget_section', label: 'Activity', columns: 1,
+          components: [{ id: 'c-1', type: 'activity', config: { limit: 5 } }],
+        }],
+      }],
+    };
+    expect(validateLayoutJson(layout)).toBeNull();
+  });
+
+  it('rejects a rail-only component (identity) placed in the kpi zone', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'identity', config: { fields: [] } }],
+      },
+    };
+    const err = validateLayoutJson(layout);
+    expect(err).toContain('zones.kpi');
+    expect(err).toContain('not allowed in zone "kpi"');
+  });
+
+  it('rejects a rail-only component (contacts) placed in the kpi zone', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'contacts', config: { relationshipId: 'rel-1' } }],
+      },
+    };
+    expect(validateLayoutJson(layout)).toContain('not allowed in zone "kpi"');
+  });
+
+  it('rejects a rail-only component (activity) placed in the kpi zone', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'activity', config: {} }],
+      },
+    };
+    expect(validateLayoutJson(layout)).toContain('not allowed in zone "kpi"');
+  });
 });
 
 // ─── Tests: service read-path normalises zones ───────────────────────────────
