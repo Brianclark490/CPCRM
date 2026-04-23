@@ -11,7 +11,9 @@ import {
   revertLayout,
   validatePageLayoutName,
   validateLayoutJson,
+  normalizeLayout,
 } from '../pageLayoutService.js';
+import type { PageLayoutJson } from '../pageLayoutService.js';
 
 const TENANT_ID = 'test-tenant-001';
 
@@ -408,7 +410,11 @@ describe('createPageLayout', () => {
     expect(result.status).toBe('draft');
     expect(result.version).toBe(1);
     expect(result.publishedLayout).toBeNull();
-    expect(result.layout).toEqual(VALID_LAYOUT_JSON);
+    // Read path normalises zones onto legacy-shaped layouts.
+    expect(result.layout).toEqual({
+      ...VALID_LAYOUT_JSON,
+      zones: { kpi: [], leftRail: [], rightRail: [] },
+    });
   });
 
   it('throws NOT_FOUND when object does not exist', async () => {
@@ -579,7 +585,10 @@ describe('publishPageLayout', () => {
 
     expect(result.status).toBe('published');
     expect(result.version).toBe(2);
-    expect(result.publishedLayout).toEqual(VALID_LAYOUT_JSON);
+    expect(result.publishedLayout).toEqual({
+      ...VALID_LAYOUT_JSON,
+      zones: { kpi: [], leftRail: [], rightRail: [] },
+    });
     expect(fakePageLayoutVersions.size).toBe(1);
   });
 
@@ -944,5 +953,153 @@ describe('revertLayout', () => {
     await expect(
       revertLayout(TENANT_ID, 'nonexistent', 'pl1', 1),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+// ─── Tests: normalizeLayout / zones schema ──────────────────────────────────
+
+describe('normalizeLayout', () => {
+  it('fills zones with empty arrays when missing (legacy layout)', () => {
+    const normalized = normalizeLayout(VALID_LAYOUT_JSON as PageLayoutJson);
+    expect(normalized.zones).toEqual({ kpi: [], leftRail: [], rightRail: [] });
+    expect(normalized.tabs).toEqual(VALID_LAYOUT_JSON.tabs);
+    expect(normalized.header).toEqual(VALID_LAYOUT_JSON.header);
+  });
+
+  it('round-trips a populated layout unchanged', () => {
+    const newShape: PageLayoutJson = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'field', config: { fieldId: 'uuid-1' } }],
+        leftRail: [
+          { id: 'lr-1', type: 'field_section', label: 'Left', columns: 1, components: [] },
+        ],
+        rightRail: [],
+      },
+    };
+    const normalized = normalizeLayout(newShape);
+    expect(normalized.zones).toEqual(newShape.zones);
+    // Idempotent on re-normalise.
+    expect(normalizeLayout(normalized)).toEqual(normalized);
+  });
+
+  it('fills missing rail arrays when zones is partially populated', () => {
+    const partial: PageLayoutJson = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'kpi', config: {} }],
+      } as PageLayoutJson['zones'],
+    };
+    const normalized = normalizeLayout(partial);
+    expect(normalized.zones?.kpi).toHaveLength(1);
+    expect(normalized.zones?.leftRail).toEqual([]);
+    expect(normalized.zones?.rightRail).toEqual([]);
+  });
+
+  it('does not mutate the input layout', () => {
+    const snapshot = JSON.parse(JSON.stringify(VALID_LAYOUT_JSON));
+    normalizeLayout(VALID_LAYOUT_JSON as PageLayoutJson);
+    expect(VALID_LAYOUT_JSON).toEqual(snapshot);
+  });
+});
+
+describe('validateLayoutJson — zones', () => {
+  it('accepts a layout with no zones (legacy shape)', () => {
+    expect(validateLayoutJson(VALID_LAYOUT_JSON)).toBeNull();
+  });
+
+  it('accepts a layout with a fully populated zones object', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'field', config: { fieldId: 'uuid-1' } }],
+        leftRail: [
+          { id: 'lr-1', type: 'field_section', label: 'Left', columns: 1, components: [] },
+        ],
+        rightRail: [],
+      },
+    };
+    expect(validateLayoutJson(layout)).toBeNull();
+  });
+
+  it('rejects zones when it is not an object', () => {
+    const layout = { ...VALID_LAYOUT_JSON, zones: 'not-an-object' };
+    expect(validateLayoutJson(layout)).toContain('layout.zones');
+  });
+
+  it('rejects zones.kpi when it is not an array', () => {
+    const layout = { ...VALID_LAYOUT_JSON, zones: { kpi: 'oops' } };
+    expect(validateLayoutJson(layout)).toContain('layout.zones.kpi');
+  });
+
+  it('rejects zones.leftRail with an invalid section type', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        leftRail: [
+          { id: 'lr-1', type: 'invalid', label: 'Left', columns: 1, components: [] },
+        ],
+      },
+    };
+    expect(validateLayoutJson(layout)).toContain('zones.leftRail');
+  });
+
+  it('rejects a kpi component with an unknown type', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'nonexistent-type', config: {} }],
+      },
+    };
+    expect(validateLayoutJson(layout)).toContain('zones.kpi');
+  });
+});
+
+// ─── Tests: service read-path normalises zones ───────────────────────────────
+
+describe('pageLayoutService read paths normalise zones', () => {
+  beforeEach(() => {
+    fakeObjects.clear();
+    fakePageLayouts.clear();
+    fakePageLayoutVersions.clear();
+    mockQuery.mockClear();
+    fakeObjects.set('obj-1', { id: 'obj-1', tenant_id: TENANT_ID });
+  });
+
+  it('getPageLayoutById fills zones on a legacy-shaped layout', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: true,
+      layout: VALID_LAYOUT_JSON, published_layout: VALID_LAYOUT_JSON,
+      version: 1, status: 'published',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: new Date().toISOString(),
+    });
+
+    const result = await getPageLayoutById(TENANT_ID, 'obj-1', 'pl1');
+    expect(result.layout.zones).toEqual({ kpi: [], leftRail: [], rightRail: [] });
+    expect(result.publishedLayout?.zones).toEqual({ kpi: [], leftRail: [], rightRail: [] });
+  });
+
+  it('listPageLayoutVersions normalises each version layout', async () => {
+    fakePageLayouts.set('pl1', {
+      id: 'pl1', tenant_id: TENANT_ID, object_id: 'obj-1',
+      name: 'Default', role: null, is_default: true,
+      layout: VALID_LAYOUT_JSON, published_layout: null,
+      version: 1, status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      published_at: null,
+    });
+    fakePageLayoutVersions.set('v1', {
+      id: 'v1', layout_id: 'pl1', tenant_id: TENANT_ID,
+      version: 1, layout: VALID_LAYOUT_JSON,
+      published_by: 'user-1', published_at: new Date().toISOString(),
+    });
+
+    const versions = await listPageLayoutVersions(TENANT_ID, 'obj-1', 'pl1');
+    expect(versions).toHaveLength(1);
+    expect(versions[0].layout.zones).toEqual({ kpi: [], leftRail: [], rightRail: [] });
   });
 });

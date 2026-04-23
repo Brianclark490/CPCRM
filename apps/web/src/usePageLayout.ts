@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@descope/react-sdk';
 import { useApiClient } from './lib/apiClient.js';
 import { pageLayoutsKeys } from './lib/queryKeys.js';
-import type { PageLayout } from './components/layoutTypes.js';
+import { normalizeLayout, type PageLayout } from './components/layoutTypes.js';
 
 /**
  * Fetches the effective page layout for a given object type.
@@ -37,7 +37,7 @@ export function usePageLayout(objectApiName: string | undefined) {
       if (!response.ok) {
         throw new Error(`Failed to load page layout: ${response.status}`);
       }
-      return (await response.json()) as PageLayout;
+      return normalizeLayout(await response.json() as PageLayout);
     },
   });
 

@@ -5,6 +5,8 @@ import { requireTenant } from '../middleware/tenant.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import { pool } from '../db/client.js';
 import { logger } from '../lib/logger.js';
+import { normalizeLayout } from '../services/pageLayoutService.js';
+import type { PageLayoutJson } from '../services/pageLayoutService.js';
 
 export const pageLayoutsRouter = Router({ mergeParams: true });
 
@@ -84,7 +86,7 @@ export async function handleGetEffectivePageLayout(
       return;
     }
 
-    res.json(publishedLayout);
+    res.json(normalizeLayout(publishedLayout as PageLayoutJson));
   } catch (err: unknown) {
     logger.error({ err, apiName }, 'Unexpected error fetching effective page layout');
     res.status(500).json({ error: 'An unexpected error occurred' });
