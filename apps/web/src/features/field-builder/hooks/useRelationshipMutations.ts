@@ -1,5 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../../../lib/apiClient.js';
+import {
+  pageLayoutsKeys,
+  relationshipsKeys,
+} from '../../../lib/queryKeys.js';
 import { slugify } from '../../../utils.js';
 import { EMPTY_RELATIONSHIP_FORM } from '../constants.js';
 import type {
@@ -11,22 +18,19 @@ import type {
 
 interface UseRelationshipMutationsOptions {
   objectId: string | undefined;
-  sessionToken: string | undefined;
-  api: { request: (url: string, init?: RequestInit) => Promise<Response> };
-  objectDef: ObjectDefinitionDetail | null;
-  fetchRelationships: () => Promise<void>;
-  setPageLayoutsError: React.Dispatch<React.SetStateAction<string | null>>;
+  objectDef: ObjectDefinitionDetail | undefined;
+  setCreateLayoutError: (message: string | null) => void;
 }
 
 export function useRelationshipMutations({
   objectId,
-  sessionToken,
-  api,
   objectDef,
-  fetchRelationships,
-  setPageLayoutsError,
+  setCreateLayoutError,
 }: UseRelationshipMutationsOptions) {
   const navigate = useNavigate();
+  const { sessionToken } = useSession();
+  const api = useApiClient();
+  const queryClient = useQueryClient();
 
   // ── Relationship modal state ────────────────────────────
   const [showRelModal, setShowRelModal] = useState(false);
@@ -34,7 +38,7 @@ export function useRelationshipMutations({
   const [relModalError, setRelModalError] = useState<string | null>(null);
   const [relSaving, setRelSaving] = useState(false);
 
-  // ── Delete relationship state ────────────────���──────────
+  // ── Delete relationship state ───────────────────────────
   const [deleteRelTarget, setDeleteRelTarget] = useState<RelationshipDefinition | null>(null);
   const [deletingRel, setDeletingRel] = useState(false);
   const [deleteRelError, setDeleteRelError] = useState<string | null>(null);
@@ -114,7 +118,9 @@ export function useRelationshipMutations({
 
       if (response.ok) {
         setShowRelModal(false);
-        await fetchRelationships();
+        await queryClient.invalidateQueries({
+          queryKey: relationshipsKeys.byObject(objectId),
+        });
       } else {
         const data = (await response.json()) as ApiError;
         setRelModalError(data.error ?? 'An unexpected error occurred');
@@ -139,7 +145,7 @@ export function useRelationshipMutations({
   };
 
   const handleDeleteRel = async () => {
-    if (!deleteRelTarget || !sessionToken) return;
+    if (!deleteRelTarget || !sessionToken || !objectId) return;
 
     setDeletingRel(true);
     setDeleteRelError(null);
@@ -151,7 +157,9 @@ export function useRelationshipMutations({
 
       if (response.ok || response.status === 204) {
         setDeleteRelTarget(null);
-        await fetchRelationships();
+        await queryClient.invalidateQueries({
+          queryKey: relationshipsKeys.byObject(objectId),
+        });
       } else {
         const data = (await response.json()) as ApiError;
         setDeleteRelError(data.error ?? 'Failed to delete relationship');
@@ -168,6 +176,9 @@ export function useRelationshipMutations({
   const handleCreateDefaultLayout = async () => {
     if (!sessionToken || !objectId || !objectDef) return;
 
+    // Reset any banner from a previous failed attempt so a retry starts
+    // clean — otherwise the old error lingers until the user swaps tabs.
+    setCreateLayoutError(null);
     setCreatingLayout(true);
 
     try {
@@ -178,12 +189,15 @@ export function useRelationshipMutations({
       });
 
       if (response.ok) {
+        await queryClient.invalidateQueries({
+          queryKey: pageLayoutsKeys.byObject(objectId),
+        });
         void navigate(`/admin/objects/${objectId}/page-builder`);
       } else {
-        setPageLayoutsError('Failed to create layout.');
+        setCreateLayoutError('Failed to create layout.');
       }
     } catch {
-      setPageLayoutsError('Failed to connect to the server. Please try again.');
+      setCreateLayoutError('Failed to connect to the server. Please try again.');
     } finally {
       setCreatingLayout(false);
     }

@@ -110,6 +110,23 @@ export const pipelinesKeys = {
     ['pipelines', 'analytics', pipelineId] as const,
 } as const;
 
+// ─── Relationships ──────────────────────────────────────────────────────────
+
+/**
+ * Keys for `/api/v1/admin/objects/:objectId/relationships` and
+ * `/api/v1/admin/relationships`.
+ *
+ * Hierarchy:
+ *   ['relationships']                          — invalidate everything
+ *   ['relationships', objectId]                — every relationship query for one object
+ *   ['relationships', objectId, 'list']        — the list of relationships for one object
+ */
+export const relationshipsKeys = {
+  all: () => ['relationships'] as const,
+  byObject: (objectId: ObjectDefinitionId) => ['relationships', objectId] as const,
+  list: (objectId: ObjectDefinitionId) => ['relationships', objectId, 'list'] as const,
+} as const;
+
 // ─── Page layouts ───────────────────────────────────────────────────────────
 
 /**
@@ -143,6 +160,7 @@ export const queryKeys = {
   records: recordsKeys,
   objectDefinitions: objectDefinitionsKeys,
   fieldDefinitions: fieldDefinitionsKeys,
+  relationships: relationshipsKeys,
   pipelines: pipelinesKeys,
   pageLayouts: pageLayoutsKeys,
 } as const;
@@ -156,5 +174,6 @@ export type AppQueryKey =
   | ReturnType<(typeof recordsKeys)[keyof typeof recordsKeys]>
   | ReturnType<(typeof objectDefinitionsKeys)[keyof typeof objectDefinitionsKeys]>
   | ReturnType<(typeof fieldDefinitionsKeys)[keyof typeof fieldDefinitionsKeys]>
+  | ReturnType<(typeof relationshipsKeys)[keyof typeof relationshipsKeys]>
   | ReturnType<(typeof pipelinesKeys)[keyof typeof pipelinesKeys]>
   | ReturnType<(typeof pageLayoutsKeys)[keyof typeof pageLayoutsKeys]>;

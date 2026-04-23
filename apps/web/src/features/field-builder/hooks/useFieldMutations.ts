@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSession } from '@descope/react-sdk';
+import { useApiClient } from '../../../lib/apiClient.js';
+import { objectDefinitionsKeys } from '../../../lib/queryKeys.js';
 import { slugify } from '../../../utils.js';
 import { buildOptionsPayload, formFromField } from '../helpers.js';
 import { EMPTY_FORM } from '../constants.js';
@@ -6,25 +10,23 @@ import type {
   FieldDefinition,
   FieldForm,
   ApiError,
+  ObjectDefinitionDetail,
 } from '../types.js';
 
 interface UseFieldMutationsOptions {
   objectId: string | undefined;
-  sessionToken: string | undefined;
-  api: { request: (url: string, init?: RequestInit) => Promise<Response> };
   fields: FieldDefinition[];
-  setFields: React.Dispatch<React.SetStateAction<FieldDefinition[]>>;
-  fetchObject: () => Promise<void>;
 }
 
 export function useFieldMutations({
   objectId,
-  sessionToken,
-  api,
   fields,
-  setFields,
-  fetchObject,
 }: UseFieldMutationsOptions) {
+  const { sessionToken } = useSession();
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const objectDetailKey = objectDefinitionsKeys.detail(objectId ?? '');
+
   // ── Field modal state ───────────────────────────────────
   const [showFieldModal, setShowFieldModal] = useState(false);
   const [editingField, setEditingField] = useState<FieldDefinition | null>(null);
@@ -197,7 +199,7 @@ export function useFieldMutations({
 
         if (response.ok) {
           setShowFieldModal(false);
-          await fetchObject();
+          await queryClient.invalidateQueries({ queryKey: objectDetailKey });
         } else {
           const data = (await response.json()) as ApiError;
           setFieldModalError(data.error ?? 'An unexpected error occurred');
@@ -213,7 +215,7 @@ export function useFieldMutations({
 
         if (response.ok) {
           setShowFieldModal(false);
-          await fetchObject();
+          await queryClient.invalidateQueries({ queryKey: objectDetailKey });
         } else {
           const data = (await response.json()) as ApiError;
           setFieldModalError(data.error ?? 'An unexpected error occurred');
@@ -252,7 +254,7 @@ export function useFieldMutations({
 
       if (response.ok || response.status === 204) {
         setDeleteTarget(null);
-        await fetchObject();
+        await queryClient.invalidateQueries({ queryKey: objectDetailKey });
       } else {
         const data = (await response.json()) as ApiError;
         setDeleteError(data.error ?? 'Failed to delete field');
@@ -274,7 +276,13 @@ export function useFieldMutations({
 
     const newFields = [...fields];
     [newFields[index], newFields[swapIndex]] = [newFields[swapIndex], newFields[index]];
-    setFields(newFields);
+
+    // Optimistically patch the cached object detail so the reorder is
+    // reflected immediately — reverting on failure below.
+    const previousDetail = queryClient.getQueryData<ObjectDefinitionDetail>(objectDetailKey);
+    queryClient.setQueryData<ObjectDefinitionDetail>(objectDetailKey, (prev) =>
+      prev ? { ...prev, fields: newFields } : prev,
+    );
 
     setReordering(true);
     try {
@@ -286,11 +294,16 @@ export function useFieldMutations({
 
       if (response.ok) {
         const updated = (await response.json()) as FieldDefinition[];
-        setFields(updated);
+        queryClient.setQueryData<ObjectDefinitionDetail>(objectDetailKey, (prev) =>
+          prev ? { ...prev, fields: updated } : prev,
+        );
+      } else if (previousDetail) {
+        queryClient.setQueryData(objectDetailKey, previousDetail);
       }
     } catch {
-      // Revert on failure
-      setFields(fields);
+      if (previousDetail) {
+        queryClient.setQueryData(objectDetailKey, previousDetail);
+      }
     } finally {
       setReordering(false);
     }
