@@ -1,0 +1,20 @@
+/* ============================================================
+   KpiStrip — Horizontal row of KPI cards below the header
+   ============================================================ */
+
+.kpiStrip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface, #fff);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kpiItem {
+  flex: 0 0 180px;
+  min-width: 0;
+}

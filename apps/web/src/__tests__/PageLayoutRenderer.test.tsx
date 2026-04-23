@@ -542,6 +542,163 @@ describe('PageLayoutRenderer', () => {
 
   // ── Section with initially collapsed state ──────────────────────────────
 
+  // ── Zoned shell (KPI strip + rails) ─────────────────────────────────────
+
+  it('collapses to a simple shell when zones are absent (legacy layout)', () => {
+    renderLayout();
+    expect(screen.queryByTestId('kpi-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-left-rail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-right-rail')).not.toBeInTheDocument();
+    expect(screen.getByTestId('layout-main')).toBeInTheDocument();
+  });
+
+  it('collapses empty zones cleanly', () => {
+    const layout = makeLayout({
+      zones: { kpi: [], leftRail: [], rightRail: [] },
+    });
+    renderLayout(layout);
+    expect(screen.queryByTestId('kpi-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-left-rail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-right-rail')).not.toBeInTheDocument();
+  });
+
+  it('renders KPI strip with zone components', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [
+          { id: 'k1', type: 'activity_timeline', config: {} },
+          { id: 'k2', type: 'notes', config: {} },
+        ],
+        leftRail: [],
+        rightRail: [],
+      },
+    });
+    renderLayout(layout);
+    expect(screen.getByTestId('kpi-strip')).toBeInTheDocument();
+    expect(screen.getByText('Activity Timeline')).toBeInTheDocument();
+    expect(screen.getByText('Notes')).toBeInTheDocument();
+  });
+
+  it('hides KPI strip when every KPI component fails visibility', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [
+          {
+            id: 'k-hidden',
+            type: 'activity_timeline',
+            config: {},
+            visibility: {
+              operator: 'AND',
+              conditions: [{ field: 'status', op: 'equals', value: 'Closed' }],
+            },
+          },
+        ],
+        leftRail: [],
+        rightRail: [],
+      },
+    });
+    renderLayout(layout);
+    expect(screen.queryByTestId('kpi-strip')).not.toBeInTheDocument();
+  });
+
+  it('hides rails when every rail section fails visibility', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [],
+        leftRail: [
+          {
+            id: 'left-hidden',
+            label: 'Hidden Left',
+            columns: 1,
+            visibility: {
+              operator: 'AND',
+              conditions: [{ field: 'status', op: 'equals', value: 'Closed' }],
+            },
+            components: [],
+          },
+        ],
+        rightRail: [
+          {
+            id: 'right-hidden',
+            label: 'Hidden Right',
+            columns: 1,
+            visibility: {
+              operator: 'AND',
+              conditions: [{ field: 'status', op: 'equals', value: 'Closed' }],
+            },
+            components: [],
+          },
+        ],
+      },
+    });
+    renderLayout(layout);
+    expect(screen.queryByTestId('layout-left-rail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-right-rail')).not.toBeInTheDocument();
+  });
+
+  it('forces rail sections to render in a single column regardless of declared columns', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [],
+        leftRail: [
+          {
+            id: 'left-multi',
+            label: 'Left Rail Multi-Col',
+            columns: 3,
+            components: [
+              { id: 'lr1', type: 'field', config: { fieldApiName: 'email' } },
+            ],
+          },
+        ],
+        rightRail: [],
+      },
+    });
+
+    const { container } = renderLayout(layout);
+    const leftRail = screen.getByTestId('layout-left-rail');
+    expect(leftRail).toBeInTheDocument();
+
+    const cols1Nodes = container.querySelectorAll('[class*="cols1"]');
+    expect(cols1Nodes.length).toBeGreaterThanOrEqual(1);
+    const cols3Nodes = container.querySelectorAll('[class*="cols3"]');
+    expect(cols3Nodes.length).toBe(0);
+  });
+
+  it('renders left and right rails with their sections', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [],
+        leftRail: [
+          {
+            id: 'left-sec',
+            label: 'Left Rail Section',
+            columns: 1,
+            components: [
+              { id: 'lr1', type: 'field', config: { fieldApiName: 'email' } },
+            ],
+          },
+        ],
+        rightRail: [
+          {
+            id: 'right-sec',
+            label: 'Right Rail Section',
+            columns: 1,
+            components: [
+              { id: 'rr1', type: 'field', config: { fieldApiName: 'phone' } },
+            ],
+          },
+        ],
+      },
+    });
+
+    renderLayout(layout);
+
+    expect(screen.getByTestId('layout-left-rail')).toBeInTheDocument();
+    expect(screen.getByTestId('layout-right-rail')).toBeInTheDocument();
+    expect(screen.getByText('Left Rail Section')).toBeInTheDocument();
+    expect(screen.getByText('Right Rail Section')).toBeInTheDocument();
+  });
+
   it('renders section collapsed when collapsed is true', () => {
     const layout = makeLayout({
       tabs: [
