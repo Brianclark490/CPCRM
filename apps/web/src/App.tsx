@@ -34,6 +34,7 @@ import { AdminTargetsPage } from './pages/AdminTargetsPage.js';
 import { ProtectedRoute } from './components/ProtectedRoute.js';
 import { TenantGuard } from './components/TenantGuard.js';
 import { AppShell } from './components/AppShell.js';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary.js';
 
 function OpportunityDetailRedirect() {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +47,7 @@ export function App() {
       <SessionSync />
       <QueryClientProvider client={queryClient}>
       <TenantSettingsProvider>
+      <RouteErrorBoundary>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
@@ -345,6 +347,7 @@ export function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </RouteErrorBoundary>
       </TenantSettingsProvider>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
       </QueryClientProvider>

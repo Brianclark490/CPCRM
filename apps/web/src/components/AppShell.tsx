@@ -8,6 +8,7 @@ import { useTheme } from '../store/useTheme.js';
 import { clearServerSession } from '../lib/apiClient.js';
 import { ProfileDropdown } from './ProfileDropdown.js';
 import { ObjectTabs } from './ObjectTabs.js';
+import { RouteErrorBoundary } from './RouteErrorBoundary.js';
 import styles from './AppShell.module.css';
 
 interface AppShellProps {
@@ -108,7 +109,9 @@ export function AppShell({ children }: AppShellProps) {
       <ObjectTabs />
 
       <main className={styles.content}>
-        <div className={styles.contentContainer}>{children}</div>
+        <div className={styles.contentContainer}>
+          <RouteErrorBoundary>{children}</RouteErrorBoundary>
+        </div>
       </main>
     </div>
   );
