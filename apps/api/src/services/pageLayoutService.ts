@@ -282,7 +282,7 @@ function validateSection(section: unknown): string | null {
 
 function validateZones(zones: unknown): string | null {
   if (zones === undefined || zones === null) return null;
-  if (typeof zones !== 'object') {
+  if (typeof zones !== 'object' || Array.isArray(zones)) {
     return 'layout.zones must be an object with kpi, leftRail, rightRail arrays';
   }
 

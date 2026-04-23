@@ -1027,6 +1027,11 @@ describe('validateLayoutJson — zones', () => {
     expect(validateLayoutJson(layout)).toContain('layout.zones');
   });
 
+  it('rejects zones when it is an array (typeof array === "object")', () => {
+    const layout = { ...VALID_LAYOUT_JSON, zones: [] };
+    expect(validateLayoutJson(layout)).toContain('layout.zones');
+  });
+
   it('rejects zones.kpi when it is not an array', () => {
     const layout = { ...VALID_LAYOUT_JSON, zones: { kpi: 'oops' } };
     expect(validateLayoutJson(layout)).toContain('layout.zones.kpi');
