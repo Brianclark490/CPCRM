@@ -21,15 +21,15 @@ export function RouteErrorFallback({ error, resetErrorBoundary }: FallbackProps)
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    const text = formatErrorForCopy(error as Error);
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+      return;
+    }
     try {
-      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        await navigator.clipboard.writeText(text);
-      }
+      await navigator.clipboard.writeText(formatErrorForCopy(error as Error));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      // If clipboard is unavailable, leave the confirmation off.
+      // Clipboard write failed (e.g. permission denied) — leave the confirmation off.
     }
   };
 

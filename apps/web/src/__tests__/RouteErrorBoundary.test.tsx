@@ -191,4 +191,45 @@ describe('RouteErrorBoundary', () => {
     expect(copiedText).toContain('clipboard test');
     expect(await screen.findByRole('status')).toHaveTextContent('Copied');
   });
+
+  it('does not show "Copied" when the clipboard API is unavailable', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <RouteErrorBoundary>
+          <Thrower shouldThrow message="no clipboard" />
+        </RouteErrorBoundary>
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Copy error/i }));
+
+    // Give any queued microtasks / timers a chance to settle.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('does not show "Copied" when the clipboard write rejects', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <RouteErrorBoundary>
+          <Thrower shouldThrow message="rejected" />
+        </RouteErrorBoundary>
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Copy error/i }));
+
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
 });
