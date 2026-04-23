@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AdminUsersPage } from '../pages/AdminUsersPage.js';
+import { renderWithQuery } from './utils/renderWithQuery.js';
 
 vi.mock('@descope/react-sdk', () => ({
   useSession: vi.fn(),
@@ -17,6 +18,49 @@ vi.mock('../store/tenant.js', () => ({
 const { useSession } = await import('@descope/react-sdk');
 const { useTenant } = await import('../store/tenant.js');
 
+interface UserRow {
+  id: string;
+  name: string;
+  fieldValues: Record<string, unknown>;
+}
+
+function mockUsersResponse(users: UserRow[]) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: users.map((u) => ({
+          ...u,
+          ownerId: 'owner-1',
+          createdAt: '2025-01-01T00:00:00Z',
+        })),
+        pagination: {
+          total: users.length,
+          limit: 100,
+          offset: 0,
+          hasMore: false,
+        },
+        object: {
+          id: 'obj-user',
+          apiName: 'user',
+          label: 'User',
+          pluralLabel: 'Users',
+          isSystem: true,
+        },
+      }),
+    } as Response),
+  );
+}
+
+function renderPage() {
+  return renderWithQuery(
+    <MemoryRouter>
+      <AdminUsersPage />
+    </MemoryRouter>,
+  );
+}
+
 describe('AdminUsersPage', () => {
   beforeEach(() => {
     vi.mocked(useTenant).mockReturnValue({ tenantId: 'T_ACME', tenantName: 'Acme Corp' });
@@ -26,28 +70,17 @@ describe('AdminUsersPage', () => {
       sessionToken: 'test-token',
       claims: {},
     });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [], total: 0 }),
-    } as Response));
+    mockUsersResponse([]);
   });
 
   it('renders the page heading', () => {
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     expect(screen.getByRole('heading', { name: 'User management' })).toBeInTheDocument();
   });
 
   it('renders the subtitle', () => {
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     expect(
       screen.getByText('Invite, manage, and remove users in your organisation'),
@@ -55,11 +88,7 @@ describe('AdminUsersPage', () => {
   });
 
   it('renders the Descope UserManagement widget with the tenant ID', () => {
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     const widget = screen.getByTestId('user-management-widget');
     expect(widget).toBeInTheDocument();
@@ -68,11 +97,7 @@ describe('AdminUsersPage', () => {
   });
 
   it('passes theme="dark" to the UserManagement widget', () => {
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     expect(screen.getByTestId('user-management-widget')).toHaveAttribute('data-theme', 'dark');
   });
@@ -80,11 +105,7 @@ describe('AdminUsersPage', () => {
   it('shows a message when no tenant is selected', () => {
     vi.mocked(useTenant).mockReturnValue({ tenantId: null, tenantName: null });
 
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     expect(
       screen.getByText('No organisation selected. Please select an organisation first.'),
@@ -92,32 +113,32 @@ describe('AdminUsersPage', () => {
     expect(screen.queryByTestId('user-management-widget')).not.toBeInTheDocument();
   });
 
+  it('does not fetch CRM users while no tenant is selected', async () => {
+    vi.mocked(useTenant).mockReturnValue({ tenantId: null, tenantName: null });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    renderPage();
+
+    // Give any would-be async query a microtask to fire before asserting.
+    await Promise.resolve();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('renders the CRM users section heading', () => {
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     expect(screen.getByRole('heading', { name: 'CRM users' })).toBeInTheDocument();
   });
 
   it('renders the authentication management section heading', () => {
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     expect(screen.getByRole('heading', { name: 'Authentication management' })).toBeInTheDocument();
   });
 
   it('shows empty state when no CRM users exist', async () => {
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     await waitFor(() => {
       expect(
@@ -127,30 +148,20 @@ describe('AdminUsersPage', () => {
   });
 
   it('renders CRM user rows when users exist', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: [
-          {
-            id: 'user-1',
-            name: 'Alice Smith',
-            fieldValues: { email: 'alice@example.com', role: 'admin', job_title: 'CEO', is_active: true },
-          },
-          {
-            id: 'user-2',
-            name: 'Bob Jones',
-            fieldValues: { email: 'bob@example.com', role: 'user', job_title: '', is_active: false },
-          },
-        ],
-        total: 2,
-      }),
-    } as Response));
+    mockUsersResponse([
+      {
+        id: 'user-1',
+        name: 'Alice Smith',
+        fieldValues: { email: 'alice@example.com', role: 'admin', job_title: 'CEO', is_active: true },
+      },
+      {
+        id: 'user-2',
+        name: 'Bob Jones',
+        fieldValues: { email: 'bob@example.com', role: 'user', job_title: '', is_active: false },
+      },
+    ]);
 
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument();
@@ -162,25 +173,15 @@ describe('AdminUsersPage', () => {
   });
 
   it('renders user name as link to record detail', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: [
-          {
-            id: 'user-1',
-            name: 'Alice Smith',
-            fieldValues: { email: 'alice@example.com', role: 'admin', is_active: true },
-          },
-        ],
-        total: 1,
-      }),
-    } as Response));
+    mockUsersResponse([
+      {
+        id: 'user-1',
+        name: 'Alice Smith',
+        fieldValues: { email: 'alice@example.com', role: 'admin', is_active: true },
+      },
+    ]);
 
-    render(
-      <MemoryRouter>
-        <AdminUsersPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     await waitFor(() => {
       const link = screen.getByRole('link', { name: 'Alice Smith' });

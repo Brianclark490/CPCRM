@@ -67,6 +67,20 @@ export interface UseRecordsParams {
   [key: string]: unknown;
 }
 
+export interface UseRecordsOptions {
+  /**
+   * Extra session-context segments merged into the query key (but not the
+   * URL) so the cache entry is scoped to things like the current tenant.
+   *
+   * The records endpoint is already tenant-filtered server-side via the
+   * session cookie, so tenancy does not need to go over the wire. It does,
+   * however, need to be part of the client-side cache key: without it, a
+   * user who switches organisations can transiently see the previous
+   * tenant's records rendered from cache before the refetch completes.
+   */
+  scope?: Readonly<Record<string, unknown>>;
+}
+
 function buildQueryString(params: UseRecordsParams): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -88,12 +102,16 @@ function buildQueryString(params: UseRecordsParams): string {
 export function useRecords(
   apiName: string | undefined,
   params: UseRecordsParams = {},
+  options: UseRecordsOptions = {},
 ): UseQueryResult<RecordsResponse> {
   const { sessionToken } = useSession();
   const api = useApiClient();
+  const { scope } = options;
+
+  const keyParams: ListParams = scope ? { ...scope, ...params } : (params as ListParams);
 
   return useQuery({
-    queryKey: recordsKeys.list(apiName ?? '', params as ListParams),
+    queryKey: recordsKeys.list(apiName ?? '', keyParams),
     queryFn: () =>
       api.get<RecordsResponse>(
         `/api/v1/objects/${apiName}/records${buildQueryString(params)}`,
