@@ -118,7 +118,32 @@ describe('GET /objects/:apiName/page-layout', () => {
 
     await handleGetEffectivePageLayout(req, res);
 
-    expect(res.json).toHaveBeenCalledWith(PUBLISHED_LAYOUT);
+    expect(res.json).toHaveBeenCalledWith({
+      ...PUBLISHED_LAYOUT,
+      zones: { kpi: [], leftRail: [], rightRail: [] },
+    });
+  });
+
+  it('preserves populated zones on the published layout', async () => {
+    const withZones = {
+      ...PUBLISHED_LAYOUT,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'field', config: { fieldId: 'uuid-1' } }],
+        leftRail: [],
+        rightRail: [],
+      },
+    };
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'obj-1' }] })
+      .mockResolvedValueOnce({ rows: [{ published_layout: withZones }] });
+
+    const req = mockReq('account');
+    const res = mockRes();
+
+    await handleGetEffectivePageLayout(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(withZones);
   });
 
   it('returns role-specific layout when user has a matching role', async () => {
@@ -139,7 +164,10 @@ describe('GET /objects/:apiName/page-layout', () => {
 
     await handleGetEffectivePageLayout(req, res);
 
-    expect(res.json).toHaveBeenCalledWith(roleLayout);
+    expect(res.json).toHaveBeenCalledWith({
+      ...roleLayout,
+      zones: { kpi: [], leftRail: [], rightRail: [] },
+    });
     // Should have queried with the user's role
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('role = $3'),
@@ -165,7 +193,10 @@ describe('GET /objects/:apiName/page-layout', () => {
 
     await handleGetEffectivePageLayout(req, res);
 
-    expect(res.json).toHaveBeenCalledWith(PUBLISHED_LAYOUT);
+    expect(res.json).toHaveBeenCalledWith({
+      ...PUBLISHED_LAYOUT,
+      zones: { kpi: [], leftRail: [], rightRail: [] },
+    });
   });
 
   it('returns 204 when role-specific query returns nothing and no default exists', async () => {

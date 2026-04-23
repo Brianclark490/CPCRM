@@ -15,7 +15,15 @@ export interface PageLayoutJson {
     badges?: Array<{ fieldId: string; colorMap: Record<string, string> }>;
     actions?: string[];
   };
+  zones?: PageLayoutZones;
   tabs: PageLayoutTab[];
+}
+
+// KPI strip is a flat list of components; rails are vertical stacks of sections.
+export interface PageLayoutZones {
+  kpi: PageLayoutComponent[];
+  leftRail: PageLayoutSection[];
+  rightRail: PageLayoutSection[];
 }
 
 export interface PageLayoutTab {
@@ -103,6 +111,20 @@ const VALID_VISIBILITY_OPS = new Set([
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Fills in `zones` with empty arrays so readers always see a populated shape.
+// Old layouts (no `zones`) read as `{ kpi: [], leftRail: [], rightRail: [] }`.
+export function normalizeLayout(layout: PageLayoutJson): PageLayoutJson {
+  const z = layout.zones as Partial<PageLayoutZones> | null | undefined;
+  return {
+    ...layout,
+    zones: {
+      kpi: Array.isArray(z?.kpi) ? z!.kpi! : [],
+      leftRail: Array.isArray(z?.leftRail) ? z!.leftRail! : [],
+      rightRail: Array.isArray(z?.rightRail) ? z!.rightRail! : [],
+    },
+  };
+}
+
 function throwValidationError(message: string): never {
   const err = new Error(message) as Error & { code: string };
   err.code = 'VALIDATION_ERROR';
@@ -130,6 +152,7 @@ function throwDeleteBlockedError(message: string): never {
 // ─── Row → domain model ─────────────────────────────────────────────────────
 
 function rowToPageLayout(row: Selectable<PageLayouts>): PageLayout {
+  const rawPublished = row.published_layout as unknown as PageLayoutJson | null;
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -137,8 +160,8 @@ function rowToPageLayout(row: Selectable<PageLayouts>): PageLayout {
     name: row.name,
     role: row.role,
     isDefault: row.is_default,
-    layout: row.layout as unknown as PageLayoutJson,
-    publishedLayout: (row.published_layout as unknown as PageLayoutJson) ?? null,
+    layout: normalizeLayout(row.layout as unknown as PageLayoutJson),
+    publishedLayout: rawPublished ? normalizeLayout(rawPublished) : null,
     version: row.version,
     status: row.status,
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at as unknown as string),
@@ -155,7 +178,7 @@ function rowToPageLayoutVersion(row: Selectable<PageLayoutVersions>): PageLayout
     layoutId: row.layout_id,
     tenantId: row.tenant_id,
     version: row.version,
-    layout: row.layout as unknown as PageLayoutJson,
+    layout: normalizeLayout(row.layout as unknown as PageLayoutJson),
     publishedBy: row.published_by,
     publishedAt: row.published_at instanceof Date ? row.published_at : new Date(row.published_at as unknown as string),
   };
@@ -206,6 +229,90 @@ function validateVisibilityRule(rule: unknown): string | null {
   return null;
 }
 
+function validateComponent(comp: unknown): string | null {
+  if (typeof comp !== 'object' || comp === null) {
+    return 'Each component must be an object';
+  }
+  const c = comp as Record<string, unknown>;
+  if (typeof c.id !== 'string' || c.id.trim().length === 0) {
+    return 'Each component must have an id';
+  }
+  if (typeof c.type !== 'string' || !VALID_COMPONENT_TYPES.has(c.type)) {
+    return `Component "${c.id}" has invalid type: ${String(c.type)}. Must be one of: ${[...VALID_COMPONENT_TYPES].join(', ')}`;
+  }
+  if (typeof c.config !== 'object' || c.config === null) {
+    return `Component "${c.id}" must have a config object`;
+  }
+
+  const compVisErr = validateVisibilityRule(c.visibility);
+  if (compVisErr) return `Component "${c.id}": ${compVisErr}`;
+
+  return null;
+}
+
+function validateSection(section: unknown): string | null {
+  if (typeof section !== 'object' || section === null) {
+    return 'Each section must be an object';
+  }
+  const s = section as Record<string, unknown>;
+  if (typeof s.id !== 'string' || s.id.trim().length === 0) {
+    return 'Each section must have an id';
+  }
+  if (typeof s.type !== 'string' || !VALID_SECTION_TYPES.has(s.type)) {
+    return `Section "${s.id}" has invalid type: ${String(s.type)}. Must be one of: ${[...VALID_SECTION_TYPES].join(', ')}`;
+  }
+  if (typeof s.label !== 'string' || s.label.trim().length === 0) {
+    return `Section "${s.id}" must have a label`;
+  }
+
+  const visErr = validateVisibilityRule(s.visibility);
+  if (visErr) return `Section "${s.id}": ${visErr}`;
+
+  if (!Array.isArray(s.components)) {
+    return `Section "${s.id}" must have a components array`;
+  }
+
+  for (const comp of s.components) {
+    const compErr = validateComponent(comp);
+    if (compErr) return compErr;
+  }
+
+  return null;
+}
+
+function validateZones(zones: unknown): string | null {
+  if (zones === undefined || zones === null) return null;
+  if (typeof zones !== 'object' || Array.isArray(zones)) {
+    return 'layout.zones must be an object with kpi, leftRail, rightRail arrays';
+  }
+
+  const z = zones as Record<string, unknown>;
+
+  if (z.kpi !== undefined) {
+    if (!Array.isArray(z.kpi)) {
+      return 'layout.zones.kpi must be an array';
+    }
+    for (const comp of z.kpi) {
+      const compErr = validateComponent(comp);
+      if (compErr) return `zones.kpi: ${compErr}`;
+    }
+  }
+
+  for (const rail of ['leftRail', 'rightRail'] as const) {
+    if (z[rail] !== undefined) {
+      if (!Array.isArray(z[rail])) {
+        return `layout.zones.${rail} must be an array`;
+      }
+      for (const section of z[rail] as unknown[]) {
+        const secErr = validateSection(section);
+        if (secErr) return `zones.${rail}: ${secErr}`;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function validateLayoutJson(layout: unknown): string | null {
   if (typeof layout !== 'object' || layout === null) {
     return 'layout is required and must be an object';
@@ -234,6 +341,9 @@ export function validateLayoutJson(layout: unknown): string | null {
     return 'layout.header.actions must be an array of strings';
   }
 
+  const zonesErr = validateZones(l.zones);
+  if (zonesErr) return zonesErr;
+
   if (!Array.isArray(l.tabs)) {
     return 'layout.tabs is required and must be an array';
   }
@@ -255,45 +365,8 @@ export function validateLayoutJson(layout: unknown): string | null {
     }
 
     for (const section of t.sections) {
-      if (typeof section !== 'object' || section === null) {
-        return 'Each section must be an object';
-      }
-      const s = section as Record<string, unknown>;
-      if (typeof s.id !== 'string' || s.id.trim().length === 0) {
-        return 'Each section must have an id';
-      }
-      if (typeof s.type !== 'string' || !VALID_SECTION_TYPES.has(s.type)) {
-        return `Section "${s.id}" has invalid type: ${String(s.type)}. Must be one of: ${[...VALID_SECTION_TYPES].join(', ')}`;
-      }
-      if (typeof s.label !== 'string' || s.label.trim().length === 0) {
-        return `Section "${s.id}" must have a label`;
-      }
-
-      const visErr = validateVisibilityRule(s.visibility);
-      if (visErr) return `Section "${s.id}": ${visErr}`;
-
-      if (!Array.isArray(s.components)) {
-        return `Section "${s.id}" must have a components array`;
-      }
-
-      for (const comp of s.components) {
-        if (typeof comp !== 'object' || comp === null) {
-          return 'Each component must be an object';
-        }
-        const c = comp as Record<string, unknown>;
-        if (typeof c.id !== 'string' || c.id.trim().length === 0) {
-          return 'Each component must have an id';
-        }
-        if (typeof c.type !== 'string' || !VALID_COMPONENT_TYPES.has(c.type)) {
-          return `Component "${c.id}" has invalid type: ${String(c.type)}. Must be one of: ${[...VALID_COMPONENT_TYPES].join(', ')}`;
-        }
-        if (typeof c.config !== 'object' || c.config === null) {
-          return `Component "${c.id}" must have a config object`;
-        }
-
-        const compVisErr = validateVisibilityRule(c.visibility);
-        if (compVisErr) return `Component "${c.id}": ${compVisErr}`;
-      }
+      const secErr = validateSection(section);
+      if (secErr) return secErr;
     }
   }
 

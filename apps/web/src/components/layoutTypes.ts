@@ -58,12 +58,42 @@ export interface HeaderConfig {
   secondaryFields: string[];
 }
 
+// KPI strip is a flat list of components; rails are vertical stacks of sections.
+export interface LayoutZones {
+  kpi: LayoutComponentDef[];
+  leftRail: LayoutSectionDef[];
+  rightRail: LayoutSectionDef[];
+}
+
 export interface PageLayout {
   id: string;
   objectId: string;
   name: string;
   header: HeaderConfig;
+  zones?: LayoutZones;
   tabs: LayoutTab[];
+}
+
+export const EMPTY_ZONES: LayoutZones = {
+  kpi: [],
+  leftRail: [],
+  rightRail: [],
+};
+
+// Fills in `zones` so renderer + builder always see a populated shape.
+// Old layouts (no `zones`) read as `{ kpi: [], leftRail: [], rightRail: [] }`.
+export function normalizeLayout<T extends { zones?: Partial<LayoutZones> | null }>(
+  layout: T,
+): T & { zones: LayoutZones } {
+  const z = layout.zones ?? null;
+  return {
+    ...layout,
+    zones: {
+      kpi: Array.isArray(z?.kpi) ? z!.kpi! : [],
+      leftRail: Array.isArray(z?.leftRail) ? z!.leftRail! : [],
+      rightRail: Array.isArray(z?.rightRail) ? z!.rightRail! : [],
+    },
+  };
 }
 
 export interface FieldDefinitionRef {
