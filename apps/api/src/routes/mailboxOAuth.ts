@@ -26,9 +26,13 @@ import {
  *
  * GET /mailbox/connect/microsoft        – authenticated; starts the flow.
  * GET /mailbox/oauth/microsoft/callback – redirected-to by Microsoft; uses
- *                                         signed state to re-identify the
- *                                         user (no Descope session cookie is
- *                                         guaranteed across the 302).
+ *                                         the opaque `state` value as a key
+ *                                         into an in-memory `stateStore` map
+ *                                         to re-identify the user (no Descope
+ *                                         session cookie is guaranteed across
+ *                                         the 302). Limited to a single
+ *                                         instance — move to shared storage
+ *                                         before running behind a scale-out.
  * POST /mailbox/disconnect              – revokes the stored tokens and
  *                                         cancels the Graph subscription.
  * GET /mailbox/status                   – current connection status for the
@@ -138,22 +142,26 @@ mailboxOAuthRouter.get(
   },
 );
 
-mailboxOAuthRouter.post(
-  '/disconnect',
-  requireAuth,
-  requireTenant,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const tenantId = req.user!.tenantId!;
-    const userId = req.user!.userId;
+async function handleDisconnect(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const tenantId = req.user!.tenantId!;
+  const userId = req.user!.userId;
 
-    const connection = await getMailboxConnection(tenantId, userId);
-    if (connection) {
-      await deleteSubscription(connection.id);
-    }
-    await disconnectMailbox(tenantId, userId);
-    res.status(204).end();
-  },
-);
+  const connection = await getMailboxConnection(tenantId, userId);
+  if (connection) {
+    await deleteSubscription(connection.id);
+  }
+  await disconnectMailbox(tenantId, userId);
+  res.status(204).end();
+}
+
+// Expose both verbs: DELETE is the canonical REST shape, POST is kept as an
+// alias so callers with strict CSRF tooling (that doesn't send bodies on
+// DELETE) still work.
+mailboxOAuthRouter.delete('/disconnect', requireAuth, requireTenant, handleDisconnect);
+mailboxOAuthRouter.post('/disconnect', requireAuth, requireTenant, handleDisconnect);
 
 mailboxOAuthRouter.get(
   '/status',

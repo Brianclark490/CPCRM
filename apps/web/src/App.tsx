@@ -42,6 +42,11 @@ function OpportunityDetailRedirect() {
   return <Navigate to={`/objects/opportunity/${id ?? ''}`} replace />;
 }
 
+function LegacyIngestRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/email-ingest?ingest=${encodeURIComponent(id ?? '')}`} replace />;
+}
+
 export function App() {
   return (
     <BrowserRouter>
@@ -277,7 +282,13 @@ export function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/email-ingest/:id" element={<Navigate to="/email-ingest" replace />} />
+        {/* Legacy deep link: /email-ingest/:id redirects to the canonical
+            query-param form so review Tasks created before the rename still
+            land correctly on the list with the modal opened. */}
+        <Route
+          path="/email-ingest/:id"
+          element={<LegacyIngestRedirect />}
+        />
         <Route
           path="/objects/:apiName"
           element={

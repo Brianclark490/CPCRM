@@ -5,9 +5,16 @@ import { encryptToken, decryptToken } from '../lib/tokenEncryption.js';
 
 /**
  * Microsoft Graph OAuth 2.0 authorization-code flow wrappers plus storage of
- * the resulting refresh token (encrypted at rest). Access tokens are never
- * persisted between requests — we always refresh on demand so a compromised
- * DB dump cannot be used directly against Graph.
+ * the resulting OAuth tokens (encrypted at rest with AES-256-GCM).
+ *
+ * The refresh token is required to mint new access tokens and is always
+ * encrypted in the DB (column `refresh_token_enc`). The last access token is
+ * also cached encrypted so we can reuse it until it's near expiry, avoiding
+ * a refresh round-trip on every Graph call. `getAccessToken()` transparently
+ * refreshes when the cached token is within 60s of its stored expiry.
+ *
+ * On disconnect, `refresh_token_enc` is nulled so the stored row can no
+ * longer mint tokens even if something else holds the connection id.
  */
 
 export const MS_AUTH_BASE = 'https://login.microsoftonline.com';
@@ -186,14 +193,19 @@ export async function saveMailboxConnection(params: {
 /**
  * Returns an up-to-date access token for the connection, refreshing via the
  * refresh_token grant when the stored access token is within 60s of expiry.
+ *
+ * Refuses to mint tokens for revoked connections or rows whose
+ * `refresh_token_enc` has been nulled — this is the defence-in-depth
+ * counterpart to `disconnectMailbox()`, which clears the refresh token.
  */
 export async function getAccessToken(connectionId: string): Promise<string> {
   const result = await pool.query<{
     access_token_enc: Buffer | null;
-    refresh_token_enc: Buffer;
+    refresh_token_enc: Buffer | null;
     token_expires_at: Date | null;
+    status: 'active' | 'paused' | 'revoked' | 'error';
   }>(
-    `SELECT access_token_enc, refresh_token_enc, token_expires_at
+    `SELECT access_token_enc, refresh_token_enc, token_expires_at, status
        FROM mailbox_connections
       WHERE id = $1`,
     [connectionId],
@@ -202,6 +214,13 @@ export async function getAccessToken(connectionId: string): Promise<string> {
     throw new Error('Mailbox connection not found');
   }
   const row = result.rows[0];
+
+  if (row.status === 'revoked') {
+    throw new Error('Mailbox connection has been revoked');
+  }
+  if (!row.refresh_token_enc) {
+    throw new Error('Mailbox connection has no refresh token');
+  }
 
   const stillValid =
     row.access_token_enc &&
@@ -251,9 +270,16 @@ export async function disconnectMailbox(
   tenantId: string,
   userId: string,
 ): Promise<void> {
+  // Null both token columns so a stale connection id can't mint new tokens
+  // after disconnect. We keep the row itself (with status='revoked') for
+  // audit so it's possible to see when a user had a mailbox connected.
   await pool.query(
     `UPDATE mailbox_connections
-        SET status = 'revoked', access_token_enc = NULL, updated_at = NOW()
+        SET status = 'revoked',
+            access_token_enc = NULL,
+            refresh_token_enc = NULL,
+            token_expires_at = NULL,
+            updated_at = NOW()
       WHERE tenant_id = $1 AND user_id = $2`,
     [tenantId, userId],
   );

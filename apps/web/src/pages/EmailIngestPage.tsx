@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApiClient } from '../lib/apiClient.js';
 import styles from './EmailIngestPage.module.css';
 
@@ -63,6 +64,7 @@ function statusLabel(status: IngestRow['status']): string {
 
 export function EmailIngestPage() {
   const api = useApiClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<IngestRow[]>([]);
   const [internalRows, setInternalRows] = useState<InternalRecentRow[]>([]);
   const [selected, setSelected] = useState<IngestDetail | null>(null);
@@ -97,6 +99,20 @@ export function EmailIngestPage() {
     },
     [api],
   );
+
+  // Review Tasks created by the server link to /email-ingest?ingest=<id>.
+  // When that query param is present, auto-open the modal so the user
+  // lands directly on the item they need to resolve.
+  useEffect(() => {
+    const id = searchParams.get('ingest');
+    if (id && (!selected || selected.id !== id)) {
+      void openDetail(id);
+      // Clear the param so a manual refresh / close doesn't re-open.
+      const next = new URLSearchParams(searchParams);
+      next.delete('ingest');
+      setSearchParams(next, { replace: true });
+    }
+  }, [openDetail, searchParams, selected, setSearchParams]);
 
   const resolve = useCallback(
     async (
@@ -210,11 +226,22 @@ export function EmailIngestPage() {
       </section>
 
       {selected && (
-        <div className={styles.modal} role="dialog" aria-modal="true">
+        <div
+          className={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`email-ingest-dialog-title-${selected.id}`}
+        >
           <div className={styles.modalCard}>
             <header className={styles.modalHeader}>
-              <h3>{selected.subject ?? '(no subject)'}</h3>
-              <button className={styles.close} onClick={() => setSelected(null)}>
+              <h3 id={`email-ingest-dialog-title-${selected.id}`}>
+                {selected.subject ?? '(no subject)'}
+              </h3>
+              <button
+                className={styles.close}
+                aria-label="Close dialog"
+                onClick={() => setSelected(null)}
+              >
                 ×
               </button>
             </header>

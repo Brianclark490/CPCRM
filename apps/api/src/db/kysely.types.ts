@@ -63,6 +63,33 @@ export interface Contacts {
   updated_at: Generated<Timestamp>;
 }
 
+export interface EmailIngest {
+  account_id: string | null;
+  activity_id: string | null;
+  cc_emails: string[] | null;
+  confidence: Numeric | null;
+  conversation_id: string | null;
+  created_at: Generated<Timestamp>;
+  error: string | null;
+  filter_decision: string;
+  from_email: string | null;
+  from_name: string | null;
+  html_body: string | null;
+  id: Generated<string>;
+  llm_extraction: Json | null;
+  provider: string;
+  provider_msg_id: string;
+  received_at: Generated<Timestamp>;
+  review_task_id: string | null;
+  status: string;
+  subject: string | null;
+  tenant_id: string;
+  text_body: string | null;
+  to_emails: string[] | null;
+  updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
 export interface FieldDefinitions {
   api_name: string;
   created_at: Generated<Timestamp>;
@@ -109,6 +136,37 @@ export interface LeadConversionMappings {
   lead_field_api_name: string;
   target_field_api_name: string;
   target_object: string;
+  tenant_id: string;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface MailboxConnections {
+  access_token_enc: Buffer | null;
+  connected_at: Generated<Timestamp>;
+  email_address: string;
+  id: Generated<string>;
+  last_error: string | null;
+  provider: string;
+  provider_user_id: string;
+  refresh_token_enc: Buffer | null;
+  scopes: string[];
+  status: Generated<string>;
+  tenant_id: string;
+  token_expires_at: Timestamp | null;
+  updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
+export interface MailboxSubscriptions {
+  client_state: string;
+  created_at: Generated<Timestamp>;
+  delta_link: string | null;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  mailbox_connection_id: string;
+  provider: string;
+  provider_subscription_id: string;
+  resource: string;
   tenant_id: string;
   updated_at: Generated<Timestamp>;
 }
@@ -358,10 +416,13 @@ export interface UserProfiles {
 export interface DB {
   accounts: Accounts;
   contacts: Contacts;
+  email_ingest: EmailIngest;
   field_definitions: FieldDefinitions;
   layout_definitions: LayoutDefinitions;
   layout_fields: LayoutFields;
   lead_conversion_mappings: LeadConversionMappings;
+  mailbox_connections: MailboxConnections;
+  mailbox_subscriptions: MailboxSubscriptions;
   object_definitions: ObjectDefinitions;
   object_permissions: ObjectPermissions;
   opportunities: Opportunities;

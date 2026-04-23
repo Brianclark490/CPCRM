@@ -305,12 +305,28 @@ export interface GraphMessageDetail {
   internetMessageHeaders?: Array<{ name: string; value: string }>;
 }
 
+/**
+ * Graph message ids are opaque strings but always alphanumeric + a small
+ * set of URL-safe separators. Rejecting anything else guards against a
+ * supply-chain bug that lets `messageId` traverse (`..`, `/`, etc.) or
+ * escape out of the `/me/messages/` segment of the URL (CodeQL js/request-forgery).
+ */
+const GRAPH_ID_RE = /^[A-Za-z0-9_\-=]{1,256}$/;
+
+export function assertGraphId(id: string): string {
+  if (!GRAPH_ID_RE.test(id)) {
+    throw new Error('Invalid Graph message id');
+  }
+  return id;
+}
+
 export async function fetchMessage(
   mailboxConnectionId: string,
   messageId: string,
 ): Promise<GraphMessageDetail> {
+  const safeId = assertGraphId(messageId);
   const accessToken = await getAccessToken(mailboxConnectionId);
-  const url = `${MS_GRAPH_BASE}/v1.0/me/messages/${messageId}?$select=id,internetMessageId,subject,bodyPreview,body,from,toRecipients,ccRecipients,receivedDateTime,conversationId,hasAttachments,internetMessageHeaders`;
+  const url = `${MS_GRAPH_BASE}/v1.0/me/messages/${encodeURIComponent(safeId)}?$select=id,internetMessageId,subject,bodyPreview,body,from,toRecipients,ccRecipients,receivedDateTime,conversationId,hasAttachments,internetMessageHeaders`;
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -319,7 +335,7 @@ export async function fetchMessage(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Graph /me/messages/${messageId} ${res.status}: ${text}`);
+    throw new Error(`Graph /me/messages/${safeId} ${res.status}: ${text}`);
   }
   return (await res.json()) as GraphMessageDetail;
 }

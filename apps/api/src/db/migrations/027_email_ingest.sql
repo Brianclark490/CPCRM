@@ -43,7 +43,11 @@ CREATE TABLE IF NOT EXISTS mailbox_connections (
     provider_user_id   TEXT          NOT NULL,                  -- Graph user id ('sub' or 'oid')
     email_address      TEXT          NOT NULL,
     access_token_enc   BYTEA,                                   -- AES-256-GCM (iv || tag || ct)
-    refresh_token_enc  BYTEA         NOT NULL,
+    -- refresh_token_enc is nullable because on disconnect we null it out so
+    -- the stored row can no longer mint new access tokens, while preserving
+    -- the connection history row for audit. Creating a new connection
+    -- overwrites this column via ON CONFLICT DO UPDATE.
+    refresh_token_enc  BYTEA,
     token_expires_at   TIMESTAMPTZ,
     scopes             TEXT[]        NOT NULL,
     status             TEXT          NOT NULL DEFAULT 'active', -- active|paused|revoked|error
@@ -120,9 +124,31 @@ CREATE INDEX IF NOT EXISTS idx_email_ingest_conversation
     ON email_ingest (tenant_id, conversation_id);
 
 -- ──────────────────────────────────────────────────────────────────────────────
--- Row-Level Security — reuses the helper from migration 025
+-- Row-Level Security — mirrors the tenant_isolation / tenant_isolation_bypass
+-- pair installed by migration 025. The helper function _enable_tenant_rls()
+-- is dropped at the end of 025, so policies are declared inline here.
 -- ──────────────────────────────────────────────────────────────────────────────
 
-SELECT _enable_tenant_rls('mailbox_connections');
-SELECT _enable_tenant_rls('mailbox_subscriptions');
-SELECT _enable_tenant_rls('email_ingest');
+ALTER TABLE mailbox_connections   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mailbox_connections   FORCE  ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON mailbox_connections
+  USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY tenant_isolation_bypass ON mailbox_connections
+  USING (current_setting('app.current_tenant_id', true) IS NULL
+      OR current_setting('app.current_tenant_id', true) = '');
+
+ALTER TABLE mailbox_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mailbox_subscriptions FORCE  ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON mailbox_subscriptions
+  USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY tenant_isolation_bypass ON mailbox_subscriptions
+  USING (current_setting('app.current_tenant_id', true) IS NULL
+      OR current_setting('app.current_tenant_id', true) = '');
+
+ALTER TABLE email_ingest          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_ingest          FORCE  ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON email_ingest
+  USING (tenant_id = current_setting('app.current_tenant_id', true));
+CREATE POLICY tenant_isolation_bypass ON email_ingest
+  USING (current_setting('app.current_tenant_id', true) IS NULL
+      OR current_setting('app.current_tenant_id', true) = '');

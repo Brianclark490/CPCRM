@@ -28,6 +28,7 @@ import {
  */
 
 export type IngestStatus =
+  | 'processing'          // transient — row is inserted, extraction not yet finalised
   | 'auto_applied'
   | 'new_account'
   | 'pending_user_review'
@@ -77,18 +78,41 @@ export interface IngestOutcome {
 function stripHtml(html: string): string {
   // A deliberately simple HTML stripper for the LLM prompt — full sanitisation
   // isn't required because we never render this string, we only feed it to
-  // the model. We collapse whitespace so the token count stays bounded.
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // the model.
+  //
+  // We cap the input length BEFORE running the regexes so a pathological body
+  // can't trigger polynomial backtracking on the `<style>` / `<script>`
+  // patterns (CodeQL js/polynomial-redos).
+  //
+  // Entity unescaping is done in a single pass via a lookup map so an input
+  // like `&amp;lt;` doesn't get double-unescaped into `<` (the two-step
+  // approach would first produce `&lt;` then `<`).
+  const MAX_INPUT = 200_000;
+  const capped = html.length > MAX_INPUT ? html.slice(0, MAX_INPUT) : html;
+
+  // [\s\S] so the match crosses newlines; the `\/?\s*>` variant covers
+  // `</script>` as well as `</script >` which the previous regex missed.
+  const withoutBlocks = capped
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ');
+
+  const withoutTags = withoutBlocks.replace(/<[^>]+>/g, ' ');
+
+  const entityMap: Record<string, string> = {
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&apos;': "'",
+  };
+  const unescaped = withoutTags.replace(
+    /&(?:nbsp|amp|lt|gt|quot|apos|#39);/gi,
+    (m) => entityMap[m.toLowerCase()] ?? m,
+  );
+
+  return unescaped.replace(/\s+/g, ' ').trim();
 }
 
 function bodyForLlm(email: InboundEmail): string {
@@ -104,16 +128,21 @@ function domainOfEmail(email: string): string | undefined {
 
 async function loadOwnerDomain(
   tenantId: string,
+  userId: string,
   ownerEmail: string | undefined,
 ): Promise<string> {
   if (ownerEmail) {
     const d = domainOfEmail(ownerEmail);
     if (d) return d;
   }
-  // Fall back to the mailbox_connections row for this user.
+  // Scope the fallback by (tenant_id, user_id) so we never pick another
+  // user's mailbox domain in a shared tenant. Return '' when unknown rather
+  // than guessing; the filter then treats every external sender as external.
   const result = await pool.query<{ email_address: string }>(
-    `SELECT email_address FROM mailbox_connections WHERE tenant_id = $1 LIMIT 1`,
-    [tenantId],
+    `SELECT email_address FROM mailbox_connections
+      WHERE tenant_id = $1 AND user_id = $2 AND status = 'active'
+      LIMIT 1`,
+    [tenantId, userId],
   );
   const fromConn = result.rows[0]?.email_address;
   return (fromConn ? domainOfEmail(fromConn) : undefined) ?? '';
@@ -151,18 +180,31 @@ async function writeIngestRow(params: {
   userId: string;
   email: InboundEmail;
   filterDecision: FilterDecision | 'manual';
-}): Promise<string> {
+}): Promise<{ id: string; insertedByUs: boolean }> {
   const id = randomUUID();
   const { tenantId, userId, email, filterDecision } = params;
 
-  await pool.query(
+  // Initial status for rows we'll process is `processing`, not `failed`, so
+  // the UI never shows a temporary false-failure. Skipped rows finalise
+  // inline immediately below so their status is correct on insert.
+  const initialStatus =
+    filterDecision === 'processed' || filterDecision === 'manual'
+      ? 'processing'
+      : 'skipped';
+
+  // INSERT ... ON CONFLICT DO NOTHING RETURNING id returns the new id only
+  // when we were the inserter. When a concurrent delivery has already
+  // inserted the row, our statement returns no rows and the second worker
+  // bails out rather than running a duplicate extraction (idempotency).
+  const insertResult = await pool.query<{ id: string }>(
     `INSERT INTO email_ingest (
        id, tenant_id, user_id, received_at, provider, provider_msg_id,
        from_email, from_name, to_emails, cc_emails, subject,
        text_body, html_body, conversation_id,
        filter_decision, status
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-     ON CONFLICT (tenant_id, provider, provider_msg_id) DO NOTHING`,
+     ON CONFLICT (tenant_id, provider, provider_msg_id) DO NOTHING
+     RETURNING id`,
     [
       id,
       tenantId,
@@ -179,18 +221,23 @@ async function writeIngestRow(params: {
       email.htmlBody ?? null,
       email.conversationId ?? null,
       filterDecision,
-      filterDecision === 'processed' || filterDecision === 'manual'
-        ? 'failed' // placeholder until orchestration finalises — set below
-        : 'skipped',
+      initialStatus,
     ],
   );
 
+  if (insertResult.rows.length > 0) {
+    return { id: insertResult.rows[0].id, insertedByUs: true };
+  }
+
+  // Conflict path: another worker inserted first. Look up the existing row
+  // so callers can report the prior outcome, but signal that we should NOT
+  // re-run extraction or side effects.
   const existing = await pool.query<{ id: string }>(
     `SELECT id FROM email_ingest
       WHERE tenant_id = $1 AND provider = $2 AND provider_msg_id = $3`,
     [tenantId, email.provider, email.providerMsgId],
   );
-  return existing.rows[0]!.id;
+  return { id: existing.rows[0]!.id, insertedByUs: false };
 }
 
 async function finaliseIngest(
@@ -280,7 +327,7 @@ async function createReviewTask(
     `From: ${email.from.email}`,
     `Subject: ${email.subject ?? '(no subject)'}`,
     ``,
-    `Open the review at /email-ingest/${ingestId} to choose the right account,`,
+    `Open /email-ingest?ingest=${ingestId} to choose the right account,`,
     `create a new one, or discard.`,
   ].join('\n');
 
@@ -422,7 +469,7 @@ export async function ingestEmail(
     };
   }
 
-  const ownerDomain = await loadOwnerDomain(ctx.tenantId, ctx.ownerEmail);
+  const ownerDomain = await loadOwnerDomain(ctx.tenantId, ctx.userId, ctx.ownerEmail);
   const mentioned = await trackedContactEmails(ctx.tenantId);
 
   const filterable: FilterableMessage = {
@@ -446,15 +493,43 @@ export async function ingestEmail(
     ? 'manual'
     : decision;
 
-  const ingestId = await writeIngestRow({
+  const { id: ingestId, insertedByUs } = await writeIngestRow({
     tenantId: ctx.tenantId,
     userId: ctx.userId,
     email,
     filterDecision: effectiveDecision,
   });
 
+  // If another worker beat us to the insert, don't run extraction or any
+  // side effects — just return the existing row's status. This closes the
+  // concurrent-delivery race on the (tenant_id, provider, provider_msg_id)
+  // unique constraint.
+  if (!insertedByUs) {
+    const existing = await pool.query<{
+      status: IngestStatus;
+      account_id: string | null;
+      activity_id: string | null;
+      review_task_id: string | null;
+      confidence: number | null;
+    }>(
+      `SELECT status, account_id, activity_id, review_task_id, confidence
+         FROM email_ingest WHERE id = $1`,
+      [ingestId],
+    );
+    const row = existing.rows[0];
+    return {
+      ingestId,
+      status: row?.status ?? 'resolved',
+      accountId: row?.account_id ?? undefined,
+      activityId: row?.activity_id ?? undefined,
+      reviewTaskId: row?.review_task_id ?? undefined,
+      confidence: row?.confidence ?? undefined,
+      filterDecision: effectiveDecision,
+    };
+  }
+
   if (decision !== 'processed' && !ctx.forceInclude) {
-    await finaliseIngest(ingestId, { status: 'skipped' });
+    // Row was inserted with status='skipped' already — no UPDATE needed.
     logger.debug({ ingestId, decision, reason }, 'Email skipped by filter');
     return { ingestId, status: 'skipped', filterDecision: decision };
   }

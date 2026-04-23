@@ -15,7 +15,10 @@ import {
   ingestEmail,
   resolvePendingIngest,
 } from '../services/emailIngestService.js';
-import type { GraphMessageDetail } from '../services/graphSubscriptionService.js';
+import {
+  assertGraphId,
+  type GraphMessageDetail,
+} from '../services/graphSubscriptionService.js';
 
 /**
  * User-facing email-ingest endpoints (JWT-authenticated).
@@ -175,12 +178,15 @@ mailboxFeedRouter.get(
 
     try {
       const accessToken = await getAccessToken(connection.id);
-      const select =
-        '$select=id,subject,from,toRecipients,receivedDateTime,bodyPreview&$top=25&$orderby=receivedDateTime desc';
-      const filter = `$filter=from/emailAddress/address eq '${ownerDomain}' or endswith(from/emailAddress/address, '@${ownerDomain}')`;
-      // Graph does not support `endswith` on `from/...` with a leading eq on
-      // the same path; we filter client-side as a fallback.
-      const url = `${MS_GRAPH_BASE}/v1.0/me/mailFolders('Inbox')/messages?${select}`;
+      // We intentionally over-fetch and filter client-side by the owner's
+      // domain. Graph's OData `$filter` on `from/emailAddress/address` with
+      // `endswith` is unreliable and sometimes rejected by Exchange, so it's
+      // simpler to fetch the last 25 inbox messages and drop anything that
+      // doesn't end with `@<ownerDomain>`.
+      const url =
+        `${MS_GRAPH_BASE}/v1.0/me/mailFolders('Inbox')/messages` +
+        `?$select=id,subject,from,toRecipients,receivedDateTime,bodyPreview` +
+        `&$top=25&$orderby=receivedDateTime desc`;
       const ghRes = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -205,7 +211,6 @@ mailboxFeedRouter.get(
           preview: m.bodyPreview,
           toEmails: (m.toRecipients ?? []).map((r) => r.emailAddress.address),
         })),
-        unusedFilterHint: filter, // kept to appease an unused-var lint warning
       });
     } catch (err) {
       logger.warn({ err }, 'Failed to load internal-recent');
@@ -222,13 +227,19 @@ mailboxFeedRouter.post(
     const tenantId = req.user!.tenantId!;
     const userId = req.user!.userId;
     const { providerMessageId } = req.params as { providerMessageId: string };
+    let safeId: string;
+    try {
+      safeId = assertGraphId(providerMessageId);
+    } catch {
+      throw AppError.validation('Invalid Graph message id');
+    }
     const connection = await getMailboxConnection(tenantId, userId);
     if (!connection || connection.status !== 'active') {
       throw AppError.validation('Mailbox is not connected');
     }
 
     const accessToken = await getAccessToken(connection.id);
-    const url = `${MS_GRAPH_BASE}/v1.0/me/messages/${providerMessageId}?$select=id,internetMessageId,subject,bodyPreview,body,from,toRecipients,ccRecipients,receivedDateTime,conversationId,hasAttachments,internetMessageHeaders`;
+    const url = `${MS_GRAPH_BASE}/v1.0/me/messages/${encodeURIComponent(safeId)}?$select=id,internetMessageId,subject,bodyPreview,body,from,toRecipients,ccRecipients,receivedDateTime,conversationId,hasAttachments,internetMessageHeaders`;
     const ghRes = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });

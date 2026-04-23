@@ -109,7 +109,12 @@ async function processNotification(
           receivedAt: new Date(detail.receivedDateTime),
           conversationId: detail.conversationId,
           headers,
-          hasCalendarAttachment: detail.hasAttachments === true, // rough — refine later
+          // We intentionally don't derive `hasCalendarAttachment` from
+          // `hasAttachments` — the latter is true for any attachment
+          // (PDF, DOC, etc.) and would cause normal customer emails with
+          // attachments to be skipped. Real calendar-invite detection
+          // requires inspecting attachment content types, which is a
+          // separate Graph round-trip we skip for now.
         },
         {
           tenantId: binding.tenantId,

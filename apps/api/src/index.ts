@@ -124,17 +124,19 @@ const apiRouter = express.Router({ mergeParams: true });
 // error response conforms to the canonical shape.
 apiRouter.use(normalizeErrorResponses);
 
-// Rate limiting applies to every API request.
-apiRouter.use(globalLimiter);
-apiRouter.use(writeMethodLimiter);
-
-// Webhook routes are mounted BEFORE CSRF because:
+// Webhook routes are mounted BEFORE rate limiting and CSRF because:
 //   - Microsoft Graph and Postmark don't carry our CSRF cookie
 //   - They authenticate via their own signatures / clientState
 //   - They must be able to respond to Graph's ?validationToken= handshake
 //     with a plaintext echo inside 10 seconds
+//   - A mail burst can exceed writeMethodLimiter's 20 req/min/IP cap, which
+//     would cause Graph/Postmark to retry notifications or give up
 apiRouter.use('/webhooks/graph', graphWebhookRouter);
 apiRouter.use('/webhooks', inboundEmailForwardRouter);
+
+// Rate limiting applies to every API request EXCEPT the webhook routes above.
+apiRouter.use(globalLimiter);
+apiRouter.use(writeMethodLimiter);
 
 // Auth session routes handle cookie-based session establishment and CSRF token
 // provisioning.  They must be mounted *before* the CSRF middleware because:
