@@ -62,23 +62,6 @@ export interface LayoutFieldWithMetadata {
   width: string;
 }
 
-export interface LayoutDefinition {
-  id: string;
-  objectId: string;
-  name: string;
-  layoutType: string;
-  isDefault: boolean;
-  fields: LayoutFieldWithMetadata[];
-}
-
-export interface LayoutListItem {
-  id: string;
-  objectId: string;
-  name: string;
-  layoutType: string;
-  isDefault: boolean;
-}
-
 export interface LayoutSection {
   label: string;
   fields: LayoutFieldWithMetadata[];
