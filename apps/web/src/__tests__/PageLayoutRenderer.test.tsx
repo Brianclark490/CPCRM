@@ -542,6 +542,78 @@ describe('PageLayoutRenderer', () => {
 
   // ── Section with initially collapsed state ──────────────────────────────
 
+  // ── Zoned shell (KPI strip + rails) ─────────────────────────────────────
+
+  it('collapses to a simple shell when zones are absent (legacy layout)', () => {
+    renderLayout();
+    expect(screen.queryByTestId('kpi-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-left-rail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-right-rail')).not.toBeInTheDocument();
+    expect(screen.getByTestId('layout-main')).toBeInTheDocument();
+  });
+
+  it('collapses empty zones cleanly', () => {
+    const layout = makeLayout({
+      zones: { kpi: [], leftRail: [], rightRail: [] },
+    });
+    renderLayout(layout);
+    expect(screen.queryByTestId('kpi-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-left-rail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-right-rail')).not.toBeInTheDocument();
+  });
+
+  it('renders KPI strip with zone components', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [
+          { id: 'k1', type: 'activity_timeline', config: {} },
+          { id: 'k2', type: 'notes', config: {} },
+        ],
+        leftRail: [],
+        rightRail: [],
+      },
+    });
+    renderLayout(layout);
+    expect(screen.getByTestId('kpi-strip')).toBeInTheDocument();
+    expect(screen.getByText('Activity Timeline')).toBeInTheDocument();
+    expect(screen.getByText('Notes')).toBeInTheDocument();
+  });
+
+  it('renders left and right rails with their sections', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [],
+        leftRail: [
+          {
+            id: 'left-sec',
+            label: 'Left Rail Section',
+            columns: 1,
+            components: [
+              { id: 'lr1', type: 'field', config: { fieldApiName: 'email' } },
+            ],
+          },
+        ],
+        rightRail: [
+          {
+            id: 'right-sec',
+            label: 'Right Rail Section',
+            columns: 1,
+            components: [
+              { id: 'rr1', type: 'field', config: { fieldApiName: 'phone' } },
+            ],
+          },
+        ],
+      },
+    });
+
+    renderLayout(layout);
+
+    expect(screen.getByTestId('layout-left-rail')).toBeInTheDocument();
+    expect(screen.getByTestId('layout-right-rail')).toBeInTheDocument();
+    expect(screen.getByText('Left Rail Section')).toBeInTheDocument();
+    expect(screen.getByText('Right Rail Section')).toBeInTheDocument();
+  });
+
   it('renders section collapsed when collapsed is true', () => {
     const layout = makeLayout({
       tabs: [
