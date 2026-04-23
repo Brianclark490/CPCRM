@@ -579,6 +579,63 @@ describe('PageLayoutRenderer', () => {
     expect(screen.getByText('Notes')).toBeInTheDocument();
   });
 
+  it('hides KPI strip when every KPI component fails visibility', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [
+          {
+            id: 'k-hidden',
+            type: 'activity_timeline',
+            config: {},
+            visibility: {
+              operator: 'AND',
+              conditions: [{ field: 'status', op: 'equals', value: 'Closed' }],
+            },
+          },
+        ],
+        leftRail: [],
+        rightRail: [],
+      },
+    });
+    renderLayout(layout);
+    expect(screen.queryByTestId('kpi-strip')).not.toBeInTheDocument();
+  });
+
+  it('hides rails when every rail section fails visibility', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [],
+        leftRail: [
+          {
+            id: 'left-hidden',
+            label: 'Hidden Left',
+            columns: 1,
+            visibility: {
+              operator: 'AND',
+              conditions: [{ field: 'status', op: 'equals', value: 'Closed' }],
+            },
+            components: [],
+          },
+        ],
+        rightRail: [
+          {
+            id: 'right-hidden',
+            label: 'Hidden Right',
+            columns: 1,
+            visibility: {
+              operator: 'AND',
+              conditions: [{ field: 'status', op: 'equals', value: 'Closed' }],
+            },
+            components: [],
+          },
+        ],
+      },
+    });
+    renderLayout(layout);
+    expect(screen.queryByTestId('layout-left-rail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('layout-right-rail')).not.toBeInTheDocument();
+  });
+
   it('renders left and right rails with their sections', () => {
     const layout = makeLayout({
       zones: {

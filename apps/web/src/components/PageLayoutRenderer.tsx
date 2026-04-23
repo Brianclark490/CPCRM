@@ -11,6 +11,7 @@ import { RecordHeader } from './RecordHeader.js';
 import { PageLayoutTabBar } from './PageLayoutTabBar.js';
 import { LayoutSection } from './LayoutSection.js';
 import { KpiStrip } from './KpiStrip.js';
+import { evaluateVisibility } from './evaluateVisibility.js';
 import styles from './PageLayoutRenderer.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -45,8 +46,14 @@ export function PageLayoutRenderer({
 
   const activeTab = layout.tabs.find((t) => t.id === activeTabId) ?? layout.tabs[0];
   const zones = layout.zones ?? EMPTY_ZONES;
-  const hasLeftRail = zones.leftRail.length > 0;
-  const hasRightRail = zones.rightRail.length > 0;
+  const visibleLeftRail = zones.leftRail.filter((s) =>
+    evaluateVisibility(s.visibility, record.fieldValues),
+  );
+  const visibleRightRail = zones.rightRail.filter((s) =>
+    evaluateVisibility(s.visibility, record.fieldValues),
+  );
+  const hasLeftRail = visibleLeftRail.length > 0;
+  const hasRightRail = visibleRightRail.length > 0;
 
   const bodyClass = [
     styles.body,
@@ -94,7 +101,7 @@ export function PageLayoutRenderer({
             className={`${styles.rail} ${styles.leftRail}`}
             data-testid="layout-left-rail"
           >
-            {renderRail(zones.leftRail)}
+            {renderRail(visibleLeftRail)}
           </aside>
         )}
 
@@ -126,7 +133,7 @@ export function PageLayoutRenderer({
             className={`${styles.rail} ${styles.rightRail}`}
             data-testid="layout-right-rail"
           >
-            {renderRail(zones.rightRail)}
+            {renderRail(visibleRightRail)}
           </aside>
         )}
       </div>

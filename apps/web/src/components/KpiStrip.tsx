@@ -5,6 +5,7 @@ import type {
   ObjectDefinitionRef,
 } from './layoutTypes.js';
 import { LayoutComponent } from './LayoutComponent.js';
+import { evaluateVisibility } from './evaluateVisibility.js';
 import styles from './KpiStrip.module.css';
 
 interface KpiStripProps {
@@ -22,13 +23,17 @@ export function KpiStrip({
   objectDef,
   onRecordCreated,
 }: KpiStripProps) {
-  if (components.length === 0) {
+  const visible = components.filter((c) =>
+    evaluateVisibility(c.visibility, record.fieldValues),
+  );
+
+  if (visible.length === 0) {
     return null;
   }
 
   return (
     <div className={styles.kpiStrip} data-testid="kpi-strip">
-      {components.map((comp) => (
+      {visible.map((comp) => (
         <div key={comp.id} className={styles.kpiItem}>
           <LayoutComponent
             component={comp}
