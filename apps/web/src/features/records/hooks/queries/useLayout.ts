@@ -15,6 +15,11 @@ export interface LayoutFieldWithMetadata {
   sortOrder: number;
   section: number;
   width: string;
+  // The backend also returns these on form layouts; list-layout callers
+  // ignore them, record-detail callers depend on them.
+  fieldRequired?: boolean;
+  fieldOptions?: Record<string, unknown>;
+  sectionLabel?: string;
 }
 
 export interface LayoutDefinition {
