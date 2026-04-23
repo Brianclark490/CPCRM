@@ -47,6 +47,12 @@ interface ReorderContext {
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiClientError) {
+    // Surface the canonical "connection failed" copy for network-level
+    // failures — `err.message` in that case is whatever the browser threw
+    // (e.g. "Failed to fetch") and isn't user-friendly.
+    if (err.isNetwork) {
+      return 'Failed to connect to the server. Please try again.';
+    }
     return err.message || fallback;
   }
   return fallback;
@@ -59,19 +65,21 @@ export function useFieldMutations({
   const { sessionToken } = useSession();
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const objectDetailKey = objectDefinitionsKeys.detail(objectId ?? '');
 
-  const invalidateFieldLists = () => {
+  // Key invalidation is driven by the mutation variables (`vars.objectId`)
+  // rather than the closed-over hook argument, so a route-param change
+  // while a mutation is in-flight can't hit the wrong cache entry.
+  const invalidateFieldLists = (targetObjectId: string) => {
     // The field list is currently served by `useFieldDefinitions`, which
     // reads from the object-detail endpoint. Invalidate both that key and
     // the dedicated `fieldDefinitions` namespace so any future hook
     // migrated onto the focused key picks up the change too.
-    void queryClient.invalidateQueries({ queryKey: objectDetailKey });
-    if (objectId) {
-      void queryClient.invalidateQueries({
-        queryKey: fieldDefinitionsKeys.byObject(objectId),
-      });
-    }
+    void queryClient.invalidateQueries({
+      queryKey: objectDefinitionsKeys.detail(targetObjectId),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: fieldDefinitionsKeys.byObject(targetObjectId),
+    });
   };
 
   // ── Field modal state ───────────────────────────────────
@@ -96,7 +104,7 @@ export function useFieldMutations({
       api.post<FieldDefinition>(`/api/v1/admin/objects/${id}/fields`, {
         body: payload,
       }),
-    onSuccess: invalidateFieldLists,
+    onSuccess: (_data, vars) => invalidateFieldLists(vars.objectId),
   });
 
   const updateFieldMutation = useMutation<
@@ -109,7 +117,7 @@ export function useFieldMutations({
         `/api/v1/admin/objects/${id}/fields/${fieldId}`,
         { body: payload },
       ),
-    onSuccess: invalidateFieldLists,
+    onSuccess: (_data, vars) => invalidateFieldLists(vars.objectId),
   });
 
   const deleteFieldMutation = useMutation<
@@ -119,7 +127,7 @@ export function useFieldMutations({
   >({
     mutationFn: ({ objectId: id, fieldId }) =>
       api.del<void>(`/api/v1/admin/objects/${id}/fields/${fieldId}`),
-    onSuccess: invalidateFieldLists,
+    onSuccess: (_data, vars) => invalidateFieldLists(vars.objectId),
   });
 
   const reorderFieldsMutation = useMutation<
@@ -133,43 +141,42 @@ export function useFieldMutations({
         `/api/v1/admin/objects/${id}/fields/reorder`,
         { body: { fieldIds } },
       ),
-    onMutate: async ({ fieldIds }) => {
+    onMutate: async ({ objectId: id, fieldIds }) => {
       // Cancel in-flight refetches so they don't overwrite the optimistic
       // patch, then reorder the cached field array to match the requested
       // id sequence before the round-trip.
-      await queryClient.cancelQueries({ queryKey: objectDetailKey });
+      const detailKey = objectDefinitionsKeys.detail(id);
+      await queryClient.cancelQueries({ queryKey: detailKey });
       const previous =
-        queryClient.getQueryData<ObjectDefinitionDetail>(objectDetailKey);
-      queryClient.setQueryData<ObjectDefinitionDetail>(
-        objectDetailKey,
-        (prev) => {
-          if (!prev) return prev;
-          const byId = new Map(prev.fields.map((f) => [f.id, f]));
-          const reordered = fieldIds
-            .map((fid) => byId.get(fid))
-            .filter((f): f is FieldDefinition => Boolean(f));
-          return { ...prev, fields: reordered };
-        },
-      );
+        queryClient.getQueryData<ObjectDefinitionDetail>(detailKey);
+      queryClient.setQueryData<ObjectDefinitionDetail>(detailKey, (prev) => {
+        if (!prev) return prev;
+        const byId = new Map(prev.fields.map((f) => [f.id, f]));
+        const reordered = fieldIds
+          .map((fid) => byId.get(fid))
+          .filter((f): f is FieldDefinition => Boolean(f));
+        return { ...prev, fields: reordered };
+      });
       return { previous };
     },
-    onError: (_err, _vars, context) => {
+    onError: (_err, vars, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(objectDetailKey, context.previous);
+        queryClient.setQueryData(
+          objectDefinitionsKeys.detail(vars.objectId),
+          context.previous,
+        );
       }
     },
-    onSuccess: (updated) => {
+    onSuccess: (updated, vars) => {
       queryClient.setQueryData<ObjectDefinitionDetail>(
-        objectDetailKey,
+        objectDefinitionsKeys.detail(vars.objectId),
         (prev) => (prev ? { ...prev, fields: updated } : prev),
       );
     },
-    onSettled: () => {
-      if (objectId) {
-        void queryClient.invalidateQueries({
-          queryKey: fieldDefinitionsKeys.byObject(objectId),
-        });
-      }
+    onSettled: (_data, _err, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: fieldDefinitionsKeys.byObject(vars.objectId),
+      });
     },
   });
 
@@ -375,8 +382,9 @@ export function useFieldMutations({
         fieldIds: newFields.map((f) => f.id),
       });
     } catch {
-      // `onError` already rolled the cache back; surfacing the error is
-      // left to the mutation's state so callers can react if needed.
+      // `onError` already rolled the optimistic patch back. Reorder failures
+      // are intentionally silent — matching the previous behaviour — so we
+      // swallow the rethrow here.
     }
   };
 
