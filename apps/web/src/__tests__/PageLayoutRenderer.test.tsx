@@ -636,6 +636,34 @@ describe('PageLayoutRenderer', () => {
     expect(screen.queryByTestId('layout-right-rail')).not.toBeInTheDocument();
   });
 
+  it('forces rail sections to render in a single column regardless of declared columns', () => {
+    const layout = makeLayout({
+      zones: {
+        kpi: [],
+        leftRail: [
+          {
+            id: 'left-multi',
+            label: 'Left Rail Multi-Col',
+            columns: 3,
+            components: [
+              { id: 'lr1', type: 'field', config: { fieldApiName: 'email' } },
+            ],
+          },
+        ],
+        rightRail: [],
+      },
+    });
+
+    const { container } = renderLayout(layout);
+    const leftRail = screen.getByTestId('layout-left-rail');
+    expect(leftRail).toBeInTheDocument();
+
+    const cols1Nodes = container.querySelectorAll('[class*="cols1"]');
+    expect(cols1Nodes.length).toBeGreaterThanOrEqual(1);
+    const cols3Nodes = container.querySelectorAll('[class*="cols3"]');
+    expect(cols3Nodes.length).toBe(0);
+  });
+
   it('renders left and right rails with their sections', () => {
     const layout = makeLayout({
       zones: {
