@@ -25,7 +25,7 @@ interface UseRecordResult {
   api: ReturnType<typeof useApiClient>;
   sessionToken: string | undefined;
   loadRecord: () => Promise<void>;
-  setRecord: Dispatch<SetStateAction<RecordDetail | null>>;
+  setRecord: Dispatch<SetStateAction<RecordDetail>>;
 }
 
 /**
@@ -42,7 +42,7 @@ export function useRecord(
   apiName: string | undefined,
   id: string | undefined,
 ): UseRecordResult {
-  const { sessionToken } = useSession();
+  const { sessionToken, isSessionLoading } = useSession();
   const api = useApiClient();
   const queryClient = useQueryClient();
 
@@ -107,21 +107,29 @@ export function useRecord(
 
   // Mirror the pre-TQ contract: `loading` gates the whole page on the
   // primary record fetch. Object-definition / layout queries fill in
-  // progressively and never block the initial render.
-  const loading = recordEnabled && recordQuery.isPending;
+  // progressively and never block the initial render. Treat "routing
+  // params present but Descope is still resolving the session token" as
+  // loading too, otherwise the page briefly renders "Record not found."
+  // while the SDK finishes refreshing.
+  const loading =
+    (Boolean(apiName && id) && !sessionToken && isSessionLoading) ||
+    (recordEnabled && recordQuery.isPending);
 
   const loadRecord = useCallback(async () => {
     if (!apiName || !id) return;
     await queryClient.invalidateQueries({ queryKey: recordKey });
   }, [queryClient, recordKey, apiName, id]);
 
-  const setRecord = useCallback<Dispatch<SetStateAction<RecordDetail | null>>>(
+  // Narrowed to non-null — callers only patch after we already have a
+  // record (see `handleStageChanged` in RecordDetailPage), so we never
+  // want to write `null` into the detail cache slot typed as
+  // `RecordDetail`.
+  const setRecord = useCallback<Dispatch<SetStateAction<RecordDetail>>>(
     (value) => {
-      queryClient.setQueryData<RecordDetail | null>(recordKey, (current) => {
+      queryClient.setQueryData<RecordDetail>(recordKey, (current) => {
+        if (current === undefined) return current;
         if (typeof value === 'function') {
-          return (value as (prev: RecordDetail | null) => RecordDetail | null)(
-            current ?? null,
-          );
+          return (value as (prev: RecordDetail) => RecordDetail)(current);
         }
         return value;
       });
