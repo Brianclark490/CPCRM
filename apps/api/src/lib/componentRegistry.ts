@@ -8,6 +8,8 @@
  * - **type**          – unique key used in layout JSON (`component.type`)
  * - **label / icon**  – display metadata for the builder palette
  * - **category**      – grouping in the palette sidebar
+ * - **allowedZones**  – whitelist of zones where the component may be placed.
+ *                       Zones: 'header', 'kpi', 'leftRail', 'main', 'rightRail'.
  * - **configSchema**  – JSON-Schema-like description of the `config` object
  * - **defaultConfig** – sensible defaults applied when a component is first added
  */
@@ -73,6 +75,57 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
       allowCreate: { type: 'boolean', description: 'Show inline "New" button' },
     },
     defaultConfig: { relationshipId: '', displayFields: [], limit: 5, allowCreate: true },
+  },
+
+  // ── Rail palette (issue #518) ───────────────────────────────────────────────
+  // Bread-and-butter components for the leftRail / rightRail zones.  Also
+  // allowed in the main zone (inside tab sections).
+  {
+    type: 'identity',
+    label: 'Identity',
+    icon: 'id-card',
+    category: 'widgets',
+    allowedZones: ['leftRail', 'main', 'rightRail'],
+    configSchema: {
+      fields: {
+        type: 'array',
+        items: 'string',
+        description: 'Field api_names to show as label/value rows',
+      },
+    },
+    defaultConfig: { fields: [] },
+  },
+  {
+    type: 'contacts',
+    label: 'Contacts',
+    icon: 'users',
+    category: 'widgets',
+    allowedZones: ['leftRail', 'main', 'rightRail'],
+    configSchema: {
+      relationshipId: {
+        type: 'string',
+        required: true,
+        description: 'UUID of the relationship to the contact object',
+      },
+      limit: { type: 'number', description: 'Max contacts to display' },
+    },
+    defaultConfig: { relationshipId: '', limit: 5 },
+  },
+  {
+    type: 'activity',
+    label: 'Activity Feed',
+    icon: 'activity',
+    category: 'widgets',
+    allowedZones: ['leftRail', 'main', 'rightRail'],
+    configSchema: {
+      limit: { type: 'number', description: 'Max activity items to display' },
+      types: {
+        type: 'array',
+        items: 'string',
+        description: 'Activity types to include (supported values: opportunity, account, system, user)',
+      },
+    },
+    defaultConfig: { limit: 20, types: [] },
   },
 
   // ── Widget components ───────────────────────────────────────────────────────
