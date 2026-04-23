@@ -1012,7 +1012,17 @@ describe('validateLayoutJson — zones', () => {
     const layout = {
       ...VALID_LAYOUT_JSON,
       zones: {
-        kpi: [{ id: 'k-1', type: 'field', config: { fieldId: 'uuid-1' } }],
+        kpi: [
+          {
+            id: 'k-1',
+            type: 'metric',
+            config: {
+              label: 'pipeline.open',
+              source: { kind: 'field', fieldApiName: 'amount' },
+              format: 'currency',
+            },
+          },
+        ],
         leftRail: [
           { id: 'lr-1', type: 'field_section', label: 'Left', columns: 1, components: [] },
         ],
@@ -1020,6 +1030,51 @@ describe('validateLayoutJson — zones', () => {
       },
     };
     expect(validateLayoutJson(layout)).toBeNull();
+  });
+
+  it('rejects a non-metric component in the kpi zone', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      zones: {
+        kpi: [{ id: 'k-1', type: 'field', config: { fieldId: 'uuid-1' } }],
+      },
+    };
+    const err = validateLayoutJson(layout);
+    expect(err).toContain('zones.kpi');
+    expect(err).toContain('"kpi" zone');
+  });
+
+  it('rejects a metric component outside the kpi zone (e.g. inside a tab section)', () => {
+    const layout = {
+      ...VALID_LAYOUT_JSON,
+      tabs: [
+        {
+          id: 'tab-1',
+          label: 'Details',
+          sections: [
+            {
+              id: 'sec-1',
+              type: 'field_section',
+              label: 'Info',
+              columns: 2,
+              components: [
+                {
+                  id: 'm-1',
+                  type: 'metric',
+                  config: {
+                    label: 'deals.open',
+                    source: { kind: 'field', fieldApiName: 'count' },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const err = validateLayoutJson(layout);
+    expect(err).toContain('metric');
+    expect(err).toContain('"main" zone');
   });
 
   it('rejects zones when it is not an object', () => {

@@ -8,6 +8,7 @@ const ICON_MAP: Record<string, string> = {
   clock: '🕐',
   target: '🎯',
   square: '⬜',
+  gauge: '📊',
   // Field-type icons
   text: '✏️',
   textarea: '📝',
