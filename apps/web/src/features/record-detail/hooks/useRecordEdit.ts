@@ -9,7 +9,6 @@ interface UseRecordEditResult {
   saveError: string | null;
   saveSuccess: boolean;
   setSaveError: (error: string | null) => void;
-  setSaveSuccess: (success: boolean) => void;
   handleEditClick: () => void;
   handleCancelClick: () => void;
   handleFieldChange: (fieldApiName: string, value: unknown) => void;
@@ -133,7 +132,6 @@ export function useRecordEdit(
     saveError,
     saveSuccess,
     setSaveError,
-    setSaveSuccess,
     handleEditClick,
     handleCancelClick,
     handleFieldChange,

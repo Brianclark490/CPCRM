@@ -22,8 +22,6 @@ interface UseRecordResult {
   pageLayout: PageLayout | null;
   loading: boolean;
   loadError: string | null;
-  api: ReturnType<typeof useApiClient>;
-  sessionToken: string | undefined;
   loadRecord: () => Promise<void>;
   setRecord: Dispatch<SetStateAction<RecordDetail>>;
 }
@@ -144,8 +142,6 @@ export function useRecord(
     pageLayout,
     loading,
     loadError,
-    api,
-    sessionToken,
     loadRecord,
     setRecord,
   };
