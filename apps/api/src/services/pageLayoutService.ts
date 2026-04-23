@@ -7,7 +7,7 @@ import type { PageLayouts, PageLayoutVersions } from '../db/kysely.types.js';
 import {
   VALID_COMPONENT_TYPES,
   isComponentAllowedInZone,
-  type ComponentZone,
+  type LayoutZone,
 } from '../lib/componentRegistry.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ function validateVisibilityRule(rule: unknown): string | null {
   return null;
 }
 
-function validateComponent(comp: unknown, zone: ComponentZone): string | null {
+function validateComponent(comp: unknown, zone?: LayoutZone): string | null {
   if (typeof comp !== 'object' || comp === null) {
     return 'Each component must be an object';
   }
@@ -244,11 +244,12 @@ function validateComponent(comp: unknown, zone: ComponentZone): string | null {
   if (typeof c.type !== 'string' || !VALID_COMPONENT_TYPES.has(c.type)) {
     return `Component "${c.id}" has invalid type: ${String(c.type)}. Must be one of: ${[...VALID_COMPONENT_TYPES].join(', ')}`;
   }
-  if (!isComponentAllowedInZone(c.type, zone)) {
-    return `Component "${c.id}" of type "${c.type}" is not allowed in zone "${zone}"`;
-  }
   if (typeof c.config !== 'object' || c.config === null) {
     return `Component "${c.id}" must have a config object`;
+  }
+
+  if (zone && !isComponentAllowedInZone(c.type, zone)) {
+    return `Component "${c.id}" of type "${c.type}" is not allowed in the "${zone}" zone`;
   }
 
   const compVisErr = validateVisibilityRule(c.visibility);
@@ -257,7 +258,7 @@ function validateComponent(comp: unknown, zone: ComponentZone): string | null {
   return null;
 }
 
-function validateSection(section: unknown, zone: ComponentZone): string | null {
+function validateSection(section: unknown, zone?: LayoutZone): string | null {
   if (typeof section !== 'object' || section === null) {
     return 'Each section must be an object';
   }

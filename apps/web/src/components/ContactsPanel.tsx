@@ -2,8 +2,15 @@ import { Link } from 'react-router-dom';
 import type { ComponentRendererProps, RelatedRecordRef } from './layoutTypes.js';
 import styles from './ContactsPanel.module.css';
 
-const ROLE_FIELD_CANDIDATES = ['role', 'title', 'contactRole', 'jobTitle'] as const;
-const PRIMARY_FIELD_CANDIDATES = ['isPrimary', 'primary', 'is_primary'] as const;
+// Related record fieldValues are keyed by api_name (snake_case for seeded CRM
+// data), so the candidate lists cover both conventions.  The default seeded
+// contact role field is `job_title`.
+const ROLE_FIELD_CANDIDATES = [
+  'job_title', 'jobTitle',
+  'role', 'contact_role', 'contactRole',
+  'title',
+] as const;
+const PRIMARY_FIELD_CANDIDATES = ['is_primary', 'isPrimary', 'primary'] as const;
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);

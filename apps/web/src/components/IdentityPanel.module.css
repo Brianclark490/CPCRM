@@ -43,9 +43,14 @@
   min-width: 0;
 }
 
-.empty {
+.emptyState {
   color: var(--color-text-muted);
   font-style: italic;
   padding: var(--space-4) var(--space-4);
   font-size: var(--font-size-sm);
+}
+
+.emptyValue {
+  color: var(--color-text-muted);
+  font-style: italic;
 }

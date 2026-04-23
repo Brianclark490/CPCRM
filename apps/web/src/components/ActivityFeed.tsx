@@ -2,11 +2,12 @@ import type { ComponentRendererProps } from './layoutTypes.js';
 import { ActivityPanel, type ActivityItem } from './ActivityPanel.js';
 
 /**
- * Chronological feed of record events (replied / call / edit / note / meeting).
- * Thin adapter around ActivityPanel — intended for side rails or the main zone.
- * Config:
- *   - limit?: number         – max items to show
- *   - types?: string[]       – filter to these ActivityItem types
+ * Chronological feed of record events.  Thin adapter around ActivityPanel —
+ * intended for side rails or the main zone.  Config:
+ *   - limit?: number     – max items to show
+ *   - types?: string[]   – filter to these `ActivityItem.type` values.  The
+ *                           current supported set matches `ActivityPanel`:
+ *                           `opportunity`, `account`, `system`, `user`.
  *
  * Real wiring lives with the activity service (#384); for now ActivityFeed
  * surfaces the same empty-state ActivityPanel renders when there are no items.

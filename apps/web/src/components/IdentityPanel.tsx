@@ -15,7 +15,7 @@ export function IdentityPanel({ component, record, fields }: ComponentRendererPr
 
   if (fieldNames.length === 0) {
     return (
-      <div className={styles.empty} data-testid="identity-panel-empty">
+      <div className={styles.emptyState} data-testid="identity-panel-empty">
         No fields configured
       </div>
     );
@@ -38,7 +38,7 @@ export function IdentityPanel({ component, record, fields }: ComponentRendererPr
           <dt className={styles.label}>{def.label}</dt>
           <dd className={styles.value}>
             {isEmpty ? (
-              <span className={styles.empty}>—</span>
+              <span className={styles.emptyValue}>—</span>
             ) : (
               <FieldRenderer fieldType={def.fieldType} value={value} />
             )}

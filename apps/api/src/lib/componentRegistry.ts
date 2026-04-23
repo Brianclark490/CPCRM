@@ -8,9 +8,8 @@
  * - **type**          – unique key used in layout JSON (`component.type`)
  * - **label / icon**  – display metadata for the builder palette
  * - **category**      – grouping in the palette sidebar
- * - **allowedZones**  – optional whitelist of zones where the component may be
- *                       placed.  Omitted = allowed everywhere (backwards compat).
- *                       Zones: 'kpi', 'leftRail', 'rightRail', 'main'.
+ * - **allowedZones**  – whitelist of zones where the component may be placed.
+ *                       Zones: 'header', 'kpi', 'leftRail', 'main', 'rightRail'.
  * - **configSchema**  – JSON-Schema-like description of the `config` object
  * - **defaultConfig** – sensible defaults applied when a component is first added
  */
@@ -19,17 +18,27 @@
 
 export type ComponentCategory = 'fields' | 'layout' | 'related' | 'widgets';
 
-/** Zones referenced by `allowedZones`. 'main' = inside a tab's section. */
-export type ComponentZone = 'kpi' | 'leftRail' | 'rightRail' | 'main';
+export type LayoutZone = 'header' | 'kpi' | 'leftRail' | 'main' | 'rightRail';
 
-export const ALL_ZONES: readonly ComponentZone[] = ['kpi', 'leftRail', 'rightRail', 'main'];
+export const ALL_ZONES: readonly LayoutZone[] = [
+  'header',
+  'kpi',
+  'leftRail',
+  'main',
+  'rightRail',
+];
 
 export interface ComponentDefinition {
   type: string;
   label: string;
   icon: string;
   category: ComponentCategory;
-  allowedZones?: readonly ComponentZone[];
+  /**
+   * Zones where this component type is allowed.  Enforced by the layout
+   * validator on the backend and surfaced to the builder palette so the
+   * client can hide components that don't fit the active zone.
+   */
+  allowedZones: readonly LayoutZone[];
   configSchema: Record<string, unknown>;
   defaultConfig: Record<string, unknown>;
 }
@@ -43,6 +52,7 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     label: 'Field',
     icon: 'text-cursor',
     category: 'fields',
+    allowedZones: ['leftRail', 'main', 'rightRail'],
     configSchema: {
       fieldId: { type: 'string', required: true, description: 'UUID of the field definition' },
       span: { type: 'number', description: 'Number of grid columns to span (default 1)' },
@@ -57,6 +67,7 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     label: 'Related List',
     icon: 'list',
     category: 'related',
+    allowedZones: ['main', 'rightRail'],
     configSchema: {
       relationshipId: { type: 'string', required: true, description: 'UUID of the relationship definition' },
       displayFields: { type: 'array', items: 'string', description: 'Field api_names to show as columns' },
@@ -74,7 +85,7 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     label: 'Identity',
     icon: 'id-card',
     category: 'widgets',
-    allowedZones: ['leftRail', 'rightRail', 'main'],
+    allowedZones: ['leftRail', 'main', 'rightRail'],
     configSchema: {
       fields: {
         type: 'array',
@@ -89,7 +100,7 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     label: 'Contacts',
     icon: 'users',
     category: 'widgets',
-    allowedZones: ['leftRail', 'rightRail', 'main'],
+    allowedZones: ['leftRail', 'main', 'rightRail'],
     configSchema: {
       relationshipId: {
         type: 'string',
@@ -105,13 +116,13 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     label: 'Activity Feed',
     icon: 'activity',
     category: 'widgets',
-    allowedZones: ['leftRail', 'rightRail', 'main'],
+    allowedZones: ['leftRail', 'main', 'rightRail'],
     configSchema: {
       limit: { type: 'number', description: 'Max activity items to display' },
       types: {
         type: 'array',
         items: 'string',
-        description: 'Activity types to include (e.g. replied, call, edit, note, meeting)',
+        description: 'Activity types to include (supported values: opportunity, account, system, user)',
       },
     },
     defaultConfig: { limit: 20, types: [] },
@@ -123,6 +134,7 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     label: 'Activity Timeline',
     icon: 'clock',
     category: 'widgets',
+    allowedZones: ['main', 'rightRail'],
     configSchema: {
       showFilters: { type: 'boolean', description: 'Show activity type filter controls' },
       limit: { type: 'number', description: 'Number of activities to load initially' },
@@ -134,6 +146,7 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     label: 'Sales Targets',
     icon: 'target',
     category: 'widgets',
+    allowedZones: ['main', 'rightRail'],
     configSchema: {
       showBusinessTarget: { type: 'boolean', description: 'Show business-level target progress bar' },
       showTeamTargets: { type: 'boolean', description: 'Show team-level target progress bars' },
@@ -149,6 +162,41 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
       periodType: 'quarterly',
     },
   },
+  {
+    type: 'metric',
+    label: 'Metric Card',
+    icon: 'gauge',
+    category: 'widgets',
+    allowedZones: ['kpi'],
+    configSchema: {
+      label: { type: 'string', required: true, description: 'Display label (e.g. "pipeline.open")' },
+      source: {
+        type: 'object',
+        required: true,
+        description:
+          'Value source — `{ kind: "field", fieldApiName }` or `{ kind: "aggregate", expr }`',
+      },
+      format: {
+        type: 'string',
+        description: 'Display format: currency, number, percent, duration',
+      },
+      target: {
+        type: 'object',
+        description:
+          'Optional target for progress bar — `{ kind: "field", fieldApiName }` or `{ kind: "literal", value }`',
+      },
+      accent: {
+        type: 'string',
+        description: 'Visual accent: default, success, warning, danger',
+      },
+    },
+    defaultConfig: {
+      label: '',
+      source: { kind: 'field', fieldApiName: '' },
+      format: 'number',
+      accent: 'default',
+    },
+  },
 
   // ── Layout components ───────────────────────────────────────────────────────
   {
@@ -156,6 +204,7 @@ export const COMPONENT_REGISTRY: readonly ComponentDefinition[] = [
     label: 'Blank Space',
     icon: 'square',
     category: 'layout',
+    allowedZones: ['leftRail', 'main', 'rightRail'],
     configSchema: {
       height: { type: 'number', description: 'Height in pixels' },
     },
@@ -181,14 +230,11 @@ export function getComponentDefinition(type: string): ComponentDefinition | unde
 }
 
 /**
- * Returns true if a component type is allowed in the given zone.
- * Components that do not declare `allowedZones` are permitted in any zone.
- * Unknown component types return false — caller should separately check
- * `VALID_COMPONENT_TYPES` for a clearer error message.
+ * Returns true when the given component type is permitted in the given zone,
+ * false when it is not or the type is unknown.
  */
-export function isComponentAllowedInZone(type: string, zone: ComponentZone): boolean {
+export function isComponentAllowedInZone(type: string, zone: LayoutZone): boolean {
   const def = getComponentDefinition(type);
   if (!def) return false;
-  if (!def.allowedZones) return true;
   return def.allowedZones.includes(zone);
 }

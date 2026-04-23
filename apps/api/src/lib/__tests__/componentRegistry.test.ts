@@ -23,7 +23,10 @@ describe('componentRegistry', () => {
     it('returns the definition for a registered type', () => {
       const def = getComponentDefinition('identity');
       expect(def?.type).toBe('identity');
-      expect(def?.allowedZones).toEqual(['leftRail', 'rightRail', 'main']);
+      expect(def?.allowedZones).toContain('leftRail');
+      expect(def?.allowedZones).toContain('rightRail');
+      expect(def?.allowedZones).toContain('main');
+      expect(def?.allowedZones).not.toContain('kpi');
     });
 
     it('returns undefined for an unregistered type', () => {
@@ -32,7 +35,7 @@ describe('componentRegistry', () => {
   });
 
   describe('isComponentAllowedInZone', () => {
-    it('allows rail components in rail zones', () => {
+    it('allows rail components (identity, contacts, activity) in the rails and main', () => {
       for (const type of ['identity', 'contacts', 'activity']) {
         expect(isComponentAllowedInZone(type, 'leftRail')).toBe(true);
         expect(isComponentAllowedInZone(type, 'rightRail')).toBe(true);
@@ -43,13 +46,6 @@ describe('componentRegistry', () => {
     it('rejects rail components in the kpi zone', () => {
       for (const type of ['identity', 'contacts', 'activity']) {
         expect(isComponentAllowedInZone(type, 'kpi')).toBe(false);
-      }
-    });
-
-    it('allows components with no allowedZones in every zone (back-compat)', () => {
-      // `field` has no allowedZones → permitted anywhere.
-      for (const zone of ['kpi', 'leftRail', 'rightRail', 'main'] as const) {
-        expect(isComponentAllowedInZone('field', zone)).toBe(true);
       }
     });
 

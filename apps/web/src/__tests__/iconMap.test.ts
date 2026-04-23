@@ -8,6 +8,7 @@ describe('resolveIcon', () => {
     expect(resolveIcon('square')).toBe('⬜');
     expect(resolveIcon('text-cursor')).toBe('✏️');
     expect(resolveIcon('list')).toBe('📋');
+    expect(resolveIcon('gauge')).toBe('📊');
   });
 
   it('maps field type identifiers to emoji characters', () => {

@@ -8,6 +8,7 @@ import { SalesTargetsRenderer } from './SalesTargetsRenderer.js';
 import { IdentityPanel } from './IdentityPanel.js';
 import { ContactsPanel } from './ContactsPanel.js';
 import { ActivityFeed } from './ActivityFeed.js';
+import { MetricCard } from './MetricCard.js';
 
 // ─── Component registry (map, not switch) ─────────────────────────────────────
 
@@ -18,6 +19,7 @@ const COMPONENT_RENDERERS: Record<string, ComponentType<ComponentRendererProps>>
   identity: IdentityPanel,
   contacts: ContactsPanel,
   activity: ActivityFeed,
+  metric: MetricCard,
   activity_timeline: PlaceholderWidget,
   notes: PlaceholderWidget,
   stage_history: PlaceholderWidget,
