@@ -32,6 +32,11 @@ import { componentRegistryRouter } from './routes/adminPageLayouts.js';
 import { pageLayoutsRouter } from './routes/pageLayouts.js';
 import { adminTargetsRouter } from './routes/adminTargets.js';
 import { targetsRouter } from './routes/targets.js';
+import { mailboxOAuthRouter } from './routes/mailboxOAuth.js';
+import { graphWebhookRouter } from './routes/graphWebhook.js';
+import { mailboxFeedRouter } from './routes/mailboxFeed.js';
+import { inboundEmailForwardRouter } from './routes/inboundEmailForward.js';
+import { startSubscriptionRenewalJob } from './jobs/renewGraphSubscriptions.js';
 import { securityHeaders } from './middleware/security.js';
 import { globalLimiter, writeMethodLimiter, authLimiter } from './middleware/rateLimiter.js';
 import { requireCsrf } from './middleware/csrf.js';
@@ -56,6 +61,26 @@ const httpLogger = pinoHttp as unknown as PinoHttpFactory;
 app.use(securityHeaders);
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(cookieParser());
+
+// The Postmark inbound webhook verifies an HMAC over the raw request body, so
+// we must mount a raw-body parser for that specific path *before* the global
+// JSON parser consumes and discards the bytes. We then re-parse JSON inside
+// the same handler-stack so the route sees `req.body` as a normal object.
+app.use(
+  '/api/v1/webhooks/inbound-email',
+  express.raw({ type: 'application/json', limit: '5mb' }),
+  (req, _res, next) => {
+    const raw = req.body as Buffer;
+    (req as typeof req & { rawBody?: Buffer }).rawBody = raw;
+    try {
+      req.body = raw && raw.length > 0 ? JSON.parse(raw.toString('utf8')) : {};
+    } catch {
+      req.body = {};
+    }
+    next();
+  },
+);
+
 app.use(express.json());
 // Assign a UUID to every incoming request BEFORE pino-http so the logger
 // picks it up via `req.id`. The same id is echoed as `X-Request-Id` and
@@ -102,6 +127,14 @@ apiRouter.use(normalizeErrorResponses);
 // Rate limiting applies to every API request.
 apiRouter.use(globalLimiter);
 apiRouter.use(writeMethodLimiter);
+
+// Webhook routes are mounted BEFORE CSRF because:
+//   - Microsoft Graph and Postmark don't carry our CSRF cookie
+//   - They authenticate via their own signatures / clientState
+//   - They must be able to respond to Graph's ?validationToken= handshake
+//     with a plaintext echo inside 10 seconds
+apiRouter.use('/webhooks/graph', graphWebhookRouter);
+apiRouter.use('/webhooks', inboundEmailForwardRouter);
 
 // Auth session routes handle cookie-based session establishment and CSRF token
 // provisioning.  They must be mounted *before* the CSRF middleware because:
@@ -160,6 +193,8 @@ apiRouter.use('/admin/tenant-settings', adminTenantSettingsRouter);
 apiRouter.use('/admin/component-registry', componentRegistryRouter);
 apiRouter.use('/admin/targets', adminTargetsRouter);
 apiRouter.use('/targets', targetsRouter);
+apiRouter.use('/mailbox', mailboxOAuthRouter);
+apiRouter.use('/', mailboxFeedRouter);
 
 // Terminal 404 for the shared API router — must be the LAST middleware
 // registered on `apiRouter`. See `lib/apiVersioning.ts` for the rationale.
@@ -204,6 +239,7 @@ runMigrations()
   .then(() => {
     app.listen(config.port, () => {
       logger.info({ port: config.port, env: config.env, corsOrigin: config.corsOrigin }, 'API server started');
+      startSubscriptionRenewalJob();
     });
   })
   .catch((err: unknown) => {

@@ -21,6 +21,7 @@ import { RecordCreatePage } from './pages/RecordCreatePage.js';
 import { RecordDetailPage } from './pages/RecordDetailPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { SettingsProfilePage } from './pages/SettingsProfilePage.js';
+import { EmailIngestPage } from './pages/EmailIngestPage.js';
 import { AdminUsersPage } from './pages/AdminUsersPage.js';
 import { AdminRolesPage } from './pages/AdminRolesPage.js';
 import { AdminAuditPage } from './pages/AdminAuditPage.js';
@@ -264,6 +265,19 @@ export function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/email-ingest"
+          element={
+            <ProtectedRoute>
+              <TenantGuard>
+                <AppShell>
+                  <EmailIngestPage />
+                </AppShell>
+              </TenantGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/email-ingest/:id" element={<Navigate to="/email-ingest" replace />} />
         <Route
           path="/objects/:apiName"
           element={
