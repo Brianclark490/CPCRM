@@ -4,7 +4,11 @@ import type { Selectable, Updateable } from 'kysely';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/kysely.js';
 import type { PageLayouts, PageLayoutVersions } from '../db/kysely.types.js';
-import { VALID_COMPONENT_TYPES } from '../lib/componentRegistry.js';
+import {
+  VALID_COMPONENT_TYPES,
+  isComponentAllowedInZone,
+  type LayoutZone,
+} from '../lib/componentRegistry.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -229,7 +233,7 @@ function validateVisibilityRule(rule: unknown): string | null {
   return null;
 }
 
-function validateComponent(comp: unknown): string | null {
+function validateComponent(comp: unknown, zone?: LayoutZone): string | null {
   if (typeof comp !== 'object' || comp === null) {
     return 'Each component must be an object';
   }
@@ -244,13 +248,17 @@ function validateComponent(comp: unknown): string | null {
     return `Component "${c.id}" must have a config object`;
   }
 
+  if (zone && !isComponentAllowedInZone(c.type, zone)) {
+    return `Component "${c.id}" of type "${c.type}" is not allowed in the "${zone}" zone`;
+  }
+
   const compVisErr = validateVisibilityRule(c.visibility);
   if (compVisErr) return `Component "${c.id}": ${compVisErr}`;
 
   return null;
 }
 
-function validateSection(section: unknown): string | null {
+function validateSection(section: unknown, zone?: LayoutZone): string | null {
   if (typeof section !== 'object' || section === null) {
     return 'Each section must be an object';
   }
@@ -273,7 +281,7 @@ function validateSection(section: unknown): string | null {
   }
 
   for (const comp of s.components) {
-    const compErr = validateComponent(comp);
+    const compErr = validateComponent(comp, zone);
     if (compErr) return compErr;
   }
 
@@ -293,7 +301,7 @@ function validateZones(zones: unknown): string | null {
       return 'layout.zones.kpi must be an array';
     }
     for (const comp of z.kpi) {
-      const compErr = validateComponent(comp);
+      const compErr = validateComponent(comp, 'kpi');
       if (compErr) return `zones.kpi: ${compErr}`;
     }
   }
@@ -304,7 +312,7 @@ function validateZones(zones: unknown): string | null {
         return `layout.zones.${rail} must be an array`;
       }
       for (const section of z[rail] as unknown[]) {
-        const secErr = validateSection(section);
+        const secErr = validateSection(section, rail);
         if (secErr) return `zones.${rail}: ${secErr}`;
       }
     }
@@ -365,7 +373,7 @@ export function validateLayoutJson(layout: unknown): string | null {
     }
 
     for (const section of t.sections) {
-      const secErr = validateSection(section);
+      const secErr = validateSection(section, 'main');
       if (secErr) return secErr;
     }
   }
