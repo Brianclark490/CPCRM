@@ -113,6 +113,18 @@ describe('AdminUsersPage', () => {
     expect(screen.queryByTestId('user-management-widget')).not.toBeInTheDocument();
   });
 
+  it('does not fetch CRM users while no tenant is selected', async () => {
+    vi.mocked(useTenant).mockReturnValue({ tenantId: null, tenantName: null });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    renderPage();
+
+    // Give any would-be async query a microtask to fire before asserting.
+    await Promise.resolve();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('renders the CRM users section heading', () => {
     renderPage();
 

@@ -18,7 +18,14 @@ function fieldStr(user: RecordItem, key: string): string {
 
 export function AdminUsersPage() {
   const { tenantId } = useTenant();
-  const usersQuery = useRecords('user', { limit: 100 });
+  // Only fetch once a tenant is selected, and isolate the cache entry by
+  // tenant so switching organisations does not briefly render the previous
+  // tenant's CRM users from cache.
+  const usersQuery = useRecords(
+    tenantId ? 'user' : undefined,
+    { limit: 100 },
+    { scope: { tenantId } },
+  );
   const users = usersQuery.data?.data ?? [];
 
   return (
