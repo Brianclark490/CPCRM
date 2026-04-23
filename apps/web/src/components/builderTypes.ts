@@ -11,11 +11,19 @@ import type {
 
 export type ComponentCategory = 'fields' | 'layout' | 'related' | 'widgets';
 
+export type LayoutZone = 'header' | 'kpi' | 'leftRail' | 'main' | 'rightRail';
+
 export interface ComponentDefinition {
   type: string;
   label: string;
   icon: string;
   category: ComponentCategory;
+  /**
+   * Zones in which this component is valid. Older API responses may omit
+   * this — consumers should treat `undefined` as "no restriction" so the
+   * legacy registry keeps working until the API is redeployed.
+   */
+  allowedZones?: readonly LayoutZone[];
   configSchema: Record<string, ConfigSchemaEntry>;
   defaultConfig: Record<string, unknown>;
 }

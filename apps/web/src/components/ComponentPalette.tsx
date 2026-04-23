@@ -8,9 +8,23 @@ import type {
   RelatedFieldRef,
   PaletteDragData,
   BuilderTab,
+  LayoutZone,
 } from './builderTypes.js';
 import { resolveIcon } from './iconMap.js';
 import styles from './ComponentPalette.module.css';
+
+// The page builder currently only edits tab sections (the `main` zone).
+// Other zones (kpi, rails) have dedicated editors / are not yet draggable.
+// We filter the palette to components valid in this zone so users can't
+// drop a component that would fail server-side zone validation on save.
+const BUILDER_ACTIVE_ZONE: LayoutZone = 'main';
+
+function isAllowedInActiveZone(def: ComponentDefinition): boolean {
+  // `allowedZones` is optional for backwards compatibility with API responses
+  // from older deployments — treat "missing" as "no restriction".
+  if (!def.allowedZones) return true;
+  return def.allowedZones.includes(BUILDER_ACTIVE_ZONE);
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -128,10 +142,12 @@ export function ComponentPalette({
     ? fields.filter((f) => f.label.toLowerCase().includes(fieldSearch.toLowerCase()))
     : fields;
 
+  const zoneFilteredRegistry = registry.filter(isAllowedInActiveZone);
+
   const grouped = CATEGORY_ORDER
     .map((cat) => ({
       category: cat,
-      items: registry.filter((r) => r.category === cat),
+      items: zoneFilteredRegistry.filter((r) => r.category === cat),
     }))
     .filter((g) => g.items.length > 0);
 
