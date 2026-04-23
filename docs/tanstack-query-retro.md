@@ -34,8 +34,8 @@ session. Numbers below are for a warm session (login already established).
 
 | Flow                  | Before                                                                                | After                                                              |
 | --------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| **Kanban board**      | Pipeline + records fetched on every mount; filter-bar edits re-fetched the full list. | Single `queryKeys.pipelines.detail` + `queryKeys.records.list` per `(pipelineId, filters)`; filter edits hit cache. |
-| **Records list**      | Object definition re-fetched per page mount; pagination cleared data between pages.   | `queryKeys.objectDefinitions.detail` shared with record-detail; `keepPreviousData` removes the empty-flash between pages. |
+| **Kanban board**      | Pipeline + records fetched on every mount; filter-bar edits re-fetched the full list. | Single `queryKeys.pipelines.detail(pipelineId)` + `queryKeys.records.list(apiName, filters)` per `(pipelineId, filters)`; filter edits hit cache. |
+| **Records list**      | Object definition re-fetched per page mount; pagination cleared data between pages.   | `queryKeys.objectDefinitions.detail(objectId)` shared with record-detail; `keepPreviousData` removes the empty-flash between pages. |
 | **Field builder**     | Object detail re-fetched after every field save; list jitter while the round-trip ran. | Mutations `invalidateQueries({ queryKey: queryKeys.objectDefinitions.detail(id) })` — one refetch per save, reordering is optimistic. |
 
 The structural wins come from three places, not from tuning:
