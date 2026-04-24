@@ -24,12 +24,12 @@
 --
 -- Depends on: 025_enable_row_level_security (RLS helper function),
 --             017_add_tenant_id_to_all_tables (tenant_id shape = VARCHAR(255))
-
--- ──────────────────────────────────────────────────────────────────────────────
--- Extensions
--- ──────────────────────────────────────────────────────────────────────────────
-
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- similarity() for name matching
+--
+-- Note on extensions: this migration deliberately does NOT install pg_trgm.
+-- Azure Database for PostgreSQL Flexible Server requires extensions to be
+-- allow-listed via the `azure.extensions` server parameter, and our target
+-- environment blocks pg_trgm. Name-similarity matching for account matches
+-- is therefore performed in application code (see accountMatchService.ts).
 
 -- ──────────────────────────────────────────────────────────────────────────────
 -- mailbox_connections

@@ -9,7 +9,8 @@ import { pool } from '../db/client.js';
  *
  *   1. Sender-domain match against an Account's stored website / email.
  *   2. LLM-extracted domain match (same comparison, different source).
- *   3. Normalised-name match using Postgres pg_trgm `similarity()`.
+ *   3. Normalised-name match using in-process trigram-Jaccard similarity
+ *      (pg_trgm semantics; no DB extension required — see `trigrams()`).
  *
  * All queries are scoped by `tenant_id` even though the RLS policy installed
  * by migration 025 already enforces isolation — defence-in-depth per ADR-006.
@@ -77,6 +78,44 @@ export function normaliseName(name: string): string {
     .replace(COMPANY_SUFFIX_RE, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Trigram set for a string, matching Postgres `pg_trgm` semantics: the input
+ * is split on non-alphanumeric runs, each token is padded with two leading
+ * spaces and one trailing space, and trigrams are collected per-token — so
+ * `"foo bar"` produces `{'  f',' fo','foo','oo ','  b',' ba','bar','ar '}`
+ * rather than a whole-string scan that would include the cross-word gram
+ * `'o b'`. This keeps the 0.35 similarity threshold calibrated against the
+ * same gram distribution pg_trgm uses, avoiding a regression on multi-word
+ * names (e.g. "Acme Corporation") when we score in-process instead of via
+ * the extension.
+ *
+ * Whitespace-only input returns an empty set so `jaccardSimilarity` of two
+ * empty inputs falls to 0 rather than a misleading 1.0.
+ */
+export function trigrams(s: string): ReadonlySet<string> {
+  const set = new Set<string>();
+  const tokens = s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  for (const tok of tokens) {
+    const padded = `  ${tok} `;
+    for (let i = 0; i <= padded.length - 3; i++) {
+      set.add(padded.slice(i, i + 3));
+    }
+  }
+  return set;
+}
+
+/** Jaccard similarity on trigram sets: |A ∩ B| / |A ∪ B|, in [0, 1]. */
+export function jaccardSimilarity(
+  a: ReadonlySet<string>,
+  b: ReadonlySet<string>,
+): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const gram of a) if (b.has(gram)) intersection++;
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
 }
 
 /**
@@ -169,28 +208,31 @@ export async function matchAccount(
     }
   }
 
-  // Name-similarity pass via pg_trgm. We run this as a single query so the
-  // comparison happens in the DB; the client-side loop then decides whether
-  // to upgrade or downgrade existing candidates.
+  // Name-similarity pass. We compute trigram-Jaccard similarity in-process
+  // against the account list we already loaded for domain matching. This
+  // avoids the pg_trgm extension, which is not allow-listed on Azure
+  // Database for PostgreSQL Flexible Server. For tenant sizes in the
+  // low-thousands this is fast enough to run on every ingest.
   if (extractedName) {
-    const simResult = await pool.query<{ id: string; name: string; score: number }>(
-      `SELECT id, name, similarity(lower(name), $2) AS score
-         FROM accounts
-        WHERE tenant_id = $1
-          AND similarity(lower(name), $2) > 0.35
-        ORDER BY score DESC
-        LIMIT 10`,
-      [tenantId, extractedName],
-    );
+    const targetGrams = trigrams(extractedName);
+    const scored = accounts
+      .map((acc) => ({
+        acc,
+        name: acc.name,
+        score: jaccardSimilarity(targetGrams, trigrams(normaliseName(acc.name))),
+      }))
+      .filter((row) => row.score > 0.35)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
 
-    for (const row of simResult.rows) {
-      // Map pg_trgm similarity (typically 0–1) into our confidence range,
+    for (const row of scored) {
+      // Map trigram-Jaccard similarity (0–1) into our confidence range,
       // capping at 0.85 so a pure-name match never auto-applies on its own.
       const score = Math.min(0.85, 0.55 + row.score * 0.3);
       consider(
-        row.id,
+        row.acc.id,
         score,
-        `name '${row.name}' ≈ '${signals.extractedCompanyName}' (trgm=${row.score.toFixed(2)})`,
+        `name '${row.name}' ≈ '${signals.extractedCompanyName}' (jacc=${row.score.toFixed(2)})`,
       );
     }
   }
