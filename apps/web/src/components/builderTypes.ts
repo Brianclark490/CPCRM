@@ -60,11 +60,20 @@ export interface BuilderTab {
   sections: BuilderSection[];
 }
 
+// KPI is a flat list of components (cards). Rails are vertical stacks of
+// sections. Matches the runtime `LayoutZones` / API `PageLayoutZones`.
+export interface BuilderZones {
+  kpi: BuilderComponent[];
+  leftRail: BuilderSection[];
+  rightRail: BuilderSection[];
+}
+
 export interface BuilderLayout {
   id: string;
   objectId: string;
   name: string;
   header: HeaderConfig;
+  zones: BuilderZones;
   tabs: BuilderTab[];
 }
 
@@ -123,7 +132,18 @@ export interface TabDropTargetData {
   tabId: string;
 }
 
-export type DragData = PaletteDragData | CanvasComponentDragData | CanvasSectionDragData | TabDropTargetData;
+// Drop target for a whole zone (KPI strip or a rail).
+export interface ZoneDropTargetData {
+  origin: 'zone';
+  zone: Exclude<LayoutZone, 'header' | 'main'>;
+}
+
+export type DragData =
+  | PaletteDragData
+  | CanvasComponentDragData
+  | CanvasSectionDragData
+  | TabDropTargetData
+  | ZoneDropTargetData;
 
 // ─── Page layout API shapes ──────────────────────────────────────────────────
 

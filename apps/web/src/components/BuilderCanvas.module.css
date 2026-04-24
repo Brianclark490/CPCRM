@@ -126,3 +126,95 @@
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+
+/* ── Zones (KPI, left/right rail, main) ──────────────────── */
+/* Mirror the runtime shell: header · KPI · [leftRail | main | rightRail].
+   Each zone is a click-to-activate drop region. The active zone gets an
+   accent outline so the user can see which zone the palette is filtered
+   to. Empty zones keep the affordance visible so users can discover the
+   drop target before any content exists. */
+
+.zone {
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  padding: var(--space-2);
+  margin-bottom: var(--space-3);
+  transition: border-color var(--transition-base), background var(--transition-base);
+}
+
+.zoneActive {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.zoneOver {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.zoneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.zoneLabel {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.zoneBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 56px;
+}
+
+.zoneEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.kpiStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.zonedBody {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 3fr) minmax(220px, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.mainZone {
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px dashed transparent;
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-base), background var(--transition-base);
+}
+
+.mainZone.zoneActive {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+@media (max-width: 960px) {
+  .zonedBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

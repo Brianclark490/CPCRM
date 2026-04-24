@@ -750,6 +750,60 @@ describe('PageBuilderPage', () => {
     });
   });
 
+  it('renders the zoned canvas shell (KPI, rails, main)', async () => {
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('page-builder')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('zone-kpi')).toBeInTheDocument();
+    expect(screen.getByTestId('zone-leftRail')).toBeInTheDocument();
+    expect(screen.getByTestId('zone-rightRail')).toBeInTheDocument();
+    expect(screen.getByTestId('zone-main')).toBeInTheDocument();
+  });
+
+  it('shows empty-zone affordances on a fresh layout', async () => {
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('zone-kpi')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('zone-empty-kpi')).toHaveTextContent(
+      'Drop a metric here',
+    );
+    expect(screen.getByTestId('zone-empty-leftRail')).toHaveTextContent(
+      'Drop a panel here',
+    );
+    expect(screen.getByTestId('zone-empty-rightRail')).toHaveTextContent(
+      'Drop a panel here',
+    );
+  });
+
+  it('updates the palette active-zone hint when a zone is clicked', async () => {
+    const user = userEvent.setup();
+    mockAllFetches();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('zone-kpi')).toBeInTheDocument();
+    });
+
+    // Default is "main" before any click.
+    expect(screen.getByTestId('palette-active-zone')).toHaveTextContent('Main');
+
+    await user.click(screen.getByTestId('zone-kpi'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('palette-active-zone')).toHaveTextContent(
+        'KPI Strip',
+      );
+    });
+  });
+
   it('handles no page layouts by creating a default', async () => {
     const mockFetch = vi.fn();
 
