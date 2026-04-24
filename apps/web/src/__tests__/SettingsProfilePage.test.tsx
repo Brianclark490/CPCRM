@@ -9,6 +9,19 @@ vi.mock('@descope/react-sdk', () => ({
   ),
 }));
 
+// The page now renders <ConnectMailboxCard />, which fetches mailbox status.
+// Stub the api client so the test doesn't attempt a network call.
+vi.mock('../lib/apiClient.js', () => ({
+  useApiClient: () => ({
+    get: vi.fn().mockResolvedValue({ connected: false, status: 'disconnected', emailAddress: null, provider: null }),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    del: vi.fn(),
+    request: vi.fn(),
+  }),
+}));
+
 describe('SettingsProfilePage', () => {
   it('renders the page heading', () => {
     render(

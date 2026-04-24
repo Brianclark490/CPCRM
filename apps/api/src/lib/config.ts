@@ -77,4 +77,29 @@ export const config = {
    * Set to true in production, false in development.
    */
   trustProxy: nodeEnv === 'production',
+
+  /**
+   * Email-to-CRM ingest agent configuration. All sensitive values are resolved
+   * at point-of-use (not cached here) so rotations take effect on next call.
+   */
+  emailIngest: {
+    /** Anthropic model used for extraction. */
+    llmModel: process.env.LLM_MODEL ?? 'claude-sonnet-4-6',
+    /** Upper bound on completion tokens per extraction call. */
+    anthropicMaxTokens: parseInt(process.env.ANTHROPIC_MAX_TOKENS ?? '1500', 10),
+    /** Domain advertised to users for the forwarding fallback. */
+    inboundEmailDomain: process.env.INBOUND_EMAIL_DOMAIN ?? 'inbound.example.com',
+    /** Public HTTPS base URL the Graph service posts notifications to. */
+    graphWebhookBaseUrl: process.env.GRAPH_WEBHOOK_BASE_URL,
+    /** Microsoft Entra multi-tenant app client id. */
+    msGraphClientId: process.env.MS_GRAPH_CLIENT_ID,
+    /** Entra tenant id — use 'common' for multi-tenant apps. */
+    msGraphTenantId: process.env.MS_GRAPH_TENANT_ID ?? 'common',
+    /** Redirect URI registered in Entra for the OAuth callback. */
+    msGraphRedirectUri: process.env.MS_GRAPH_REDIRECT_URI,
+    /** Confidence ≥ this auto-applies the activity to the matched Account. */
+    autoApplyThreshold: parseFloat(process.env.EMAIL_INGEST_AUTO_APPLY_THRESHOLD ?? '0.85'),
+    /** Confidence < this creates a new Account without review. */
+    autoCreateThreshold: parseFloat(process.env.EMAIL_INGEST_AUTO_CREATE_THRESHOLD ?? '0.55'),
+  },
 } as const;

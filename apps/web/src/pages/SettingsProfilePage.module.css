@@ -33,3 +33,7 @@
   padding: var(--space-8);
   min-height: 300px;
 }
+
+.mailboxContainer {
+  margin-top: var(--space-6);
+}
