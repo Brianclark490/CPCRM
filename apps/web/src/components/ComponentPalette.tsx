@@ -13,17 +13,18 @@ import type {
 import { resolveIcon } from './iconMap.js';
 import styles from './ComponentPalette.module.css';
 
-// The page builder currently only edits tab sections (the `main` zone).
-// Other zones (kpi, rails) have dedicated editors / are not yet draggable.
-// We filter the palette to components valid in this zone so users can't
-// drop a component that would fail server-side zone validation on save.
-const BUILDER_ACTIVE_ZONE: LayoutZone = 'main';
+// The canvas tracks an active zone: clicking KPI / a rail / the tab body
+// switches this, and the palette filters its options to components valid
+// in that zone so users can't drop something the server would reject on
+// save. When not provided (older callers), defaults to `main` to keep
+// the pre-zones behaviour.
+const DEFAULT_ACTIVE_ZONE: LayoutZone = 'main';
 
-function isAllowedInActiveZone(def: ComponentDefinition): boolean {
+function isAllowedInZone(def: ComponentDefinition, zone: LayoutZone): boolean {
   // `allowedZones` is optional for backwards compatibility with API responses
   // from older deployments — treat "missing" as "no restriction".
   if (!def.allowedZones) return true;
-  return def.allowedZones.includes(BUILDER_ACTIVE_ZONE);
+  return def.allowedZones.includes(zone);
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -34,7 +35,16 @@ interface ComponentPaletteProps {
   relationships: RelationshipRef[];
   relatedFields: RelatedFieldRef[];
   tabs: BuilderTab[];
+  activeZone?: LayoutZone;
 }
+
+const ZONE_LABELS: Record<LayoutZone, string> = {
+  header: 'Header',
+  kpi: 'KPI Strip',
+  leftRail: 'Left Rail',
+  main: 'Main',
+  rightRail: 'Right Rail',
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -132,6 +142,7 @@ export function ComponentPalette({
   relationships,
   relatedFields,
   tabs,
+  activeZone = DEFAULT_ACTIVE_ZONE,
 }: ComponentPaletteProps) {
   const [fieldSearch, setFieldSearch] = useState('');
   const placedFields = getPlacedFieldIds(tabs);
@@ -142,7 +153,20 @@ export function ComponentPalette({
     ? fields.filter((f) => f.label.toLowerCase().includes(fieldSearch.toLowerCase()))
     : fields;
 
-  const zoneFilteredRegistry = registry.filter(isAllowedInActiveZone);
+  const zoneFilteredRegistry = registry.filter((def) => isAllowedInZone(def, activeZone));
+  // Fields / related-field / related-list palette groups wrap generic
+  // `field`/`related_field`/`related_list` registry entries. Hide each
+  // group entirely when its underlying type isn't allowed in the active
+  // zone so, for example, the KPI palette doesn't offer plain fields.
+  const fieldAllowed = registry.every(
+    (r) => r.type !== 'field' || isAllowedInZone(r, activeZone),
+  );
+  const relatedFieldAllowed = registry.every(
+    (r) => r.type !== 'related_field' || isAllowedInZone(r, activeZone),
+  );
+  const relatedListAllowed = registry.every(
+    (r) => r.type !== 'related_list' || isAllowedInZone(r, activeZone),
+  );
 
   const grouped = CATEGORY_ORDER
     .map((cat) => ({
@@ -166,11 +190,21 @@ export function ComponentPalette({
   }, {});
 
   return (
-    <div className={styles.palette} data-testid="component-palette">
+    <div
+      className={styles.palette}
+      data-testid="component-palette"
+      data-active-zone={activeZone}
+    >
       <h3 className={styles.paletteTitle}>Components</h3>
+      <p
+        className={styles.activeZoneHint}
+        data-testid="palette-active-zone"
+      >
+        Showing components for: <strong>{ZONE_LABELS[activeZone]}</strong>
+      </p>
 
       {/* Field instances */}
-      {fields.length > 0 && (
+      {fieldAllowed && fields.length > 0 && (
         <div className={styles.group}>
           <h4 className={styles.groupLabel}>Fields</h4>
           <input
@@ -204,7 +238,7 @@ export function ComponentPalette({
       )}
 
       {/* Related field instances */}
-      {Object.keys(relatedFieldsByRelationship).length > 0 && (
+      {relatedFieldAllowed && Object.keys(relatedFieldsByRelationship).length > 0 && (
         <div className={styles.group} data-testid="related-fields-group">
           <h4 className={styles.groupLabel}>Related Fields</h4>
           {Object.entries(relatedFieldsByRelationship).map(([relApiName, group]) => (
@@ -244,7 +278,7 @@ export function ComponentPalette({
       )}
 
       {/* Relationship instances */}
-      {relationships.length > 0 && (
+      {relatedListAllowed && relationships.length > 0 && (
         <div className={styles.group}>
           <h4 className={styles.groupLabel}>Related Lists</h4>
           {relationships.map((rel) => (

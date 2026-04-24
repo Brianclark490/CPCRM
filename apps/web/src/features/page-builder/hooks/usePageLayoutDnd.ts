@@ -5,18 +5,41 @@ import type {
   BuilderComponent,
   BuilderSection,
   BuilderTab,
+  ComponentDefinition,
   PaletteDragData,
   CanvasComponentDragData,
   CanvasSectionDragData,
+  LayoutZone,
 } from '../../../components/builderTypes.js';
 import { uid, findSection } from '../helpers.js';
 
 interface UsePageLayoutDndOptions {
   layout: BuilderLayout | null;
   updateLayout: (mutator: (draft: BuilderLayout) => BuilderLayout) => void;
+  registry?: ComponentDefinition[];
+  onRejectZoneDrop?: (componentType: string, zone: LayoutZone) => void;
 }
 
-export function usePageLayoutDnd({ layout, updateLayout }: UsePageLayoutDndOptions) {
+// Client-side mirror of the server's isComponentAllowedInZone. Returns
+// true when the registry doesn't list allowedZones (back-compat) so older
+// deployments don't break drops on the first load after upgrade.
+function isAllowedInZone(
+  registry: ComponentDefinition[] | undefined,
+  componentType: string,
+  zone: LayoutZone,
+): boolean {
+  if (!registry) return true;
+  const def = registry.find((r) => r.type === componentType);
+  if (!def || !def.allowedZones) return true;
+  return def.allowedZones.includes(zone);
+}
+
+export function usePageLayoutDnd({
+  layout,
+  updateLayout,
+  registry,
+  onRejectZoneDrop,
+}: UsePageLayoutDndOptions) {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -42,8 +65,43 @@ export function usePageLayoutDnd({ layout, updateLayout }: UsePageLayoutDndOptio
         config: { ...paletteData.defaultConfig },
       };
 
+      // Palette → zone drop (KPI strip or a rail).
+      if (overData && overData.origin === 'zone') {
+        const zone = overData.zone as LayoutZone;
+        if (!isAllowedInZone(registry, paletteData.componentType, zone)) {
+          onRejectZoneDrop?.(paletteData.componentType, zone);
+          return;
+        }
+        if (zone === 'kpi') {
+          updateLayout((draft) => {
+            draft.zones.kpi.push(newComp);
+            return draft;
+          });
+          return;
+        }
+        if (zone === 'leftRail' || zone === 'rightRail') {
+          // Rails are stacks of sections, each with a single column. Drops
+          // onto the rail zone itself create a new one-column section.
+          updateLayout((draft) => {
+            draft.zones[zone].push({
+              id: uid(),
+              type: 'field_section',
+              label: `Section ${draft.zones[zone].length + 1}`,
+              columns: 1,
+              components: [newComp],
+            });
+            return draft;
+          });
+          return;
+        }
+      }
+
       // Palette → new-section drop: create a section and place the component in it.
       if (overData && overData.origin === 'new-section') {
+        if (!isAllowedInZone(registry, paletteData.componentType, 'main')) {
+          onRejectZoneDrop?.(paletteData.componentType, 'main');
+          return;
+        }
         const targetTabId = overData.tabId as string;
         const columns = (overData.columns as number) ?? 1;
         updateLayout((draft) => {
@@ -68,10 +126,32 @@ export function usePageLayoutDnd({ layout, updateLayout }: UsePageLayoutDndOptio
 
       if (!targetSectionId) return;
 
+      // Infer the target zone from where this section lives, so the palette
+      // → existing-section path enforces the same whitelist as zone drops.
+      const targetZone: LayoutZone = layout.zones.leftRail.some((s) => s.id === targetSectionId)
+        ? 'leftRail'
+        : layout.zones.rightRail.some((s) => s.id === targetSectionId)
+          ? 'rightRail'
+          : 'main';
+      if (!isAllowedInZone(registry, paletteData.componentType, targetZone)) {
+        onRejectZoneDrop?.(paletteData.componentType, targetZone);
+        return;
+      }
+
       updateLayout((draft) => {
         const loc = findSection(draft, targetSectionId!);
         if (loc) {
           draft.tabs[loc.tabIndex].sections[loc.sectionIndex].components.push(newComp);
+          return draft;
+        }
+        for (const rail of ['leftRail', 'rightRail'] as const) {
+          const idx = draft.zones[rail].findIndex(
+            (s: BuilderSection) => s.id === targetSectionId,
+          );
+          if (idx >= 0) {
+            draft.zones[rail][idx].components.push(newComp);
+            return draft;
+          }
         }
         return draft;
       });
@@ -199,7 +279,7 @@ export function usePageLayoutDnd({ layout, updateLayout }: UsePageLayoutDndOptio
         return draft;
       });
     }
-  }, [layout, updateLayout]);
+  }, [layout, updateLayout, registry, onRejectZoneDrop]);
 
   return {
     activeDragId,

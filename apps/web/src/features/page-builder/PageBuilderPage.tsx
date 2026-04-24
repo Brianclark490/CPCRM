@@ -18,6 +18,7 @@ export function PageBuilderPage() {
   const dnd = usePageLayoutDnd({
     layout: pl.layout,
     updateLayout: pl.updateLayout,
+    registry: pl.registry,
   });
 
   const actions = usePageLayoutActions({
@@ -112,8 +113,10 @@ export function PageBuilderPage() {
         selectedId={pl.selectedId}
         selectedItem={pl.getSelectedItem()}
         activeDragId={dnd.activeDragId}
+        activeZone={pl.activeZone}
         sensors={pl.sensors}
         onSelect={pl.setSelectedId}
+        onSelectZone={pl.setActiveZone}
         onHeaderChange={pl.handleHeaderChange}
         onAddTab={pl.handleAddTab}
         onRenameTab={pl.handleRenameTab}

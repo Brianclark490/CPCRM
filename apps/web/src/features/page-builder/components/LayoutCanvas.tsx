@@ -21,6 +21,7 @@ import type {
   RelationshipRef,
   RelatedFieldRef,
   BuilderLayout,
+  LayoutZone,
 } from '../../../components/builderTypes.js';
 import type { HeaderConfig, VisibilityRule } from '../../../components/layoutTypes.js';
 import styles from '../PageBuilderPage.module.css';
@@ -50,8 +51,10 @@ interface LayoutCanvasProps {
   selectedId: string | null;
   selectedItem: SelectedItem | null;
   activeDragId: string | null;
+  activeZone: LayoutZone;
   sensors: SensorDescriptor<SensorOptions>[];
   onSelect: (id: string | null) => void;
+  onSelectZone: (zone: LayoutZone) => void;
   onHeaderChange: (header: HeaderConfig) => void;
   onAddTab: () => void;
   onRenameTab: (tabId: string, label: string) => void;
@@ -79,8 +82,10 @@ export function LayoutCanvas({
   selectedId,
   selectedItem,
   activeDragId,
+  activeZone,
   sensors,
   onSelect,
+  onSelectZone,
   onHeaderChange,
   onAddTab,
   onRenameTab,
@@ -112,6 +117,7 @@ export function LayoutCanvas({
           relationships={relationships}
           relatedFields={relatedFields}
           tabs={layout.tabs}
+          activeZone={activeZone}
         />
 
         <BuilderCanvas
@@ -120,7 +126,9 @@ export function LayoutCanvas({
           relationships={relationships}
           registry={registry}
           selectedId={selectedId}
+          activeZone={activeZone}
           onSelect={onSelect}
+          onSelectZone={onSelectZone}
           onHeaderChange={onHeaderChange}
           onAddTab={onAddTab}
           onRenameTab={onRenameTab}

@@ -3,13 +3,16 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type {
   BuilderLayout,
+  BuilderComponent,
   BuilderSection,
   FieldRef,
   RelationshipRef,
   ComponentDefinition,
+  LayoutZone,
 } from './builderTypes.js';
 import { HeaderZoneEditor } from './HeaderZoneEditor.js';
 import { DroppableSection } from './DroppableSection.js';
+import { DraggableComponent } from './DraggableComponent.js';
 import type { HeaderConfig } from './layoutTypes.js';
 import styles from './BuilderCanvas.module.css';
 
@@ -35,6 +38,64 @@ function DroppableTab({ tabId, isActive, children }: DroppableTabProps) {
     >
       {children}
     </div>
+  );
+}
+
+// Drop target wrapping a whole zone (KPI strip, left/right rail).
+interface ZoneDropRegionProps {
+  zone: Extract<LayoutZone, 'kpi' | 'leftRail' | 'rightRail'>;
+  label: string;
+  isActive: boolean;
+  isEmpty: boolean;
+  emptyHint: string;
+  onActivate: () => void;
+  children: React.ReactNode;
+}
+
+function ZoneDropRegion({
+  zone,
+  label,
+  isActive,
+  isEmpty,
+  emptyHint,
+  onActivate,
+  children,
+}: ZoneDropRegionProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `zone-drop-${zone}`,
+    data: { origin: 'zone', zone },
+  });
+
+  return (
+    <section
+      ref={setNodeRef}
+      className={[
+        styles.zone,
+        isActive ? styles.zoneActive : '',
+        isOver ? styles.zoneOver : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      data-testid={`zone-${zone}`}
+      data-zone-active={isActive ? 'true' : 'false'}
+      onClick={(e) => {
+        e.stopPropagation();
+        onActivate();
+      }}
+    >
+      <header className={styles.zoneHeader}>
+        <span className={styles.zoneLabel}>{label}</span>
+      </header>
+      <div className={styles.zoneBody}>
+        {isEmpty ? (
+          <div className={styles.zoneEmpty} data-testid={`zone-empty-${zone}`}>
+            {emptyHint}
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -74,7 +135,9 @@ interface BuilderCanvasProps {
   relationships: RelationshipRef[];
   registry: ComponentDefinition[];
   selectedId: string | null;
+  activeZone: LayoutZone;
   onSelect: (id: string | null) => void;
+  onSelectZone: (zone: LayoutZone) => void;
   onHeaderChange: (header: HeaderConfig) => void;
   onAddTab: () => void;
   onRenameTab: (tabId: string, label: string) => void;
@@ -95,7 +158,9 @@ export function BuilderCanvas({
   relationships,
   registry,
   selectedId,
+  activeZone,
   onSelect,
+  onSelectZone,
   onHeaderChange,
   onAddTab,
   onRenameTab,
@@ -109,6 +174,7 @@ export function BuilderCanvas({
 }: BuilderCanvasProps) {
   const [activeTabId, setActiveTabId] = useState(layout.tabs[0]?.id ?? '');
   const activeTab = layout.tabs.find((t) => t.id === activeTabId) ?? layout.tabs[0];
+  const zones = layout.zones;
 
   // Keep a local rename state for tabs
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
@@ -131,8 +197,73 @@ export function BuilderCanvas({
         onChange={onHeaderChange}
       />
 
-      {/* Tab bar */}
-      <div className={styles.tabBar} data-testid="builder-tab-bar">
+      {/* KPI strip zone */}
+      <ZoneDropRegion
+        zone="kpi"
+        label="KPI Strip"
+        isActive={activeZone === 'kpi'}
+        isEmpty={zones.kpi.length === 0}
+        emptyHint="Drop a metric here"
+        onActivate={() => onSelectZone('kpi')}
+      >
+        <div className={styles.kpiStrip}>
+          {zones.kpi.map((comp: BuilderComponent) => (
+            <DraggableComponent
+              key={comp.id}
+              component={comp}
+              sectionId=""
+              fields={fields}
+              relationships={relationships}
+              registry={registry}
+              isSelected={selectedId === comp.id}
+              onSelect={() => onSelectComponent(comp.id)}
+              onRemove={() => onRemoveComponent('', comp.id)}
+            />
+          ))}
+        </div>
+      </ZoneDropRegion>
+
+      {/* Three-column body: leftRail · main · rightRail */}
+      <div className={styles.zonedBody}>
+        <ZoneDropRegion
+          zone="leftRail"
+          label="Left Rail"
+          isActive={activeZone === 'leftRail'}
+          isEmpty={zones.leftRail.length === 0}
+          emptyHint="Drop a panel here"
+          onActivate={() => onSelectZone('leftRail')}
+        >
+          {zones.leftRail.map((section: BuilderSection) => (
+            <DroppableSection
+              key={section.id}
+              section={section}
+              fields={fields}
+              relationships={relationships}
+              registry={registry}
+              selectedId={selectedId}
+              onSelectComponent={onSelectComponent}
+              onSelectSection={onSelectSection}
+              onRemoveComponent={onRemoveComponent}
+              onRemoveSection={onRemoveSection}
+              onRenameSection={onRenameSection}
+            />
+          ))}
+        </ZoneDropRegion>
+
+        <div
+          className={`${styles.mainZone} ${activeZone === 'main' ? styles.zoneActive : ''}`}
+          data-testid="zone-main"
+          data-zone-active={activeZone === 'main' ? 'true' : 'false'}
+          onClick={(e) => {
+            // Clicking blank space in the main zone clears selection and
+            // activates it so the palette re-filters to main-zone components.
+            e.stopPropagation();
+            onSelect(null);
+            onSelectZone('main');
+          }}
+        >
+          {/* Tab bar */}
+          <div className={styles.tabBar} data-testid="builder-tab-bar">
         {layout.tabs.map((tab) => (
           <DroppableTab
             key={tab.id}
@@ -253,6 +384,33 @@ export function BuilderCanvas({
           </div>
         </div>
       )}
+        </div>
+
+        <ZoneDropRegion
+          zone="rightRail"
+          label="Right Rail"
+          isActive={activeZone === 'rightRail'}
+          isEmpty={zones.rightRail.length === 0}
+          emptyHint="Drop a panel here"
+          onActivate={() => onSelectZone('rightRail')}
+        >
+          {zones.rightRail.map((section: BuilderSection) => (
+            <DroppableSection
+              key={section.id}
+              section={section}
+              fields={fields}
+              relationships={relationships}
+              registry={registry}
+              selectedId={selectedId}
+              onSelectComponent={onSelectComponent}
+              onSelectSection={onSelectSection}
+              onRemoveComponent={onRemoveComponent}
+              onRemoveSection={onRemoveSection}
+              onRenameSection={onRenameSection}
+            />
+          ))}
+        </ZoneDropRegion>
+      </div>
     </div>
   );
 }
