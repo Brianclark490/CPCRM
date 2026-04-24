@@ -9,7 +9,8 @@ import { pool } from '../db/client.js';
  *
  *   1. Sender-domain match against an Account's stored website / email.
  *   2. LLM-extracted domain match (same comparison, different source).
- *   3. Normalised-name match using Postgres pg_trgm `similarity()`.
+ *   3. Normalised-name match using in-process trigram-Jaccard similarity
+ *      (pg_trgm semantics; no DB extension required — see `trigrams()`).
  *
  * All queries are scoped by `tenant_id` even though the RLS policy installed
  * by migration 025 already enforces isolation — defence-in-depth per ADR-006.
@@ -80,16 +81,27 @@ export function normaliseName(name: string): string {
 }
 
 /**
- * Trigram set for a string, padded with spaces at start/end so short names
- * still produce useful grams. Matches the convention Postgres `pg_trgm`
- * uses so callers moving between DB-side and app-side scoring see
- * comparable numbers.
+ * Trigram set for a string, matching Postgres `pg_trgm` semantics: the input
+ * is split on non-alphanumeric runs, each token is padded with two leading
+ * spaces and one trailing space, and trigrams are collected per-token — so
+ * `"foo bar"` produces `{'  f',' fo','foo','oo ','  b',' ba','bar','ar '}`
+ * rather than a whole-string scan that would include the cross-word gram
+ * `'o b'`. This keeps the 0.35 similarity threshold calibrated against the
+ * same gram distribution pg_trgm uses, avoiding a regression on multi-word
+ * names (e.g. "Acme Corporation") when we score in-process instead of via
+ * the extension.
+ *
+ * Whitespace-only input returns an empty set so `jaccardSimilarity` of two
+ * empty inputs falls to 0 rather than a misleading 1.0.
  */
 export function trigrams(s: string): ReadonlySet<string> {
-  const padded = `  ${s.toLowerCase()} `;
   const set = new Set<string>();
-  for (let i = 0; i < padded.length - 2; i++) {
-    set.add(padded.slice(i, i + 3));
+  const tokens = s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  for (const tok of tokens) {
+    const padded = `  ${tok} `;
+    for (let i = 0; i <= padded.length - 3; i++) {
+      set.add(padded.slice(i, i + 3));
+    }
   }
   return set;
 }
@@ -220,7 +232,7 @@ export async function matchAccount(
       consider(
         row.acc.id,
         score,
-        `name '${row.name}' ≈ '${signals.extractedCompanyName}' (trgm=${row.score.toFixed(2)})`,
+        `name '${row.name}' ≈ '${signals.extractedCompanyName}' (jacc=${row.score.toFixed(2)})`,
       );
     }
   }

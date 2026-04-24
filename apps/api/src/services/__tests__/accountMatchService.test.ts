@@ -55,9 +55,35 @@ describe('accountMatchService helpers', () => {
     it('produces padded trigrams for short strings', () => {
       const grams = trigrams('acme');
       // '  a', ' ac', 'acm', 'cme', 'me '
-      expect(grams.size).toBeGreaterThanOrEqual(5);
+      expect(grams.size).toBe(5);
       expect(grams.has('acm')).toBe(true);
       expect(grams.has('cme')).toBe(true);
+    });
+
+    it('tokenises on whitespace so no cross-word trigrams appear (pg_trgm parity)', () => {
+      const grams = trigrams('foo bar');
+      // Cross-word grams like 'o b', 'oo ', ' ba' should NOT appear; each
+      // word is padded and scanned independently.
+      expect(grams.has('o b')).toBe(false);
+      // 'foo' and 'bar' per-word trigrams should both be present.
+      expect(grams.has('foo')).toBe(true);
+      expect(grams.has('bar')).toBe(true);
+      expect(grams.has('  f')).toBe(true);
+      expect(grams.has('  b')).toBe(true);
+    });
+
+    it('splits on non-alphanumeric separators (pg_trgm parity)', () => {
+      const hyphen = trigrams('foo-bar');
+      const space = trigrams('foo bar');
+      // Same tokens, same grams regardless of separator character.
+      expect([...hyphen].sort()).toEqual([...space].sort());
+    });
+
+    it('returns an empty set for empty / whitespace-only input', () => {
+      expect(trigrams('').size).toBe(0);
+      expect(trigrams('   ').size).toBe(0);
+      // Two empty inputs score 0, not 1.
+      expect(jaccardSimilarity(trigrams(''), trigrams(''))).toBe(0);
     });
 
     it('identical strings score 1.0', () => {
