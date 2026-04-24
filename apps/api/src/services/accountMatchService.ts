@@ -80,6 +80,33 @@ export function normaliseName(name: string): string {
 }
 
 /**
+ * Trigram set for a string, padded with spaces at start/end so short names
+ * still produce useful grams. Matches the convention Postgres `pg_trgm`
+ * uses so callers moving between DB-side and app-side scoring see
+ * comparable numbers.
+ */
+export function trigrams(s: string): ReadonlySet<string> {
+  const padded = `  ${s.toLowerCase()} `;
+  const set = new Set<string>();
+  for (let i = 0; i < padded.length - 2; i++) {
+    set.add(padded.slice(i, i + 3));
+  }
+  return set;
+}
+
+/** Jaccard similarity on trigram sets: |A ∩ B| / |A ∪ B|, in [0, 1]. */
+export function jaccardSimilarity(
+  a: ReadonlySet<string>,
+  b: ReadonlySet<string>,
+): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const gram of a) if (b.has(gram)) intersection++;
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
  * Turns `https://sub.acme.co.uk/foo` into `acme.co.uk`. Returns undefined if
  * the input can't be parsed as a URL or if the host is empty.
  */
@@ -169,26 +196,29 @@ export async function matchAccount(
     }
   }
 
-  // Name-similarity pass via pg_trgm. We run this as a single query so the
-  // comparison happens in the DB; the client-side loop then decides whether
-  // to upgrade or downgrade existing candidates.
+  // Name-similarity pass. We compute trigram-Jaccard similarity in-process
+  // against the account list we already loaded for domain matching. This
+  // avoids the pg_trgm extension, which is not allow-listed on Azure
+  // Database for PostgreSQL Flexible Server. For tenant sizes in the
+  // low-thousands this is fast enough to run on every ingest.
   if (extractedName) {
-    const simResult = await pool.query<{ id: string; name: string; score: number }>(
-      `SELECT id, name, similarity(lower(name), $2) AS score
-         FROM accounts
-        WHERE tenant_id = $1
-          AND similarity(lower(name), $2) > 0.35
-        ORDER BY score DESC
-        LIMIT 10`,
-      [tenantId, extractedName],
-    );
+    const targetGrams = trigrams(extractedName);
+    const scored = accounts
+      .map((acc) => ({
+        acc,
+        name: acc.name,
+        score: jaccardSimilarity(targetGrams, trigrams(normaliseName(acc.name))),
+      }))
+      .filter((row) => row.score > 0.35)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
 
-    for (const row of simResult.rows) {
-      // Map pg_trgm similarity (typically 0–1) into our confidence range,
+    for (const row of scored) {
+      // Map trigram-Jaccard similarity (0–1) into our confidence range,
       // capping at 0.85 so a pure-name match never auto-applies on its own.
       const score = Math.min(0.85, 0.55 + row.score * 0.3);
       consider(
-        row.id,
+        row.acc.id,
         score,
         `name '${row.name}' ≈ '${signals.extractedCompanyName}' (trgm=${row.score.toFixed(2)})`,
       );
