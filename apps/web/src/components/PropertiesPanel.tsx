@@ -99,6 +99,42 @@ function ConfigField({
     );
   }
 
+  // Object-typed fields (e.g. `source`/`target` on metric cards) need a
+  // structured editor. Until one ships, render a read-only JSON preview so
+  // the text input fallback doesn't silently overwrite a nested object with
+  // a string value.
+  if (type === 'object') {
+    const json =
+      value === undefined || value === null
+        ? ''
+        : (() => {
+            try {
+              return JSON.stringify(value, null, 2);
+            } catch {
+              return String(value);
+            }
+          })();
+    return (
+      <div className={styles.field} data-testid={`prop-object-${name}`}>
+        <label className={styles.fieldLabel} htmlFor={`prop-${name}`}>
+          {name}
+        </label>
+        <textarea
+          id={`prop-${name}`}
+          className={styles.textarea}
+          value={json}
+          readOnly
+          rows={Math.min(6, Math.max(2, json.split('\n').length))}
+        />
+        <span className={styles.hint}>
+          {description
+            ? `${description} (read-only — editor coming soon)`
+            : 'Read-only — a structured editor for this field is coming soon.'}
+        </span>
+      </div>
+    );
+  }
+
   // Default: string
   return (
     <div className={styles.field}>

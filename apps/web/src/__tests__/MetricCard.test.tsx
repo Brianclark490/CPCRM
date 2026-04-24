@@ -158,6 +158,20 @@ describe('MetricCard', () => {
     expect(fill.style.width).toBe('0%');
   });
 
+  it('exposes an accessible name on the progress bar that includes the metric label', () => {
+    renderMetric(
+      {
+        label: 'pipeline.open',
+        source: { kind: 'field', fieldApiName: 'v' },
+        target: { kind: 'literal', value: 100 },
+      },
+      { v: 40 },
+    );
+
+    const bar = screen.getByTestId('metric-progress');
+    expect(bar).toHaveAttribute('aria-label', 'pipeline.open: 40% of target');
+  });
+
   it('renders progress at 50% when value is half of target', () => {
     renderMetric(
       {

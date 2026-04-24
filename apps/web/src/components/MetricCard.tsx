@@ -150,6 +150,11 @@ export function MetricCard({ component, record }: ComponentRendererProps) {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progressRatio * 100)}
+          aria-label={
+            label
+              ? `${label}: ${Math.round(progressRatio * 100)}% of target`
+              : `${Math.round(progressRatio * 100)}% of target`
+          }
           data-testid="metric-progress"
         >
           <div
