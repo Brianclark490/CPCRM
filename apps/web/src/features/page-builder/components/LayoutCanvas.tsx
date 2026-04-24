@@ -117,6 +117,7 @@ export function LayoutCanvas({
           relationships={relationships}
           relatedFields={relatedFields}
           tabs={layout.tabs}
+          zones={layout.zones}
           activeZone={activeZone}
         />
 

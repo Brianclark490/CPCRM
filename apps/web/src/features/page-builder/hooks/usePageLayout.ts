@@ -31,9 +31,10 @@ import {
   normalizeBuilderZones,
 } from '../helpers.js';
 
-// Zones the page builder exposes as drop targets. 'header' has its own
-// dedicated editor (`HeaderZoneEditor`) and 'main' covers the tab body, so
-// both are tracked separately from this union.
+// Active zone state for the page builder canvas. Matches the full
+// `LayoutZone` union: 'header' runs through the dedicated
+// `HeaderZoneEditor`, while 'main' / 'kpi' / 'leftRail' / 'rightRail'
+// are the zones the canvas exposes as drop targets.
 export type ActiveZone = LayoutZone;
 
 type RailZone = 'leftRail' | 'rightRail';

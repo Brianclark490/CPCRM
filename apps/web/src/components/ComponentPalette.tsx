@@ -8,6 +8,9 @@ import type {
   RelatedFieldRef,
   PaletteDragData,
   BuilderTab,
+  BuilderZones,
+  BuilderSection,
+  BuilderComponent,
   LayoutZone,
 } from './builderTypes.js';
 import { resolveIcon } from './iconMap.js';
@@ -35,6 +38,11 @@ interface ComponentPaletteProps {
   relationships: RelationshipRef[];
   relatedFields: RelatedFieldRef[];
   tabs: BuilderTab[];
+  // Rail sections also accept fields, related fields, and related lists.
+  // When provided, the palette's "placed" indicator reflects items in
+  // rails too so admins don't get a misleading checkmark state. Omitted
+  // in tests / older callers; treated as no rails in that case.
+  zones?: BuilderZones;
   activeZone?: LayoutZone;
 }
 
@@ -57,49 +65,70 @@ const CATEGORY_LABELS: Record<ComponentCategory, string> = {
 
 const CATEGORY_ORDER: ComponentCategory[] = ['fields', 'related', 'widgets', 'layout'];
 
-function getPlacedFieldIds(tabs: BuilderTab[]): Set<string> {
-  const ids = new Set<string>();
+// Walk every section that can host field / related-field / related-list
+// components. That's every tab section plus both rails; KPI components
+// never have these types so we skip it.
+function forEachHostSection(
+  tabs: BuilderTab[],
+  zones: BuilderZones | undefined,
+  visit: (section: BuilderSection) => void,
+) {
   for (const tab of tabs) {
-    for (const section of tab.sections) {
-      for (const comp of section.components) {
-        if (comp.type === 'field' && comp.config.fieldApiName) {
-          ids.add(String(comp.config.fieldApiName));
-        }
+    for (const section of tab.sections) visit(section);
+  }
+  if (zones) {
+    for (const section of zones.leftRail) visit(section);
+    for (const section of zones.rightRail) visit(section);
+  }
+}
+
+function getPlacedFieldIds(
+  tabs: BuilderTab[],
+  zones: BuilderZones | undefined,
+): Set<string> {
+  const ids = new Set<string>();
+  forEachHostSection(tabs, zones, (section) => {
+    for (const comp of section.components) {
+      if (comp.type === 'field' && comp.config.fieldApiName) {
+        ids.add(String(comp.config.fieldApiName));
       }
     }
-  }
+  });
   return ids;
 }
 
-function getPlacedRelationshipIds(tabs: BuilderTab[]): Set<string> {
+function getPlacedRelationshipIds(
+  tabs: BuilderTab[],
+  zones: BuilderZones | undefined,
+): Set<string> {
   const ids = new Set<string>();
-  for (const tab of tabs) {
-    for (const section of tab.sections) {
-      for (const comp of section.components) {
-        if (comp.type === 'related_list' && comp.config.relationshipId) {
-          ids.add(String(comp.config.relationshipId));
-        }
+  forEachHostSection(tabs, zones, (section) => {
+    for (const comp of section.components) {
+      if (comp.type === 'related_list' && comp.config.relationshipId) {
+        ids.add(String(comp.config.relationshipId));
       }
     }
-  }
+  });
   return ids;
 }
 
-function getPlacedRelatedFieldIds(tabs: BuilderTab[]): Set<string> {
+function getPlacedRelatedFieldIds(
+  tabs: BuilderTab[],
+  zones: BuilderZones | undefined,
+): Set<string> {
   const ids = new Set<string>();
-  for (const tab of tabs) {
-    for (const section of tab.sections) {
-      for (const comp of section.components) {
-        if (
-          comp.type === 'related_field' &&
-          comp.config.relationshipApiName &&
-          comp.config.relatedFieldApiName
-        ) {
-          ids.add(`${comp.config.relationshipApiName}.${comp.config.relatedFieldApiName}`);
-        }
-      }
+  const addFromComponent = (comp: BuilderComponent) => {
+    if (
+      comp.type === 'related_field' &&
+      comp.config.relationshipApiName &&
+      comp.config.relatedFieldApiName
+    ) {
+      ids.add(`${comp.config.relationshipApiName}.${comp.config.relatedFieldApiName}`);
     }
-  }
+  };
+  forEachHostSection(tabs, zones, (section) => {
+    for (const comp of section.components) addFromComponent(comp);
+  });
   return ids;
 }
 
@@ -142,12 +171,13 @@ export function ComponentPalette({
   relationships,
   relatedFields,
   tabs,
+  zones,
   activeZone = DEFAULT_ACTIVE_ZONE,
 }: ComponentPaletteProps) {
   const [fieldSearch, setFieldSearch] = useState('');
-  const placedFields = getPlacedFieldIds(tabs);
-  const placedRelationships = getPlacedRelationshipIds(tabs);
-  const placedRelatedFields = getPlacedRelatedFieldIds(tabs);
+  const placedFields = getPlacedFieldIds(tabs, zones);
+  const placedRelationships = getPlacedRelationshipIds(tabs, zones);
+  const placedRelatedFields = getPlacedRelatedFieldIds(tabs, zones);
 
   const filteredFields = fieldSearch
     ? fields.filter((f) => f.label.toLowerCase().includes(fieldSearch.toLowerCase()))

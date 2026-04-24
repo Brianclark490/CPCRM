@@ -66,6 +66,13 @@ function ZoneDropRegion({
     data: { origin: 'zone', zone },
   });
 
+  // The zone wrapper itself must be reachable by keyboard so screen-reader
+  // and keyboard-only users can activate it. Child sections / components
+  // call `e.stopPropagation()` on their own clicks, so they activate the
+  // zone through callbacks the parent wires in — this handler only fires
+  // for clicks on the zone's chrome (header, empty hint).
+  const handleActivate = () => onActivate();
+
   return (
     <section
       ref={setNodeRef}
@@ -78,9 +85,19 @@ function ZoneDropRegion({
         .join(' ')}
       data-testid={`zone-${zone}`}
       data-zone-active={isActive ? 'true' : 'false'}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isActive}
+      aria-label={`${label} zone${isActive ? ' (active)' : ''}`}
       onClick={(e) => {
         e.stopPropagation();
-        onActivate();
+        handleActivate();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleActivate();
+        }
       }}
     >
       <header className={styles.zoneHeader}>
@@ -180,6 +197,34 @@ export function BuilderCanvas({
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
+  // Children inside each zone stop click propagation so their own select
+  // handlers don't bubble up to the zone wrapper's `onClick`. To keep
+  // `activeZone` in sync with the palette, wrap the select / remove
+  // callbacks passed into each zone so they also activate the zone.
+  const zoneAwareHandlers = (zone: LayoutZone) => ({
+    onSelectComponent: (componentId: string) => {
+      onSelectZone(zone);
+      onSelectComponent(componentId);
+    },
+    onSelectSection: (sectionId: string) => {
+      onSelectZone(zone);
+      onSelectSection(sectionId);
+    },
+    onRemoveComponent: (sectionId: string, componentId: string) => {
+      onSelectZone(zone);
+      onRemoveComponent(sectionId, componentId);
+    },
+    onRemoveSection: (sectionId: string) => {
+      onSelectZone(zone);
+      onRemoveSection(sectionId);
+    },
+  });
+
+  const kpiHandlers = zoneAwareHandlers('kpi');
+  const leftRailHandlers = zoneAwareHandlers('leftRail');
+  const rightRailHandlers = zoneAwareHandlers('rightRail');
+  const mainHandlers = zoneAwareHandlers('main');
+
   const sectionSortableIds = (activeTab?.sections ?? []).map(
     (s: BuilderSection) => `section-${s.id}`,
   );
@@ -207,19 +252,24 @@ export function BuilderCanvas({
         onActivate={() => onSelectZone('kpi')}
       >
         <div className={styles.kpiStrip}>
-          {zones.kpi.map((comp: BuilderComponent) => (
-            <DraggableComponent
-              key={comp.id}
-              component={comp}
-              sectionId=""
-              fields={fields}
-              relationships={relationships}
-              registry={registry}
-              isSelected={selectedId === comp.id}
-              onSelect={() => onSelectComponent(comp.id)}
-              onRemove={() => onRemoveComponent('', comp.id)}
-            />
-          ))}
+          <SortableContext
+            items={zones.kpi.map((c: BuilderComponent) => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {zones.kpi.map((comp: BuilderComponent) => (
+              <DraggableComponent
+                key={comp.id}
+                component={comp}
+                sectionId=""
+                fields={fields}
+                relationships={relationships}
+                registry={registry}
+                isSelected={selectedId === comp.id}
+                onSelect={() => kpiHandlers.onSelectComponent(comp.id)}
+                onRemove={() => kpiHandlers.onRemoveComponent('', comp.id)}
+              />
+            ))}
+          </SortableContext>
         </div>
       </ZoneDropRegion>
 
@@ -233,21 +283,26 @@ export function BuilderCanvas({
           emptyHint="Drop a panel here"
           onActivate={() => onSelectZone('leftRail')}
         >
-          {zones.leftRail.map((section: BuilderSection) => (
-            <DroppableSection
-              key={section.id}
-              section={section}
-              fields={fields}
-              relationships={relationships}
-              registry={registry}
-              selectedId={selectedId}
-              onSelectComponent={onSelectComponent}
-              onSelectSection={onSelectSection}
-              onRemoveComponent={onRemoveComponent}
-              onRemoveSection={onRemoveSection}
-              onRenameSection={onRenameSection}
-            />
-          ))}
+          <SortableContext
+            items={zones.leftRail.map((s: BuilderSection) => `section-${s.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            {zones.leftRail.map((section: BuilderSection) => (
+              <DroppableSection
+                key={section.id}
+                section={section}
+                fields={fields}
+                relationships={relationships}
+                registry={registry}
+                selectedId={selectedId}
+                onSelectComponent={leftRailHandlers.onSelectComponent}
+                onSelectSection={leftRailHandlers.onSelectSection}
+                onRemoveComponent={leftRailHandlers.onRemoveComponent}
+                onRemoveSection={leftRailHandlers.onRemoveSection}
+                onRenameSection={onRenameSection}
+              />
+            ))}
+          </SortableContext>
         </ZoneDropRegion>
 
         <div
@@ -357,10 +412,10 @@ export function BuilderCanvas({
                 relationships={relationships}
                 registry={registry}
                 selectedId={selectedId}
-                onSelectComponent={onSelectComponent}
-                onSelectSection={onSelectSection}
-                onRemoveComponent={onRemoveComponent}
-                onRemoveSection={onRemoveSection}
+                onSelectComponent={mainHandlers.onSelectComponent}
+                onSelectSection={mainHandlers.onSelectSection}
+                onRemoveComponent={mainHandlers.onRemoveComponent}
+                onRemoveSection={mainHandlers.onRemoveSection}
                 onRenameSection={onRenameSection}
               />
             ))}
@@ -394,21 +449,26 @@ export function BuilderCanvas({
           emptyHint="Drop a panel here"
           onActivate={() => onSelectZone('rightRail')}
         >
-          {zones.rightRail.map((section: BuilderSection) => (
-            <DroppableSection
-              key={section.id}
-              section={section}
-              fields={fields}
-              relationships={relationships}
-              registry={registry}
-              selectedId={selectedId}
-              onSelectComponent={onSelectComponent}
-              onSelectSection={onSelectSection}
-              onRemoveComponent={onRemoveComponent}
-              onRemoveSection={onRemoveSection}
-              onRenameSection={onRenameSection}
-            />
-          ))}
+          <SortableContext
+            items={zones.rightRail.map((s: BuilderSection) => `section-${s.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            {zones.rightRail.map((section: BuilderSection) => (
+              <DroppableSection
+                key={section.id}
+                section={section}
+                fields={fields}
+                relationships={relationships}
+                registry={registry}
+                selectedId={selectedId}
+                onSelectComponent={rightRailHandlers.onSelectComponent}
+                onSelectSection={rightRailHandlers.onSelectSection}
+                onRemoveComponent={rightRailHandlers.onRemoveComponent}
+                onRemoveSection={rightRailHandlers.onRemoveSection}
+                onRenameSection={onRenameSection}
+              />
+            ))}
+          </SortableContext>
         </ZoneDropRegion>
       </div>
     </div>

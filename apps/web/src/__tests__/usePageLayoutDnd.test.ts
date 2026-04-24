@@ -197,4 +197,110 @@ describe('usePageLayoutDnd — zone drops', () => {
       'activity_timeline',
     );
   });
+
+  it('rejects unknown component types when a registry is loaded', () => {
+    const { hook, getLayout, onRejectZoneDrop } = setupHook(makeLayout());
+
+    act(() => {
+      hook.result.current.handleDragEnd(
+        paletteDropEvent('unknown_widget', zoneDropTarget('rightRail')),
+      );
+    });
+
+    expect(getLayout().zones.rightRail).toHaveLength(0);
+    expect(onRejectZoneDrop).toHaveBeenCalledWith('unknown_widget', 'rightRail');
+  });
 });
+
+// ─── Cross-zone component moves ────────────────────────────────────────────
+
+describe('usePageLayoutDnd — canvas component reorder across zones', () => {
+  function canvasComponentDragEvent(
+    sourceSectionId: string,
+    componentId: string,
+    over: DragEndEvent['over'],
+  ): DragEndEvent {
+    return {
+      active: {
+        id: componentId,
+        data: {
+          current: { origin: 'canvas', sectionId: sourceSectionId, componentId },
+        },
+        rect: { current: { initial: null, translated: null } },
+      },
+      over,
+      delta: { x: 0, y: 0 },
+      collisions: [],
+      activatorEvent: new Event('pointer'),
+    } as unknown as DragEndEvent;
+  }
+
+  function sectionDropTarget(sectionId: string): DragEndEvent['over'] {
+    return {
+      id: `droppable-${sectionId}`,
+      data: { current: { sectionId } },
+    } as unknown as DragEndEvent['over'];
+  }
+
+  it('moves an identity_panel from a main section into a left-rail section', () => {
+    const layout = makeLayout();
+    layout.tabs[0].sections[0].components.push({
+      id: 'c-identity',
+      type: 'identity_panel',
+      config: {},
+    });
+    layout.zones.leftRail.push({
+      id: 'rail-sec-1',
+      type: 'field_section',
+      label: 'Rail Section',
+      columns: 1,
+      components: [],
+    });
+    const { hook, getLayout } = setupHook(layout);
+
+    act(() => {
+      hook.result.current.handleDragEnd(
+        canvasComponentDragEvent('sec-1', 'c-identity', sectionDropTarget('rail-sec-1')),
+      );
+    });
+
+    const updated = getLayout();
+    expect(updated.tabs[0].sections[0].components).toHaveLength(0);
+    expect(updated.zones.leftRail[0].components).toHaveLength(1);
+    expect(updated.zones.leftRail[0].components[0].id).toBe('c-identity');
+  });
+
+  it('rejects moving a main-only component into a rail and keeps it in place', () => {
+    const layout = makeLayout();
+    layout.tabs[0].sections[0].components.push({
+      id: 'c-timeline',
+      type: 'activity_timeline',
+      config: {},
+    });
+    layout.zones.leftRail.push({
+      id: 'rail-sec-1',
+      type: 'field_section',
+      label: 'Rail Section',
+      columns: 1,
+      components: [],
+    });
+    const onRejectZoneDrop = vi.fn();
+    const { hook, getLayout } = setupHook(layout, onRejectZoneDrop);
+
+    act(() => {
+      hook.result.current.handleDragEnd(
+        canvasComponentDragEvent('sec-1', 'c-timeline', sectionDropTarget('rail-sec-1')),
+      );
+    });
+
+    const updated = getLayout();
+    // Regression guard: the earlier implementation spliced first and
+    // bailed when `findSection` couldn't resolve the rail target,
+    // causing silent data loss. We expect the component to stay put.
+    expect(updated.tabs[0].sections[0].components).toHaveLength(1);
+    expect(updated.tabs[0].sections[0].components[0].id).toBe('c-timeline');
+    expect(updated.zones.leftRail[0].components).toHaveLength(0);
+    expect(onRejectZoneDrop).toHaveBeenCalledWith('activity_timeline', 'leftRail');
+  });
+});
+
