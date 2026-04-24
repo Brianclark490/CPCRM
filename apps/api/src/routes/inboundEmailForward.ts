@@ -58,25 +58,79 @@ function verifySignature(req: Request): boolean {
   }
 }
 
-const USER_ADDRESS_RE = /^u-([a-zA-Z0-9_-]+)@/;
+// Two supported address shapes:
+//   u-<userId>@...              – user is in exactly one tenant
+//   u-<userId>.<tenantSlug>@... – explicit tenant selector for multi-tenant users
+const USER_ADDRESS_RE = /^u-([a-zA-Z0-9_-]+)(?:\.([a-zA-Z0-9_-]+))?@/;
 
-function extractUserIdFromTo(payload: PostmarkInboundPayload): string | undefined {
+interface ForwardAddress {
+  userId: string;
+  tenantSlug?: string;
+}
+
+function extractAddressFromTo(payload: PostmarkInboundPayload): ForwardAddress | undefined {
   const candidates: string[] = [];
   if (payload.OriginalRecipient) candidates.push(payload.OriginalRecipient);
   for (const t of payload.ToFull ?? []) candidates.push(t.Email);
   for (const email of candidates) {
     const m = USER_ADDRESS_RE.exec(email);
-    if (m) return m[1];
+    if (m) return { userId: m[1], tenantSlug: m[2] };
   }
   return undefined;
 }
 
-async function resolveTenantForUser(userId: string): Promise<string | undefined> {
-  const result = await pool.query<{ tenant_id: string }>(
-    `SELECT tenant_id FROM tenant_memberships WHERE user_id = $1 LIMIT 1`,
+type TenantResolution =
+  | { kind: 'ok'; tenantId: string }
+  | { kind: 'none' }
+  | { kind: 'ambiguous'; tenantSlugs: string[] };
+
+/**
+ * Resolves the forward recipient to a specific tenant.
+ *
+ * - If the address carries a tenant slug (`u-<id>.<slug>@...`), we require an
+ *   exact match — never silently fall back to another tenant.
+ * - If the address has no slug and the user belongs to exactly one tenant,
+ *   that tenant is used.
+ * - If the user belongs to multiple tenants and no slug was provided, the
+ *   result is `ambiguous` and the webhook refuses rather than guessing — this
+ *   prevents routing email content into the wrong organisation (reviewer
+ *   flagged the previous `LIMIT 1` as non-deterministic; returning 409 with
+ *   an explicit list is safer and tells the user how to re-send).
+ */
+async function resolveTenantForAddress(
+  address: ForwardAddress,
+): Promise<TenantResolution> {
+  const { userId, tenantSlug } = address;
+
+  if (tenantSlug) {
+    const result = await pool.query<{ id: string }>(
+      `SELECT t.id
+         FROM tenant_memberships m
+         JOIN tenants t ON t.id = m.tenant_id
+        WHERE m.user_id = $1 AND t.slug = $2
+        LIMIT 1`,
+      [userId, tenantSlug],
+    );
+    if (result.rows.length === 0) return { kind: 'none' };
+    return { kind: 'ok', tenantId: result.rows[0].id };
+  }
+
+  const result = await pool.query<{ tenant_id: string; slug: string }>(
+    `SELECT m.tenant_id, t.slug
+       FROM tenant_memberships m
+       JOIN tenants t ON t.id = m.tenant_id
+      WHERE m.user_id = $1
+      ORDER BY m.created_at ASC`,
     [userId],
   );
-  return result.rows[0]?.tenant_id;
+  if (result.rows.length === 0) return { kind: 'none' };
+  if (result.rows.length === 1) {
+    return { kind: 'ok', tenantId: result.rows[0].tenant_id };
+  }
+  return {
+    kind: 'ambiguous',
+    tenantSlugs: result.rows.map((r) => r.slug),
+  };
 }
 
 inboundEmailForwardRouter.post(
@@ -87,16 +141,34 @@ inboundEmailForwardRouter.post(
       return;
     }
     const payload = req.body as PostmarkInboundPayload;
-    const userId = extractUserIdFromTo(payload);
-    if (!userId) {
+    const address = extractAddressFromTo(payload);
+    if (!address) {
       res.status(400).json({ error: 'Unable to derive user from To address' });
       return;
     }
-    const tenantId = await resolveTenantForUser(userId);
-    if (!tenantId) {
-      res.status(403).json({ error: 'User has no tenant membership' });
+    const { userId } = address;
+    const tenant = await resolveTenantForAddress(address);
+    if (tenant.kind === 'none') {
+      res.status(403).json({
+        error: address.tenantSlug
+          ? `User is not a member of tenant '${address.tenantSlug}'`
+          : 'User has no tenant membership',
+      });
       return;
     }
+    if (tenant.kind === 'ambiguous') {
+      // Refuse rather than silently filing email into the wrong tenant.
+      // The user can re-send to `u-<userId>.<tenantSlug>@...` to disambiguate.
+      res.status(409).json({
+        error: 'User belongs to multiple tenants',
+        detail:
+          `Re-send to u-${userId}.<tenantSlug>@<inbound domain> with one of ` +
+          `[${tenant.tenantSlugs.join(', ')}] to choose which tenant the ` +
+          `email should be filed in.`,
+      });
+      return;
+    }
+    const tenantId = tenant.tenantId;
 
     // Respond fast so Postmark marks the delivery successful — process inline
     // within an AsyncLocalStorage context so RLS is active.

@@ -90,11 +90,13 @@ function stripHtml(html: string): string {
   const MAX_INPUT = 200_000;
   const capped = html.length > MAX_INPUT ? html.slice(0, MAX_INPUT) : html;
 
-  // [\s\S] so the match crosses newlines; the `\/?\s*>` variant covers
-  // `</script>` as well as `</script >` which the previous regex missed.
+  // `[\s\S]` so the match crosses newlines. The closing-tag pattern
+  // `<\/(style|script)\b[^>]*>` matches `</style>`, `</style >`, and the
+  // browser-tolerated `</style\n  bar>` form — the latter would bypass a
+  // `<\/style\s*>` regex and leave the block untouched (CodeQL js/bad-tag-filter).
   const withoutBlocks = capped
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ');
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, ' ');
 
   const withoutTags = withoutBlocks.replace(/<[^>]+>/g, ' ');
 
@@ -126,26 +128,14 @@ function domainOfEmail(email: string): string | undefined {
   return at === -1 ? undefined : email.slice(at + 1).toLowerCase();
 }
 
-async function loadOwnerDomain(
-  tenantId: string,
-  userId: string,
-  ownerEmail: string | undefined,
-): Promise<string> {
-  if (ownerEmail) {
-    const d = domainOfEmail(ownerEmail);
-    if (d) return d;
-  }
-  // Scope the fallback by (tenant_id, user_id) so we never pick another
-  // user's mailbox domain in a shared tenant. Return '' when unknown rather
-  // than guessing; the filter then treats every external sender as external.
-  const result = await pool.query<{ email_address: string }>(
-    `SELECT email_address FROM mailbox_connections
-      WHERE tenant_id = $1 AND user_id = $2 AND status = 'active'
-      LIMIT 1`,
-    [tenantId, userId],
-  );
-  const fromConn = result.rows[0]?.email_address;
-  return (fromConn ? domainOfEmail(fromConn) : undefined) ?? '';
+function loadOwnerDomain(ownerEmail: string | undefined): string {
+  // The owner domain is only used by the filter to classify a thread as
+  // internal-to-org. When we don't know the mailbox owner's email (e.g. a
+  // Postmark forward where the forwarder's identity is encoded in the
+  // local-part only), we return ''. An empty owner domain disables the
+  // internal-thread skip rule — which is strictly safer than guessing with
+  // another user's mailbox domain.
+  return (ownerEmail ? domainOfEmail(ownerEmail) : undefined) ?? '';
 }
 
 async function trackedContactEmails(tenantId: string): Promise<string[]> {
@@ -469,7 +459,7 @@ export async function ingestEmail(
     };
   }
 
-  const ownerDomain = await loadOwnerDomain(ctx.tenantId, ctx.userId, ctx.ownerEmail);
+  const ownerDomain = loadOwnerDomain(ctx.ownerEmail);
   const mentioned = await trackedContactEmails(ctx.tenantId);
 
   const filterable: FilterableMessage = {

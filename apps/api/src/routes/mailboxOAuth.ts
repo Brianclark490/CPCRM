@@ -33,7 +33,7 @@ import {
  *                                         the 302). Limited to a single
  *                                         instance — move to shared storage
  *                                         before running behind a scale-out.
- * POST /mailbox/disconnect              – revokes the stored tokens and
+ * DELETE|POST /mailbox/disconnect       – revokes the stored tokens and
  *                                         cancels the Graph subscription.
  * GET /mailbox/status                   – current connection status for the
  *                                         signed-in user.
