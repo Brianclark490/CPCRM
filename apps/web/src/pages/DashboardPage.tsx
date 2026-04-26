@@ -127,12 +127,14 @@ export function DashboardPage() {
       value: opportunityCount !== null ? String(opportunityCount) : '—',
       meta: opportunityCount !== null ? `${opportunityCount} total` : 'Loading…',
       icon: statIcons.opportunity,
+      to: '/objects/opportunity',
     },
     {
       label: 'Active Accounts',
       value: accountCount !== null ? String(accountCount) : '—',
       meta: accountCount !== null ? `${accountCount} total` : 'Loading…',
       icon: statIcons.account,
+      to: '/objects/account',
     },
   ];
 
@@ -151,7 +153,7 @@ export function DashboardPage() {
 
       <div className={styles.statsGrid}>
         {stats.map((stat) => (
-          <StatCard key={stat.label} label={stat.label} value={stat.value} meta={stat.meta} icon={stat.icon} />
+          <StatCard key={stat.label} label={stat.label} value={stat.value} meta={stat.meta} icon={stat.icon} to={stat.to} />
         ))}
       </div>
 
