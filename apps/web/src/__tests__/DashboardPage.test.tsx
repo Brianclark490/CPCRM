@@ -107,6 +107,22 @@ describe('DashboardPage', () => {
     expect(newAccLink).toHaveAttribute('href', '/objects/account/new');
   });
 
+  it('renders the Open Opportunities stat card as a link to the opportunities object', () => {
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>,
+    );
+
+    const oppCardLink = screen.getByRole('link', { name: /Open Opportunities/i });
+    expect(oppCardLink).toBeInTheDocument();
+    expect(oppCardLink).toHaveAttribute('href', '/objects/opportunity');
+
+    const accCardLink = screen.getByRole('link', { name: /Active Accounts/i });
+    expect(accCardLink).toBeInTheDocument();
+    expect(accCardLink).toHaveAttribute('href', '/objects/account');
+  });
+
   it('updates stat counts after fetching record totals', async () => {
     mockFetchCounts(12, 7);
 
