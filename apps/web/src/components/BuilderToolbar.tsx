@@ -17,6 +17,8 @@ interface BuilderToolbarProps {
   onSaveDraft: () => void;
   onPublish: () => void;
   onPreview: () => void;
+  /** Open the AI prompt modal. Stub for natural-language editing (#522). */
+  onAsk?: () => void;
   /** Role-based layout support */
   allLayouts?: RoleLayout[];
   selectedLayoutId?: string | null;
@@ -36,6 +38,7 @@ export function BuilderToolbar({
   onSaveDraft,
   onPublish,
   onPreview,
+  onAsk,
   allLayouts,
   selectedLayoutId,
   onRoleChange,
@@ -131,6 +134,17 @@ export function BuilderToolbar({
             data-testid="reset-to-default-button"
           >
             Reset to default
+          </PrimaryButton>
+        )}
+        {onAsk && (
+          <PrimaryButton
+            variant="ghost"
+            size="sm"
+            onClick={onAsk}
+            data-testid="ask-button"
+            aria-keyshortcuts="Control+K Meta+K"
+          >
+            <span aria-hidden="true">✨</span> Ask
           </PrimaryButton>
         )}
         <PrimaryButton

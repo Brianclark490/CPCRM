@@ -804,6 +804,93 @@ describe('PageBuilderPage', () => {
     });
   });
 
+  describe('AI prompt stub (#522)', () => {
+    it('renders the Ask button in the toolbar', async () => {
+      mockAllFetches();
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-button')).toBeInTheDocument();
+      });
+    });
+
+    it('opens the AI prompt modal when Ask is clicked', async () => {
+      const user = userEvent.setup();
+      mockAllFetches();
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-button')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId('ask-button'));
+
+      expect(screen.getByTestId('ai-prompt-modal')).toBeInTheDocument();
+    });
+
+    it('opens the AI prompt modal via Cmd/Ctrl+K', async () => {
+      const user = userEvent.setup();
+      mockAllFetches();
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('page-builder')).toBeInTheDocument();
+      });
+
+      await user.keyboard('{Control>}k{/Control}');
+
+      expect(screen.getByTestId('ai-prompt-modal')).toBeInTheDocument();
+    });
+
+    it('logs the prompt and shows a coming-soon toast on submit, then closes the modal', async () => {
+      const user = userEvent.setup();
+      mockAllFetches();
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-button')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId('ask-button'));
+      await user.type(
+        screen.getByTestId('ai-prompt-textarea'),
+        'Replace opportunities with calls',
+      );
+      await user.click(screen.getByTestId('ai-prompt-submit'));
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[AI prompt stub]',
+        expect.objectContaining({ prompt: 'Replace opportunities with calls' }),
+      );
+      expect(screen.queryByTestId('ai-prompt-modal')).not.toBeInTheDocument();
+      expect(screen.getByTestId('ai-toast')).toHaveTextContent(
+        'AI editing is coming soon. Your request has been logged.',
+      );
+
+      infoSpy.mockRestore();
+    });
+
+    it('does not call the network when the AI prompt is submitted', async () => {
+      const user = userEvent.setup();
+      const mockFetch = mockAllFetches();
+      vi.spyOn(console, 'info').mockImplementation(() => {});
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-button')).toBeInTheDocument();
+      });
+
+      const callsBefore = mockFetch.mock.calls.length;
+
+      await user.click(screen.getByTestId('ask-button'));
+      await user.type(screen.getByTestId('ai-prompt-textarea'), 'do a thing');
+      await user.click(screen.getByTestId('ai-prompt-submit'));
+
+      expect(mockFetch.mock.calls.length).toBe(callsBefore);
+    });
+  });
+
   it('handles no page layouts by creating a default', async () => {
     const mockFetch = vi.fn();
 

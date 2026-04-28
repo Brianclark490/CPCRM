@@ -1,14 +1,18 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { BuilderToolbar } from '../../components/BuilderToolbar.js';
 import type { RoleLayout } from '../../components/BuilderToolbar.js';
 import { VersionHistoryPanel } from '../../components/VersionHistoryPanel.js';
 import { CopyLayoutModal } from '../../components/CopyLayoutModal.js';
+import { AiPromptModal } from '../../components/AiPromptModal.js';
 import { usePageLayout } from './hooks/usePageLayout.js';
 import { usePageLayoutDnd } from './hooks/usePageLayoutDnd.js';
 import { usePageLayoutActions } from './hooks/usePageLayoutActions.js';
 import { LayoutCanvas } from './components/LayoutCanvas.js';
 import { PreviewPane } from './components/PreviewPane.js';
 import styles from './PageBuilderPage.module.css';
+
+const AI_TOAST_TIMEOUT_MS = 4000;
 
 export function PageBuilderPage() {
   const { objectId } = useParams<{ objectId: string }>();
@@ -33,6 +37,46 @@ export function PageBuilderPage() {
     setAllLayouts: pl.setAllLayouts,
     loadLayoutDetail: pl.loadLayoutDetail,
   });
+
+  // ── AI prompt stub (#522) ──────────────────────────────────
+  // The real LLM contract is being designed in #523; this is purely a UX
+  // freeze so everything around the affordance can be built.
+  const [showAiPrompt, setShowAiPrompt] = useState(false);
+  const [aiToast, setAiToast] = useState<string | null>(null);
+
+  const openAiPrompt = useCallback(() => setShowAiPrompt(true), []);
+
+  useEffect(() => {
+    if (!aiToast) return;
+    const timer = window.setTimeout(() => setAiToast(null), AI_TOAST_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [aiToast]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setShowAiPrompt(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const handleAskSubmit = useCallback(
+    (prompt: string) => {
+      // Real backend lands after the contract spike (#523). For now: log the
+      // prompt + current layout JSON so we can sanity-check the affordance,
+      // then close the modal and show a coming-soon toast.
+      console.info('[AI prompt stub]', {
+        prompt,
+        layout: pl.layout,
+      });
+      setShowAiPrompt(false);
+      setAiToast('AI editing is coming soon. Your request has been logged.');
+    },
+    [pl.layout],
+  );
 
   // ── Loading / error states ──────────���──────────────────────
 
@@ -81,6 +125,7 @@ export function PageBuilderPage() {
         onSaveDraft={() => void actions.handleSaveDraft()}
         onPublish={() => void actions.handlePublish()}
         onPreview={() => actions.setShowPreview(true)}
+        onAsk={openAiPrompt}
         allLayouts={allLayoutsForToolbar}
         selectedLayoutId={pl.selectedLayoutId}
         onRoleChange={(layoutId, role) => void actions.handleRoleChange(layoutId, role)}
@@ -152,6 +197,24 @@ export function PageBuilderPage() {
           onRevert={(version) => void actions.handleRevert(version)}
           onClose={() => actions.setShowHistory(false)}
         />
+      )}
+
+      {showAiPrompt && (
+        <AiPromptModal
+          onSubmit={handleAskSubmit}
+          onClose={() => setShowAiPrompt(false)}
+        />
+      )}
+
+      {aiToast && (
+        <div
+          className={styles.aiToast}
+          role="status"
+          aria-live="polite"
+          data-testid="ai-toast"
+        >
+          {aiToast}
+        </div>
       )}
 
       {actions.showCopyModal && (
