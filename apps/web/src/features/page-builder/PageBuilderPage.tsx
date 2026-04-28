@@ -5,6 +5,7 @@ import type { RoleLayout } from '../../components/BuilderToolbar.js';
 import { VersionHistoryPanel } from '../../components/VersionHistoryPanel.js';
 import { CopyLayoutModal } from '../../components/CopyLayoutModal.js';
 import { AiPromptModal } from '../../components/AiPromptModal.js';
+import { logger } from '../../lib/logger.js';
 import { usePageLayout } from './hooks/usePageLayout.js';
 import { usePageLayoutDnd } from './hooks/usePageLayoutDnd.js';
 import { usePageLayoutActions } from './hooks/usePageLayoutActions.js';
@@ -67,8 +68,10 @@ export function PageBuilderPage() {
     (prompt: string) => {
       // Real backend lands after the contract spike (#523). For now: log the
       // prompt + current layout JSON so we can sanity-check the affordance,
-      // then close the modal and show a coming-soon toast.
-      console.info('[AI prompt stub]', {
+      // then close the modal and show a coming-soon toast. logger.info no-ops
+      // in production so tenant layout data doesn't leak to the browser
+      // console there.
+      logger.info('AI prompt stub', {
         prompt,
         layout: pl.layout,
       });
@@ -78,7 +81,7 @@ export function PageBuilderPage() {
     [pl.layout],
   );
 
-  // ── Loading / error states ──────────���──────────────────────
+  // ── Loading / error states ────────────────────────────────
 
   if (pl.loading) {
     return <div className={styles.page} data-testid="page-builder-loading">Loading&hellip;</div>;

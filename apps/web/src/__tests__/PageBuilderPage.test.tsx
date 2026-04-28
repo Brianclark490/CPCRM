@@ -859,8 +859,10 @@ describe('PageBuilderPage', () => {
       );
       await user.click(screen.getByTestId('ai-prompt-submit'));
 
+      // logger.info routes through console.info with a "[cpcrm] " prefix in
+      // dev/test; in production it no-ops, so tenant data doesn't leak.
       expect(infoSpy).toHaveBeenCalledWith(
-        '[AI prompt stub]',
+        '[cpcrm] AI prompt stub',
         expect.objectContaining({ prompt: 'Replace opportunities with calls' }),
       );
       expect(screen.queryByTestId('ai-prompt-modal')).not.toBeInTheDocument();
