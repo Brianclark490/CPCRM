@@ -27,9 +27,14 @@ export function AiPromptModal({ onSubmit, onClose }: AiPromptModalProps) {
       }
 
       if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'input, select, textarea, button, [tabindex]:not([tabindex="-1"])',
-        );
+        // Exclude disabled controls so the trap's first/last anchors stay on
+        // elements that can actually receive focus — otherwise Tab from the
+        // last enabled control wouldn't wrap and focus could escape.
+        const focusable = Array.from(
+          modalRef.current.querySelectorAll<HTMLElement>(
+            'input, select, textarea, button, [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((el) => !el.hasAttribute('disabled'));
         if (focusable.length === 0) return;
 
         const first = focusable[0];

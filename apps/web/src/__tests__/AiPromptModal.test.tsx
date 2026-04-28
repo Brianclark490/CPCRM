@@ -80,6 +80,22 @@ describe('AiPromptModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('focus trap wraps from the last enabled control even when submit is disabled', async () => {
+    const user = userEvent.setup();
+    render(<AiPromptModal onSubmit={vi.fn()} onClose={vi.fn()} />);
+
+    // Submit is disabled with empty prompt — make sure Tab from the last
+    // *enabled* control (Cancel) wraps back to the close button rather than
+    // landing on the disabled submit and letting focus escape.
+    expect(screen.getByTestId('ai-prompt-submit')).toBeDisabled();
+
+    screen.getByTestId('ai-prompt-cancel').focus();
+    expect(screen.getByTestId('ai-prompt-cancel')).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByTestId('ai-prompt-close')).toHaveFocus();
+  });
+
   it('does not submit when prompt is whitespace only', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
