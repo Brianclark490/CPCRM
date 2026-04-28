@@ -452,13 +452,17 @@ describe('RecordListPage', () => {
       expect(link).toHaveAttribute('href', '/objects/account/rec-1');
     });
 
-    // The column header should show "Account Name", not a separate "Name"
-    const columnHeaders = screen.getAllByRole('columnheader');
-    const headerTexts = columnHeaders.map((th) => th.textContent);
-    expect(headerTexts).toContain('Account Name');
-    expect(headerTexts).toContain('Industry');
-    // There should be no standalone "Name" column header
-    expect(headerTexts).not.toContain('Name');
+    // The column header should show "Account Name", not a separate "Name".
+    // Wrapped in waitFor because the default "Name" column briefly appears
+    // before the layout-driven columns swap in, racing the link assertion above.
+    await waitFor(() => {
+      const headerTexts = screen
+        .getAllByRole('columnheader')
+        .map((th) => th.textContent);
+      expect(headerTexts).toContain('Account Name');
+      expect(headerTexts).toContain('Industry');
+      expect(headerTexts).not.toContain('Name');
+    });
   });
 
   it('renders an Owner column with the owner name', async () => {
