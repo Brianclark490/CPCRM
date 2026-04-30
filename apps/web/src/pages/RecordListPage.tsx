@@ -92,6 +92,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [filters, setFilters] = useState<Record<string, string>>({});
 
   // Pipeline view toggle state
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>(initialView ?? 'list');
@@ -120,6 +121,7 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
     setDebouncedSearch('');
     setSortBy(null);
     setSortDir('asc');
+    setFilters({});
     userToggledView.current = false;
     // Always sync viewMode to the current pinned route — otherwise a
     // user who toggled to List before navigating between two pipeline
@@ -180,8 +182,13 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
       params.sort_by = sortBy;
       params.sort_dir = sortDir;
     }
+    // Field filters → encoded as `filter[<field>]=<value>` so Express's
+    // default `qs` parser deserialises them back into a nested object.
+    for (const [field, value] of Object.entries(filters)) {
+      if (value) params[`filter[${field}]`] = value;
+    }
     return params;
-  }, [page, debouncedSearch, sortBy, sortDir]);
+  }, [page, debouncedSearch, sortBy, sortDir, filters]);
 
   const recordsQuery = useRecords(apiName, recordsParams);
 
@@ -253,6 +260,22 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
   // Show an "Account" column when any record has a linked parent account
   const showAccountColumn = records.some((r) => r.linkedParent != null);
 
+  // Dropdown fields from the list layout — each becomes a filter <select>
+  // in the toolbar. Hidden when the layout doesn't expose any dropdowns.
+  const filterFields: Array<{ apiName: string; label: string; choices: string[] }> =
+    (layoutColumns ?? [])
+      .filter((lf) => lf.fieldType === 'dropdown')
+      .map((lf) => {
+        const raw = (lf.fieldOptions?.choices ?? []) as unknown;
+        const choices = Array.isArray(raw)
+          ? raw.filter((c): c is string => typeof c === 'string')
+          : [];
+        return { apiName: lf.fieldApiName, label: lf.fieldLabel, choices };
+      })
+      .filter((f) => f.choices.length > 0);
+
+  const hasActiveFilters = Object.values(filters).some((v) => v);
+
   const pluralLabel = objectDef?.pluralLabel ?? apiName ?? 'Records';
   const singularLabel = objectDef?.label ?? apiName ?? 'Record';
 
@@ -273,6 +296,50 @@ export function RecordListPage({ initialView }: RecordListPageProps = {}) {
             <span className={styles.recordCount}>
               {total} {total === 1 ? singularLabel.toLowerCase() : pluralLabel.toLowerCase()}
             </span>
+          )}
+          {filterFields.length > 0 && (
+            <div className={styles.filterGroup} data-testid="record-filters">
+              {filterFields.map((f) => {
+                const value = filters[f.apiName] ?? '';
+                return (
+                  <select
+                    key={f.apiName}
+                    className={`${styles.filterSelect} ${value ? styles.filterSelectActive : ''}`}
+                    aria-label={`Filter by ${f.label}`}
+                    value={value}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setFilters((prev) => {
+                        const updated = { ...prev };
+                        if (next) updated[f.apiName] = next;
+                        else delete updated[f.apiName];
+                        return updated;
+                      });
+                      setPage(1);
+                    }}
+                  >
+                    <option value="">All {f.label.toLowerCase()}</option>
+                    {f.choices.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })}
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className={styles.filterClear}
+                  onClick={() => {
+                    setFilters({});
+                    setPage(1);
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div className={styles.toolbarRight}>

@@ -384,6 +384,7 @@ describe('GET /objects/:apiName/records', () => {
       offset: 0,
       sortBy: undefined,
       sortDir: undefined,
+      filters: {},
     });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
@@ -415,7 +416,30 @@ describe('GET /objects/:apiName/records', () => {
       offset: 20,
       sortBy: 'name',
       sortDir: 'asc',
+      filters: {},
     });
+  });
+
+  it('forwards dropdown field filters from filter[<field>] query params', async () => {
+    mockListRecords.mockResolvedValue({ data: [], total: 0, limit: 50, offset: 0, object: {} });
+
+    // Express's `qs` parser turns `filter[type]=Customer&filter[status]=Active`
+    // into `req.query.filter = { type: 'Customer', status: 'Active' }`.
+    const req = mockReq(
+      {},
+      undefined,
+      { apiName: 'account' },
+      { filter: { type: 'Customer', status: 'Active' } as unknown as string },
+    );
+    const res = mockRes();
+
+    await handleListRecords(req, res);
+
+    expect(mockListRecords).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: { type: 'Customer', status: 'Active' },
+      }),
+    );
   });
 
   it('rejects limit greater than the max with HTTP 400', async () => {

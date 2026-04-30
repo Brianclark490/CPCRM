@@ -104,6 +104,33 @@
         "required": [
           "error"
         ]
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ]
       }
     },
     "parameters": {}
@@ -774,18 +801,24 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "description": "Maximum number of items to return (default 50, max 200).",
+              "example": "50"
             },
             "required": false,
-            "name": "page",
+            "description": "Maximum number of items to return (default 50, max 200).",
+            "name": "limit",
             "in": "query"
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "description": "Number of items to skip before returning results (default 0).",
+              "example": "0"
             },
             "required": false,
-            "name": "limit",
+            "description": "Number of items to skip before returning results (default 0).",
+            "name": "offset",
             "in": "query"
           }
         ],
@@ -886,22 +919,24 @@
                         ]
                       }
                     },
-                    "total": {
-                      "type": "number"
-                    },
-                    "page": {
-                      "type": "number"
-                    },
-                    "limit": {
-                      "type": "number"
+                    "pagination": {
+                      "$ref": "#/components/schemas/PaginationMeta"
                     }
                   },
                   "required": [
                     "data",
-                    "total",
-                    "page",
-                    "limit"
+                    "pagination"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -5885,22 +5920,6 @@
               "type": "string"
             },
             "required": false,
-            "name": "page",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "limit",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
             "name": "sort_by",
             "in": "query"
           },
@@ -5914,6 +5933,28 @@
             },
             "required": false,
             "name": "sort_dir",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Maximum number of items to return (default 50, max 200).",
+              "example": "50"
+            },
+            "required": false,
+            "description": "Maximum number of items to return (default 50, max 200).",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Number of items to skip before returning results (default 0).",
+              "example": "0"
+            },
+            "required": false,
+            "description": "Number of items to skip before returning results (default 0).",
+            "name": "offset",
             "in": "query"
           }
         ],
@@ -5975,14 +6016,8 @@
                         ]
                       }
                     },
-                    "total": {
-                      "type": "number"
-                    },
-                    "page": {
-                      "type": "number"
-                    },
-                    "limit": {
-                      "type": "number"
+                    "pagination": {
+                      "$ref": "#/components/schemas/PaginationMeta"
                     },
                     "object": {
                       "type": "object",
@@ -6013,11 +6048,19 @@
                   },
                   "required": [
                     "data",
-                    "total",
-                    "page",
-                    "limit",
+                    "pagination",
                     "object"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -7615,17 +7658,23 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "description": "Maximum number of items to return (default 50, max 200).",
+              "example": "50"
             },
             "required": false,
+            "description": "Maximum number of items to return (default 50, max 200).",
             "name": "limit",
             "in": "query"
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "description": "Number of items to skip before returning results (default 0).",
+              "example": "0"
             },
             "required": false,
+            "description": "Number of items to skip before returning results (default 0).",
             "name": "offset",
             "in": "query"
           }
@@ -7638,7 +7687,7 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "tenants": {
+                    "data": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -7675,22 +7724,24 @@
                         ]
                       }
                     },
-                    "total": {
-                      "type": "number"
-                    },
-                    "limit": {
-                      "type": "number"
-                    },
-                    "offset": {
-                      "type": "number"
+                    "pagination": {
+                      "$ref": "#/components/schemas/PaginationMeta"
                     }
                   },
                   "required": [
-                    "tenants",
-                    "total",
-                    "limit",
-                    "offset"
+                    "data",
+                    "pagination"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -8559,18 +8610,24 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "description": "Maximum number of items to return (default 50, max 200).",
+              "example": "50"
             },
             "required": false,
-            "name": "page",
+            "description": "Maximum number of items to return (default 50, max 200).",
+            "name": "limit",
             "in": "query"
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "description": "Number of items to skip before returning results (default 0).",
+              "example": "0"
             },
             "required": false,
-            "name": "limit",
+            "description": "Number of items to skip before returning results (default 0).",
+            "name": "offset",
             "in": "query"
           }
         ],
@@ -8608,22 +8665,24 @@
                         }
                       }
                     },
-                    "total": {
-                      "type": "number"
-                    },
-                    "page": {
-                      "type": "number"
-                    },
-                    "limit": {
-                      "type": "number"
+                    "pagination": {
+                      "$ref": "#/components/schemas/PaginationMeta"
                     }
                   },
                   "required": [
                     "data",
-                    "total",
-                    "page",
-                    "limit"
+                    "pagination"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }

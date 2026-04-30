@@ -695,13 +695,28 @@ export async function listRecords(params: {
   offset: number;
   sortBy?: string;
   sortDir?: string;
+  filters?: Record<string, string>;
 }): Promise<ListRecordsResult> {
-  const { tenantId, apiName, ownerId, search, limit, offset, sortBy, sortDir } = params;
+  const { tenantId, apiName, ownerId, search, limit, offset, sortBy, sortDir, filters } = params;
   // ownerId is currently used via filters at the route/service level (reserved for future scoping)
   void ownerId;
 
   const objectDef = await resolveObjectByApiName(tenantId, apiName);
   const fieldDefs = await getFieldDefinitions(tenantId, objectDef.id);
+
+  // Resolve dropdown filters → only fields that exist and are dropdowns are
+  // applied. We bind values as parameters; identifiers are validated to
+  // contain only the safe charset before being interpolated.
+  const dropdownFilters: Array<{ apiName: string; value: string }> = [];
+  if (filters) {
+    for (const [key, value] of Object.entries(filters)) {
+      if (typeof value !== 'string' || value.length === 0) continue;
+      const fieldDef = fieldDefs.find((fd) => fd.apiName === key);
+      if (!fieldDef || fieldDef.fieldType !== 'dropdown') continue;
+      if (!isSafeIdentifier(fieldDef.apiName)) continue;
+      dropdownFilters.push({ apiName: fieldDef.apiName, value });
+    }
+  }
 
   const trimmedSearch = search?.trim();
   const hasSearch = trimmedSearch !== undefined && trimmedSearch.length > 0;
@@ -739,6 +754,14 @@ export async function listRecords(params: {
     });
   }
 
+  for (const f of dropdownFilters) {
+    countQuery = countQuery.where(
+      sql<string>`r.field_values->>${f.apiName}`,
+      '=',
+      f.value,
+    );
+  }
+
   const countRow = await countQuery.executeTakeFirstOrThrow();
   const total = parseInt(countRow.total as unknown as string, 10);
 
@@ -759,6 +782,14 @@ export async function listRecords(params: {
       ];
       return eb.or(conds);
     });
+  }
+
+  for (const f of dropdownFilters) {
+    dataQuery = dataQuery.where(
+      sql<string>`r.field_values->>${f.apiName}`,
+      '=',
+      f.value,
+    );
   }
 
   // Sorting — defence-in-depth via isSafeIdentifier + parameter binding
