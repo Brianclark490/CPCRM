@@ -132,6 +132,7 @@ export async function handleCreateRecord(
  *   offset?: number   — number of results to skip (default 0)
  *   sort_by?: string  — field api_name or "name"/"created_at"/"updated_at"
  *   sort_dir?: string — "asc" or "desc"
+ *   filter[<field>]?: string — exact match on a dropdown field's value
  *
  * Responses:
  *   200  – { data, pagination: { total, limit, offset, hasMore }, object }
@@ -154,6 +155,7 @@ export async function handleListRecords(
     offset?: string;
     sort_by?: string;
     sort_dir?: string;
+    filter?: Record<string, unknown>;
   };
 
   let pagination;
@@ -169,6 +171,15 @@ export async function handleListRecords(
     throw err;
   }
 
+  // Express parses `filter[type]=Customer` into `{ filter: { type: 'Customer' } }`.
+  // Coerce to a flat string→string map and drop anything that isn't a string.
+  const filters: Record<string, string> = {};
+  if (query.filter && typeof query.filter === 'object' && !Array.isArray(query.filter)) {
+    for (const [k, v] of Object.entries(query.filter)) {
+      if (typeof v === 'string' && v.length > 0) filters[k] = v;
+    }
+  }
+
   try {
     const result = await listRecords({
       tenantId: req.user!.tenantId!,
@@ -179,6 +190,7 @@ export async function handleListRecords(
       offset: pagination.offset,
       sortBy: query.sort_by,
       sortDir: query.sort_dir,
+      filters,
     });
 
     const envelope = paginatedResponse(result.data, result.total, pagination);
