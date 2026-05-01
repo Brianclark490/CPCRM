@@ -284,24 +284,123 @@ const ComponentInputSchema = z
   })
   .strict();
 
+// ─── Layout shape schemas ──────────────────────────────────────────────────
+//
+// Validates the layout payload the BE sends to the model in `AiEditContext`
+// and that the FE feeds into the reducer. Section `type` is intentionally
+// optional here because the FE in-memory shape (apps/web/src/components/
+// layoutTypes.ts) treats it as optional; the post-apply BE validator
+// re-checks it via validateSection.
+
+export const AiLayoutComponentSchema: z.ZodType<AiLayoutComponent> = z
+  .object({
+    id: NonEmptyString,
+    type: NonEmptyString,
+    config: z.record(z.string(), z.unknown()),
+    visibility: AiVisibilityRuleSchema.nullable().optional(),
+  })
+  .strict();
+
+export const AiLayoutSectionSchema: z.ZodType<AiLayoutSection> = z
+  .object({
+    id: NonEmptyString,
+    type: NonEmptyString.optional(),
+    label: z.string(),
+    columns: z.number().int(),
+    collapsed: z.boolean().optional(),
+    visibility: AiVisibilityRuleSchema.nullable().optional(),
+    components: z.array(AiLayoutComponentSchema),
+  })
+  .strict();
+
+export const AiLayoutTabSchema: z.ZodType<AiLayoutTab> = z
+  .object({
+    id: NonEmptyString,
+    label: z.string(),
+    sections: z.array(AiLayoutSectionSchema),
+  })
+  .strict();
+
+export const AiLayoutZonesSchema: z.ZodType<AiLayoutZones> = z
+  .object({
+    kpi: z.array(AiLayoutComponentSchema),
+    leftRail: z.array(AiLayoutSectionSchema),
+    rightRail: z.array(AiLayoutSectionSchema),
+  })
+  .strict();
+
+export const AiLayoutHeaderSchema: z.ZodType<AiLayoutHeader> = z
+  .object({
+    primaryField: z.string(),
+    secondaryFields: z.array(z.string()),
+  })
+  .strict();
+
+export const AiPageLayoutSchema: z.ZodType<AiPageLayout> = z
+  .object({
+    id: NonEmptyString,
+    objectId: NonEmptyString,
+    name: z.string(),
+    header: AiLayoutHeaderSchema,
+    zones: AiLayoutZonesSchema.optional(),
+    tabs: z.array(AiLayoutTabSchema),
+  })
+  .strict();
+
+// ─── Context schemas ───────────────────────────────────────────────────────
+
+export const AiEditContextFieldSchema: z.ZodType<AiEditContextField> = z
+  .object({
+    apiName: NonEmptyString,
+    label: z.string(),
+    fieldType: z.string(),
+  })
+  .strict();
+
+export const AiEditContextRelationshipSchema: z.ZodType<AiEditContextRelationship> =
+  z
+    .object({
+      relationshipId: NonEmptyString,
+      label: z.string(),
+      relationshipType: z.enum(['lookup', 'parent_child']),
+      relatedObjectApiName: NonEmptyString,
+    })
+    .strict();
+
+export const AiEditContextSchema: z.ZodType<AiEditContext> = z
+  .object({
+    layoutId: NonEmptyString,
+    objectApiName: NonEmptyString,
+    objectLabel: z.string(),
+    layout: AiPageLayoutSchema,
+    fields: z.array(AiEditContextFieldSchema),
+    relationships: z.array(AiEditContextRelationshipSchema),
+  })
+  .strict();
+
 const AddComponentTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('zone'), zone: z.literal('kpi') }).strict(),
   z.object({ kind: z.literal('section'), sectionId: NonEmptyString }).strict(),
 ]);
+
+// Positions are 0-based indices; -1 is the documented "append" sentinel.
+// Anything below -1 is a model bug — reject at gate 1 rather than silently
+// treating it as append.
+const PositionSchema = z.number().int().min(-1);
 
 const MoveComponentTargetSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('zone'),
       zone: z.literal('kpi'),
-      position: z.number().int(),
+      position: PositionSchema,
     })
     .strict(),
   z
     .object({
       kind: z.literal('section'),
       sectionId: NonEmptyString,
-      position: z.number().int(),
+      position: PositionSchema,
     })
     .strict(),
 ]);
@@ -321,7 +420,7 @@ export const AddComponentOpSchema = z
     op: z.literal('add_component'),
     id: NonEmptyString,
     target: AddComponentTargetSchema,
-    position: z.number().int(),
+    position: PositionSchema,
     component: ComponentInputSchema,
   })
   .strict();
@@ -363,7 +462,7 @@ export const AddSectionOpSchema = z
     op: z.literal('add_section'),
     id: NonEmptyString,
     target: AddSectionTargetSchema,
-    position: z.number().int(),
+    position: PositionSchema,
     section: z
       .object({
         id: NonEmptyString.optional(),
@@ -407,7 +506,10 @@ export const ReorderSectionOpSchema = z
     op: z.literal('reorder_section'),
     id: NonEmptyString,
     sectionId: NonEmptyString,
-    position: z.number().int(),
+    // Reorder is "new 0-based index inside its current rail or tab" — no
+    // append sentinel. Negatives would be silently treated as "move to end"
+    // by moveTo, so reject them at gate 1.
+    position: z.number().int().min(0),
   })
   .strict();
 
@@ -520,8 +622,9 @@ function insertAt<T>(arr: readonly T[], position: number, item: T): T[] {
 function moveTo<T>(arr: readonly T[], fromIndex: number, position: number): T[] {
   const out = arr.slice();
   const [item] = out.splice(fromIndex, 1);
-  const insertAt = position < 0 || position > out.length ? out.length : position;
-  out.splice(insertAt, 0, item);
+  const insertIndex =
+    position < 0 || position > out.length ? out.length : position;
+  out.splice(insertIndex, 0, item);
   return out;
 }
 
@@ -920,5 +1023,14 @@ export function applyOp(layout: AiPageLayout, op: AiEditOp): AiPageLayout {
       return applyReplaceSection(layout, op);
     case 'reorder_section':
       return applyReorderSection(layout, op);
+    default: {
+      // Exhaustiveness guard: TS errors here if a new op kind is added
+      // without a case above, and at runtime we throw instead of returning
+      // undefined when a caller bypasses AiEditOpSchema.
+      const exhaustive: never = op;
+      throw new Error(
+        `applyOp: unknown op kind ${JSON.stringify((exhaustive as { op?: unknown }).op)}`,
+      );
+    }
   }
 }

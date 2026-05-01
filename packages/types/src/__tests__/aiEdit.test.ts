@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   AddComponentOpSchema,
   AddSectionOpSchema,
+  AiEditContextSchema,
   AiEditResponseSchema,
   AiPageLayout,
+  AiPageLayoutSchema,
   applyOp,
   MoveComponentOpSchema,
   RemoveComponentOpSchema,
@@ -700,5 +702,140 @@ describe('per-op schema rejections', () => {
         position: 1.5,
       }).success,
     ).toBe(false);
+  });
+
+  it('rejects reorder_section with a negative position (no append sentinel)', () => {
+    expect(
+      ReorderSectionOpSchema.safeParse({
+        op: 'reorder_section',
+        id: 'op_1',
+        sectionId: 'sec_x',
+        position: -1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects add_component with a position below the -1 append sentinel', () => {
+    expect(
+      AddComponentOpSchema.safeParse({
+        op: 'add_component',
+        id: 'op_1',
+        target: { kind: 'zone', zone: 'kpi' },
+        position: -2,
+        component: { type: 'metric', config: {} },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects move_component with a position below -1', () => {
+    expect(
+      MoveComponentOpSchema.safeParse({
+        op: 'move_component',
+        id: 'op_1',
+        componentId: 'cmp_x',
+        to: { kind: 'zone', zone: 'kpi', position: -5 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects add_section with a position below -1', () => {
+    expect(
+      AddSectionOpSchema.safeParse({
+        op: 'add_section',
+        id: 'op_1',
+        target: { kind: 'rail', rail: 'leftRail' },
+        position: -2,
+        section: { label: 'X', columns: 1, components: [] },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('layout + context schemas', () => {
+  it('parses a minimal layout', () => {
+    const parsed = AiPageLayoutSchema.parse({
+      id: 'lay_1',
+      objectId: 'obj_1',
+      name: 'Default',
+      header: { primaryField: 'name', secondaryFields: [] },
+      tabs: [],
+    });
+    expect(parsed.id).toBe('lay_1');
+  });
+
+  it('rejects a layout with an extra top-level key', () => {
+    expect(
+      AiPageLayoutSchema.safeParse({
+        id: 'lay_1',
+        objectId: 'obj_1',
+        name: 'Default',
+        header: { primaryField: 'name', secondaryFields: [] },
+        tabs: [],
+        rogue: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('parses a context with fields and relationships', () => {
+    const parsed = AiEditContextSchema.parse({
+      layoutId: 'lay_1',
+      objectApiName: 'opportunity',
+      objectLabel: 'Opportunity',
+      layout: {
+        id: 'lay_1',
+        objectId: 'obj_1',
+        name: 'Default',
+        header: { primaryField: 'name', secondaryFields: [] },
+        tabs: [],
+      },
+      fields: [{ apiName: 'name', label: 'Name', fieldType: 'text' }],
+      relationships: [
+        {
+          relationshipId: 'rel_calls',
+          label: 'Calls',
+          relationshipType: 'parent_child',
+          relatedObjectApiName: 'call',
+        },
+      ],
+    });
+    expect(parsed.fields[0].apiName).toBe('name');
+  });
+
+  it('rejects a context with an unknown relationship type', () => {
+    expect(
+      AiEditContextSchema.safeParse({
+        layoutId: 'lay_1',
+        objectApiName: 'opportunity',
+        objectLabel: 'Opportunity',
+        layout: {
+          id: 'lay_1',
+          objectId: 'obj_1',
+          name: 'Default',
+          header: { primaryField: 'name', secondaryFields: [] },
+          tabs: [],
+        },
+        fields: [],
+        relationships: [
+          {
+            relationshipId: 'rel_x',
+            label: 'X',
+            relationshipType: 'sibling',
+            relatedObjectApiName: 'x',
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('applyOp exhaustiveness', () => {
+  it('throws on an unknown op kind that bypassed the schema', () => {
+    expect(() =>
+      // Cast through unknown — emulates a caller bypassing AiEditOpSchema.
+      applyOp({ id: 'l', objectId: 'o', name: 'n', header: { primaryField: 'p', secondaryFields: [] }, tabs: [] }, {
+        op: 'mutate_everything',
+        id: 'op_1',
+      } as unknown as Parameters<typeof applyOp>[1]),
+    ).toThrow(/unknown op kind/);
   });
 });
