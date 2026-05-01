@@ -5,12 +5,16 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "test": "echo 'test not yet implemented'",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
     "lint": "echo 'lint not yet implemented'",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
   "devDependencies": {
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   }
 }
