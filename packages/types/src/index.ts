@@ -1120,3 +1120,9 @@ export interface ComponentDefinition {
   /** Default config values when a new component is added */
   defaultConfig: Record<string, unknown>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI page-editor edit contract
+// ─────────────────────────────────────────────────────────────────────────────
+
+export * from './aiEdit.js';
