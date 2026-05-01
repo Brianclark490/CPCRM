@@ -173,6 +173,10 @@ export interface UpdateComponentConfigOp {
   patch: Record<string, unknown>;
 }
 
+export type AiSectionType = 'field_section' | 'related_list' | 'widget_section';
+
+export const DEFAULT_SECTION_TYPE: AiSectionType = 'field_section';
+
 export interface AddSectionOp {
   op: 'add_section';
   id: string;
@@ -182,6 +186,8 @@ export interface AddSectionOp {
   position: number;
   section: {
     id?: string;
+    /** Defaults to DEFAULT_SECTION_TYPE when omitted. */
+    type?: AiSectionType;
     label: string;
     columns: number;
     collapsed?: boolean;
@@ -201,6 +207,7 @@ export interface ReplaceSectionOp {
   sectionId: string;
   section: {
     label?: string;
+    type?: AiSectionType;
     columns?: number;
     collapsed?: boolean;
     components: AiEditComponentInput[];
@@ -345,6 +352,12 @@ export const UpdateComponentConfigOpSchema = z
   })
   .strict();
 
+const SectionTypeSchema = z.enum([
+  'field_section',
+  'related_list',
+  'widget_section',
+]);
+
 export const AddSectionOpSchema = z
   .object({
     op: z.literal('add_section'),
@@ -354,6 +367,7 @@ export const AddSectionOpSchema = z
     section: z
       .object({
         id: NonEmptyString.optional(),
+        type: SectionTypeSchema.optional(),
         label: NonEmptyString,
         columns: z.number().int().min(1).max(2),
         collapsed: z.boolean().optional(),
@@ -379,6 +393,7 @@ export const ReplaceSectionOpSchema = z
     section: z
       .object({
         label: NonEmptyString.optional(),
+        type: SectionTypeSchema.optional(),
         columns: z.number().int().min(1).max(2).optional(),
         collapsed: z.boolean().optional(),
         components: z.array(ComponentInputSchema),
@@ -480,8 +495,12 @@ function materialiseComponent(input: AiEditComponentInput): AiLayoutComponent {
 function materialiseSection(
   input: AddSectionOp['section'],
 ): AiLayoutSection {
+  // Default to `field_section` so the post-apply BE validator
+  // (validateSection in pageLayoutService) accepts the layout. Without a
+  // type it rejects every AI-added section.
   return {
     id: input.id ?? generateId(ID_PREFIX_SECTION),
+    type: input.type ?? DEFAULT_SECTION_TYPE,
     label: input.label,
     columns: input.columns,
     ...(input.collapsed !== undefined ? { collapsed: input.collapsed } : {}),
@@ -846,6 +865,7 @@ function applyReplaceSection(
   return updateSection(layout, loc, (existing) => ({
     ...existing,
     ...(op.section.label !== undefined ? { label: op.section.label } : {}),
+    ...(op.section.type !== undefined ? { type: op.section.type } : {}),
     ...(op.section.columns !== undefined ? { columns: op.section.columns } : {}),
     ...(op.section.collapsed !== undefined
       ? { collapsed: op.section.collapsed }

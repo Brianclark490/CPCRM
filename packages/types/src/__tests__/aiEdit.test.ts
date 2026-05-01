@@ -317,6 +317,38 @@ describe('applyOp', () => {
         }),
       ).toThrow(/tab_missing/);
     });
+
+    it('defaults the section type to field_section when omitted', () => {
+      const result = applyOp(baseLayout(), {
+        op: 'add_section',
+        id: 'op_1',
+        target: { kind: 'rail', rail: 'rightRail' },
+        position: -1,
+        section: { label: 'New', columns: 1, components: [] },
+      });
+      expect(result.zones!.rightRail[0].type).toBe('field_section');
+    });
+
+    it('honours an explicit section type', () => {
+      const result = applyOp(baseLayout(), {
+        op: 'add_section',
+        id: 'op_1',
+        target: { kind: 'rail', rail: 'rightRail' },
+        position: -1,
+        section: {
+          type: 'related_list',
+          label: 'Calls',
+          columns: 1,
+          components: [
+            {
+              type: 'related_list',
+              config: { relationshipId: 'rel_recent_calls' },
+            },
+          ],
+        },
+      });
+      expect(result.zones!.rightRail[0].type).toBe('related_list');
+    });
   });
 
   describe('remove_section', () => {
@@ -363,6 +395,25 @@ describe('applyOp', () => {
       expect(replaced.columns).toBe(1);
       expect(replaced.components).toHaveLength(1);
       expect(replaced.components[0].type).toBe('related_list');
+    });
+
+    it('honours an explicit section type override', () => {
+      const layout = baseLayout();
+      const result = applyOp(layout, {
+        op: 'replace_section',
+        id: 'op_1',
+        sectionId: 'sec_opps',
+        section: {
+          type: 'related_list',
+          components: [
+            {
+              type: 'related_list',
+              config: { relationshipId: 'rel_recent_calls' },
+            },
+          ],
+        },
+      });
+      expect(result.zones!.leftRail[0].type).toBe('related_list');
     });
   });
 
@@ -599,6 +650,23 @@ describe('per-op schema rejections', () => {
         target: { kind: 'rail', rail: 'leftRail' },
         position: 0,
         section: { label: 'X', columns: 3, components: [] },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects add_section with an unknown section type', () => {
+    expect(
+      AddSectionOpSchema.safeParse({
+        op: 'add_section',
+        id: 'op_1',
+        target: { kind: 'rail', rail: 'leftRail' },
+        position: 0,
+        section: {
+          type: 'mystery_section',
+          label: 'X',
+          columns: 1,
+          components: [],
+        },
       }).success,
     ).toBe(false);
   });
