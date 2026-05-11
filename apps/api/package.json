@@ -15,7 +15,7 @@
     "db:types": "kysely-codegen --dialect postgres --url $DATABASE_URL --out-file src/db/kysely.types.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.90.0",
+    "@anthropic-ai/sdk": "^0.91.1",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@descope/node-sdk": "^1.10.0",
     "cookie-parser": "^1.4.7",
